@@ -76,7 +76,7 @@ def get_audio_embedding(
     center: bool = True,
 ) -> Tuple[Dict[int, Tensor], Tensor]:
     assert audio.ndim == 2
-    audio = audio.to(model.device)
+    model = model.to(audio.device)
 
     # Implement batching of the audio
     if batch_size is None:
@@ -116,12 +116,28 @@ def get_audio_embedding(
     return allembs, timestamps
 
 
+def pairwise_distance(emb1: Tensor, emb2: Tensor) -> Tensor:
+    assert emb1.ndim == 3
+    assert emb1.shape == emb2.shape
+    # Flatten each embedding across frames
+    emb1 = emb1.view(emb1.shape[0], -1)
+    emb2 = emb2.view(emb2.shape[0], -1)
+    # Compute the pairwise 1-norm distance
+    d = torch.cdist(emb1, emb2, p=1.0)
+    assert d.shape == (emb1.shape[0], emb2.shape[0])
+    return d
+
+
 if __name__ == "__main__":
-    if torch.cuda.is_available:
+    if torch.cuda.is_available():
         device = "cuda:0"
     else:
         device = "cpu"
     model = load_model("", device=device)
+    # White noise
+    audio = torch.rand(1024, 20000, device=device) * 2 - 1
     embs, timestamps = get_audio_embedding(
-        audio=torch.rand(1024, 20000) * 2 - 1, model=model, hop_size_samples=1000
+        audio=audio, model=model, hop_size_samples=1000
     )
+
+    pairwise_distance(embs[20].float(), embs[20].float())
