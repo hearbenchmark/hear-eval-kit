@@ -6,22 +6,11 @@ This is simply a mel spectrogram followed by random projection.
 
 import math
 from collections import defaultdict
-from typing import Any, List, Tuple, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
 from torchaudio.transforms import MelSpectrogram
-
-
-def input_sample_rate() -> int:
-    return RandomProjectionMelEmbedding.sample_rate
-
-
-def load_model(model_file_path: str, device: str = "cpu") -> Any:
-    """
-    We don't load anything from disk.
-    """
-    return RandomProjectionMelEmbedding().to(device)
 
 
 class RandomProjectionMelEmbedding(torch.nn.Module):
@@ -68,6 +57,31 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         return {4096: x4096, 2048: x2048, 512: x512, 128: x128, 20: x20}
 
 
+def input_sample_rate() -> int:
+    """
+    Returns:
+        One of the following values: [16000, 22050, 44100, 48000].
+            To avoid resampling on-the-fly, we will query your model
+        to find out what sample rate audio to provide it.
+    """
+    return RandomProjectionMelEmbedding.sample_rate
+
+
+def load_model(model_file_path: str, device: str = "cpu") -> Any:
+    """
+    In this baseline, we don't load anything from disk.
+    Args:
+        model_file_path: Load model checkpoint from this file path.
+            device: For inference on machines with multiple GPUs,
+            this instructs the participant which device to use. If
+            “cpu”, the CPU should be used (Multi-GPU support is not
+            required).
+    Returns:
+        Model
+    """
+    return RandomProjectionMelEmbedding().to(device)
+
+
 def get_audio_embedding(
     audio: Tensor,
     model: Any,
@@ -75,6 +89,33 @@ def get_audio_embedding(
     batch_size: Optional[int] = None,
     center: bool = True,
 ) -> Tuple[Dict[int, Tensor], Tensor]:
+    """
+    Args:
+            audio: n_sounds x n_samples of mono audio in the range
+            [-1, 1]. We are making the simplifying assumption that
+            for every task, all sounds will be padded/trimmed to
+            the same length. This doesn’t preclude people from
+            using the API for corpora of variable-length sounds;
+            merely we don’t implement that as a core feature. It
+            could be a wrapper function added later.
+            model: Loaded model, in PyTorch or Tensorflow 2.x. This
+        should be moved to the device the audio tensor is on.
+        hop_size: Number of audio samples between adjacent frames
+            batch_size: The participants are responsible for estimating
+        the batch_size that will achieve high-throughput while
+        maintaining appropriate memory constraints. However,
+        batch_size is a useful feature for end-users to be able to
+        toggle.
+            center: If True, the timestamps correspond to the center
+            of each analysis window. center=True will be used for
+            all evaluation tasks.
+    Returns:
+            ({embedding_size: Tensor}, list(frame timestamps)) where
+            embedding_size can be any of [4096, 2048, 512, 128,
+            20].  Tensor is float32 (or signed int for 20-dim),
+            n_sounds x n_frames x dim.
+
+    """
     assert audio.ndim == 2
     model = model.to(audio.device)
 
@@ -117,6 +158,17 @@ def get_audio_embedding(
 
 
 def pairwise_distance(emb1: Tensor, emb2: Tensor) -> Tensor:
+    """
+    Note that if you are calling this with the 20-dim int8,
+    you should cast them to .float() first.
+
+    Args:
+        emb1: Tensor of shape (n_samples1, n_frames, emb_dimension)
+        emb2: Tensor of shape (n_samples2, n_frames, emb_dimension)
+    Returns:
+        Pairwise distance tensor (n_samples1, n_samples2).
+        Unnormalized l1.
+    """
     assert emb1.ndim == 3
     assert emb1.shape == emb2.shape
     # Flatten each embedding across frames
