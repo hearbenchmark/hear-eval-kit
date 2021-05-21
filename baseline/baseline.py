@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 from torch import Tensor
 from torchaudio.transforms import MelSpectrogram
+import torch.nn.functional as F
 
 
 class RandomProjectionMelEmbedding(torch.nn.Module):
@@ -82,10 +83,55 @@ def load_model(model_file_path: str, device: str = "cpu") -> Any:
     return RandomProjectionMelEmbedding().to(device)
 
 
+def frame_audio(
+    audio: Tensor,
+    frame_size: int,
+    hop_size: int,
+    is_centered: bool
+):
+    """
+    Slice audio into equal length frames. Each adjacent frame is a hop_size number of
+    samples apart.
+
+    Args:
+        audio: input audio, expects a 2d Tensor of shape: (batch_size, num)samples)
+        frame_size: the length each resulting frame should be
+        hop_size: number of samples between frames.
+        is_centered: Pad audio by frame_size // 2 to center audio in frame
+
+    Returns:
+        A Tensor of shape (batch_size, num_frames, frame_size)
+    """
+    batch_size, num_samples = audio.shape
+
+    # Adjust the number of samples if centering to allow for a half
+    # frame size number of padded samples padded at the start.
+    start_pad = 0
+    if is_centered:
+        half_frame_size = int(frame_size // 2)
+        num_samples += half_frame_size
+        start_pad = half_frame_size
+
+    # Number of frames is the number of hops that can occur within num_samples
+    num_frames = math.ceil(num_samples / hop_size)
+
+    # Pad audio to facilitate centered frames.
+    padded_num_samples = (num_frames - 1) * hop_size + frame_size
+    end_pad = padded_num_samples - num_samples
+    audio = F.pad(audio, (start_pad, end_pad))
+
+    # Frame.
+    shape = (batch_size, num_frames, frame_size)
+    stride = (1, hop_size, 1)
+    frames = torch.as_strided(audio, shape, stride)
+
+    return frames
+
+
 def get_audio_embedding(
     audio: Tensor,
-    model: Any,
-    hop_size_samples: int,
+    model: RandomProjectionMelEmbedding,
+    hop_size: int,
     batch_size: Optional[int] = None,
     center: bool = True,
 ) -> Tuple[Dict[int, Tensor], Tensor]:
@@ -116,45 +162,52 @@ def get_audio_embedding(
             n_sounds x n_frames x dim.
 
     """
-    assert audio.ndim == 2
-    model = model.to(audio.device)
 
-    # Implement batching of the audio
-    if batch_size is None:
-        # Here we just pick a sensible default batch size
-        batch_size = 512
-    dataset = torch.utils.data.TensorDataset(audio)
-    loader = torch.utils.data.DataLoader(
-        dataset, batch_size=batch_size, shuffle=False, drop_last=False
-    )
+    assert isinstance(model, RandomProjectionMelEmbedding)
 
-    if center:
-        timestamps = (
-            torch.range(0, audio.shape[1], hop_size_samples) / input_sample_rate()
-        )
-    else:
-        # We will only use center=True in HEAR 2021
-        raise ValueError("center = False not supported")
+    frames = frame_audio(audio, model.n_fft, hop_size, center)
 
-    # Put the model into eval mode, and don't compute any gradients.
-    model.eval()
-    with torch.no_grad():
-        # Iterate over all batches and accumulate the embeddings
-        # into allembs
-        allembs = defaultdict(list)
-        for batch in loader:
-            # The dataset only has one element, which is the audio
-            # batch tensor
-            embs = model(batch[0], hop_size_samples=hop_size_samples, center=center)
-            for e in embs:
-                allembs[e].append(embs[e])
-    # Concatenate the minibatches before returning
-    # TODO: Check that returns are the right type?
-    for e in allembs:
-        allembs[e] = torch.cat(allembs[e], dim=0)
-        assert allembs[e].shape[0] == audio.shape[0]
-        assert len(timestamps) == allembs[e].shape[1]
-    return allembs, timestamps
+    print(frames.shape)
+    return frames
+    # assert audio.ndim == 2
+    # model = model.to(audio.device)
+    #
+    # # Implement batching of the audio
+    # if batch_size is None:
+    #     # Here we just pick a sensible default batch size
+    #     batch_size = 512
+    # dataset = torch.utils.data.TensorDataset(audio)
+    # loader = torch.utils.data.DataLoader(
+    #     dataset, batch_size=batch_size, shuffle=False, drop_last=False
+    # )
+    #
+    # if center:
+    #     timestamps = (
+    #         torch.range(0, audio.shape[1], hop_size_samples) / input_sample_rate()
+    #     )
+    # else:
+    #     # We will only use center=True in HEAR 2021
+    #     raise ValueError("center = False not supported")
+    #
+    # # Put the model into eval mode, and don't compute any gradients.
+    # model.eval()
+    # with torch.no_grad():
+    #     # Iterate over all batches and accumulate the embeddings
+    #     # into allembs
+    #     allembs = defaultdict(list)
+    #     for batch in loader:
+    #         # The dataset only has one element, which is the audio
+    #         # batch tensor
+    #         embs = model(batch[0], hop_size_samples=hop_size_samples, center=center)
+    #         for e in embs:
+    #             allembs[e].append(embs[e])
+    # # Concatenate the minibatches before returning
+    # # TODO: Check that returns are the right type?
+    # for e in allembs:
+    #     allembs[e] = torch.cat(allembs[e], dim=0)
+    #     assert allembs[e].shape[0] == audio.shape[0]
+    #     assert len(timestamps) == allembs[e].shape[1]
+    # return allembs, timestamps
 
 
 def pairwise_distance(emb1: Tensor, emb2: Tensor) -> Tensor:
