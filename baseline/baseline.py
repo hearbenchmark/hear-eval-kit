@@ -83,12 +83,7 @@ def load_model(model_file_path: str, device: str = "cpu") -> Any:
     return RandomProjectionMelEmbedding().to(device)
 
 
-def frame_audio(
-    audio: Tensor,
-    frame_size: int,
-    hop_size: int,
-    is_centered: bool
-):
+def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool):
     """
     Slice audio into equal length frames. Each adjacent frame is a hop_size number of
     samples apart.
@@ -163,9 +158,28 @@ def get_audio_embedding(
 
     """
 
-    assert isinstance(model, RandomProjectionMelEmbedding)
+    if not isinstance(model, RandomProjectionMelEmbedding):
+        raise ValueError(
+            f"Model must be an instance of {RandomProjectionMelEmbedding.__name__}"
+        )
+
+    # Send the model to the same device that the audio tensor is on.
+    model = model.to(audio.device)
+
+    assert audio.ndim == 2
 
     frames = frame_audio(audio, model.n_fft, hop_size, center)
+    audio_batches = frames.shape[0]
+
+    # Implement batching of the audio.
+    if batch_size is None:
+        # Here we just pick a sensible default batch size
+        batch_size = 512
+
+    dataset = torch.utils.data.TensorDataset(frames)
+    loader = torch.utils.data.DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, drop_last=False
+    )
 
     print(frames.shape)
     return frames
