@@ -1,4 +1,4 @@
-#!/usr/bin/env python3 
+#!/usr/bin/env python3
 """
 WRITEME [outline the steps in the pipeline]
 
@@ -62,9 +62,11 @@ MAX_FRAMES_PER_CORPUS = 20 * 3600
 
 max_files_per_corpus = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
 
+
 def require_dir(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+
 
 def download_file(url, local_filename):
     """
@@ -78,13 +80,14 @@ def download_file(url, local_filename):
     # NOTE the stream=True parameter below
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
-        with open(local_filename, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192): 
+        with open(local_filename, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
                 # If you have chunk encoded response uncomment if
                 # and set chunk_size parameter to None.
-                #if chunk: 
+                # if chunk:
                 f.write(chunk)
     return local_filename
+
 
 class DownloadCorpus(luigi.Task):
     def output(self):
@@ -92,9 +95,13 @@ class DownloadCorpus(luigi.Task):
 
     def run(self):
         # TODO: Change the working dir
-        download_file("https://zenodo.org/record/4498364/files/public_dataset.zip", "_checkpoints/corpus.zip")
-        with self.output().open('w') as outfile:
+        download_file(
+            "https://zenodo.org/record/4498364/files/public_dataset.zip",
+            "_checkpoints/corpus.zip",
+        )
+        with self.output().open("w") as outfile:
             pass
+
 
 class ExtractCorpus(luigi.Task):
     def requires(self):
@@ -106,13 +113,15 @@ class ExtractCorpus(luigi.Task):
     def run(self):
         # TODO: Do this in another directory
         os.system("cd _checkpoints && unzip corpus.zip")
-        with self.output().open('w') as outfile:
+        with self.output().open("w") as outfile:
             pass
 
+
 def filename_to_inthash(filename):
-  # Adapted from Google Speech Commands convention.
-  hash_name_hashed = hashlib.sha1(filename.encode("utf-8")).hexdigest()
-  return int(hash_name_hashed, 16)
+    # Adapted from Google Speech Commands convention.
+    hash_name_hashed = hashlib.sha1(filename.encode("utf-8")).hexdigest()
+    return int(hash_name_hashed, 16)
+
 
 class SubsampleCorpus(luigi.Task):
     def requires(self):
@@ -123,51 +132,64 @@ class SubsampleCorpus(luigi.Task):
 
     def run(self):
         # Really coughvid? webm + ogg?
-        audiofiles = list(glob.glob("_checkpoints/public_dataset/*.webm") + glob.glob("_checkpoints/public_dataset/*.ogg"))
+        audiofiles = list(
+            glob.glob("_checkpoints/public_dataset/*.webm")
+            + glob.glob("_checkpoints/public_dataset/*.ogg")
+        )
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: filename_to_inthash(filename))
         print(audiofiles[:10])
         if len(audiofiles) > max_files_per_corpus:
-            print("%d audio files in corpus, keeping only %d" % (len(audiofiles), max_files_per_corpus))
+            print(
+                "%d audio files in corpus, keeping only %d"
+                % (len(audiofiles), max_files_per_corpus)
+            )
             for audiofile in audiofiles[max_files_per_corpus:]:
                 os.remove(audiofile)
-        assert len(list(glob.glob("_checkpoints/public_dataset/*.webm") + glob.glob("_checkpoints/public_dataset/*.ogg"))) <= len(audiofiles)
-        with self.output().open('w') as outfile:
+        assert len(
+            list(
+                glob.glob("_checkpoints/public_dataset/*.webm")
+                + glob.glob("_checkpoints/public_dataset/*.ogg")
+            )
+        ) <= len(audiofiles)
+        with self.output().open("w") as outfile:
             pass
 
+
 def which_set(filename, validation_percentage, testing_percentage):
-  """
-  Code adapted from Google Speech Commands dataset.
+    """
+    Code adapted from Google Speech Commands dataset.
 
-  Determines which data partition the file should belong to, based
-  upon the filename.
+    Determines which data partition the file should belong to, based
+    upon the filename.
 
-  We want to keep files in the same training, validation, or testing
-  sets even if new ones are added over time. This makes it less
-  likely that testing samples will accidentally be reused in training
-  when long runs are restarted for example. To keep this stability,
-  a hash of the filename is taken and used to determine which set
-  it should belong to. This determination only depends on the name
-  and the set proportions, so it won't change as other files are
-  added.
+    We want to keep files in the same training, validation, or testing
+    sets even if new ones are added over time. This makes it less
+    likely that testing samples will accidentally be reused in training
+    when long runs are restarted for example. To keep this stability,
+    a hash of the filename is taken and used to determine which set
+    it should belong to. This determination only depends on the name
+    and the set proportions, so it won't change as other files are
+    added.
 
-  Args:
-    filename: File path of the data sample.
-    validation_percentage: How much of the data set to use for validation.
-    testing_percentage: How much of the data set to use for testing.
+    Args:
+      filename: File path of the data sample.
+      validation_percentage: How much of the data set to use for validation.
+      testing_percentage: How much of the data set to use for testing.
 
-  Returns:
-    String, one of 'train', 'val', or 'test'.
-  """
-  base_name = os.path.basename(filename)
-  percentage_hash = filename_to_inthash(filename) % 100
-  if percentage_hash < validation_percentage:
-    result = 'val'
-  elif percentage_hash < (testing_percentage + validation_percentage):
-    result = 'test'
-  else:
-    result = 'train'
-  return result
+    Returns:
+      String, one of 'train', 'val', or 'test'.
+    """
+    base_name = os.path.basename(filename)
+    percentage_hash = filename_to_inthash(filename) % 100
+    if percentage_hash < validation_percentage:
+        result = "val"
+    elif percentage_hash < (testing_percentage + validation_percentage):
+        result = "test"
+    else:
+        result = "train"
+    return result
+
 
 def convert_to_wav(in_file: str, out_file: str):
     devnull = open(os.devnull, "w")
@@ -179,11 +201,13 @@ def convert_to_wav(in_file: str, out_file: str):
     # Make sure the return code is 0 and the command was successful.
     assert ret == 0
 
+
 class ToWavCorpus(luigi.Task):
     """
     Convert all audio to WAV files using Sox.
     TODO: ToMono
     """
+
     def requires(self):
         return [SubsampleCorpus()]
 
@@ -191,10 +215,16 @@ class ToWavCorpus(luigi.Task):
         return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
 
     def run(self):
-        for audiofile in tqdm(list(glob.glob("_checkpoints/public_dataset/*.webm") + glob.glob("_checkpoints/public_dataset/*.ogg"))):
+        for audiofile in tqdm(
+            list(
+                glob.glob("_checkpoints/public_dataset/*.webm")
+                + glob.glob("_checkpoints/public_dataset/*.ogg")
+            )
+        ):
             convert_to_wav(audiofile, os.path.splitext(audiofile)[0] + ".wav")
-        with self.output().open('w') as outfile:
+        with self.output().open("w") as outfile:
             pass
+
 
 class EnsureLengthCorpus(luigi.Task):
     """
@@ -202,6 +232,7 @@ class EnsureLengthCorpus(luigi.Task):
     There might be a one-liner in ffmpeg that we can convert to WAV
     and ensure the file length at the same time.
     """
+
     def requires(self):
         return [ToWavCorpus()]
 
@@ -222,14 +253,16 @@ class EnsureLengthCorpus(luigi.Task):
                 x = np.hstack([x, np.zeros(target_length_samples - len(x))])
             assert len(x) == target_length_samples
             sf.write(audiofile, x, sr)
-        with self.output().open('w') as outfile:
+        with self.output().open("w") as outfile:
             pass
+
 
 class TrainTestCorpus(luigi.Task):
     """
     If there is already a train/test split, we use that.
-    Otherwise we deterministically 
+    Otherwise we deterministically
     """
+
     def requires(self):
         return [EnsureLengthCorpus()]
 
@@ -238,23 +271,36 @@ class TrainTestCorpus(luigi.Task):
 
     def run(self):
         for audiofile in tqdm(list(glob.glob("_checkpoints/public_dataset/*.wav"))):
-            partition = which_set(audiofile, validation_percentage=0.0, testing_percentage=10.0)
+            partition = which_set(
+                audiofile, validation_percentage=0.0, testing_percentage=10.0
+            )
             partition_dir = f"_checkpoints/{partition}/"
             require_dir(partition_dir)
             shutil.copy2(audiofile, partition_dir)
-        with self.output().open('w') as outfile:
+        with self.output().open("w") as outfile:
             pass
+
 
 def resample_wav(in_file: str, out_file: str, out_sr: int):
     # TODO: Don't do anything if we are already the right sample rate.
     devnull = open(os.devnull, "w")
     ret = subprocess.call(
-        ["ffmpeg", "-i", in_file, "-af", "aresample=resampler=soxr", "-ar", str(out_sr), out_file],
+        [
+            "ffmpeg",
+            "-i",
+            in_file,
+            "-af",
+            "aresample=resampler=soxr",
+            "-ar",
+            str(out_sr),
+            out_file,
+        ],
         stdout=devnull,
         stderr=devnull,
     )
     # Make sure the return code is 0 and the command was successful.
     assert ret == 0
+
 
 class ResampledCorpus(luigi.Task):
     sr = luigi.IntParameter()
@@ -269,11 +315,14 @@ class ResampledCorpus(luigi.Task):
         for partition in ["train", "test", "val"]:
             for audiofile in tqdm(list(glob.glob(f"_checkpoints/{partition}/*.wav"))):
                 for target_sr in SAMPLE_RATES:
-                    resampled_audiofile = os.path.join(f"_checkpoints/{target_sr}/{partition}/",
-                        os.path.split(audiofile)[1])
+                    resampled_audiofile = os.path.join(
+                        f"_checkpoints/{target_sr}/{partition}/",
+                        os.path.split(audiofile)[1],
+                    )
                     resample_wav(audiofile, resampled_audiofile, target_sr)
-        with self.output().open('w') as outfile:
+        with self.output().open("w") as outfile:
             pass
+
 
 # TODO: Load from S3 + un-tar if available
 class FinalizeCorpus(luigi.Task):
@@ -284,10 +333,11 @@ class FinalizeCorpus(luigi.Task):
         return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
 
     def run(self):
-        with self.output().open('w') as outfile:
+        with self.output().open("w") as outfile:
             pass
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print("max_files_per_corpus = %d" % max_files_per_corpus)
     require_dir("_checkpoints")
     luigi.build([FinalizeCorpus()], workers=NUM_WORKERS, local_scheduler=True)
