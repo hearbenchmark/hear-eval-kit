@@ -20,7 +20,8 @@ For each evaluation task, the directory structure is:
 
 ## More details
 
-task.sjon also specifies the hop_size that we will use for the evaluation.
+task.json also specifies the hop_size that we will use for the
+evaluation.
 
 If this is a task involving multiple classes or labels, the max
 number of classes/labels will be provided. We might have two versions

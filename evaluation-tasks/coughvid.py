@@ -12,17 +12,13 @@ Perhaps we should move to having all tasks write to
 working directories can be easily removed.
 
 TODO:
-* Subsampling: If we only want X hours of audio total
-(or, actually, max N frames) we need a step for that.
-* Restrict or pad audio to fixed length given in metadata.json
-* Where do we put the temporary files and how do we clean
-them up when we're done.
 * For tasks with large tqdm lists, it might make sense to add
 multiprocessing, e.g. as per
 https://github.com/neuralaudio/hear2021-eval-kit/pull/3/files#diff-2ac814f07851f8ddbb7cf1b456ab8ff5947ba33f1bf884e279eecc0cfc9b5262R48
 * We also want everything to run in separate taskname/ directories
 so different pipelines are isolated from each other.
-* We need all the files in the README.md created for each dataset.
+* We need all the files in the README.md created for each dataset
+(task.json, train.csv, etc.).
 * After downloading from Zenodo, check that the zipfile has the
 correct MD5.
 """
