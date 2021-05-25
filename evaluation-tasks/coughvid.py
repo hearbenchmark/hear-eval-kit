@@ -18,6 +18,8 @@ so different pipelines are isolated from each other.
 (task.json, train.csv, etc.).
 * After downloading from Zenodo, check that the zipfile has the
 correct MD5.
+* Would be nice to compute the 50% and 75% percentile audio length
+to the metadata.
 * Upload to S3 at end (or skip if it exists on S3)
 """
 
@@ -31,6 +33,7 @@ import luigi
 import numpy as np
 import requests
 import soundfile as sf
+from slugify import slugify
 from tqdm.auto import tqdm
 
 # TODO: Put this in a config.py later
@@ -91,10 +94,11 @@ class WorkTask(luigi.Task):
     We assume following conventions:
         * Each luigi Task will have a name property:
             {classname}-{task parameters}
-            * The "output" of each task is a touch'ed file,
-        indicating that the task is done:
+        * The "output" of each task is a touch'ed file,
+        indicating that the task is done. Each .run()
+        method should end with this command:
             `_workdir/done-{name}`
-            * The working output of each task will go into:
+            * Optionally, working output of each task will go into:
             `_workdir/{name}`
     Downstream dependencies should be cautious of automatically
     removing the working output, unless they are sure they are the
@@ -109,6 +113,7 @@ class WorkTask(luigi.Task):
     def output(self):
         return luigi.LocalTarget("_workdir/done-%s" % self.name)
 
+    @property
     def workdir(self):
         d = "_workdir/%s/" % self.name
         ensure_dir(d)
@@ -116,6 +121,7 @@ class WorkTask(luigi.Task):
 
 
 class DownloadCorpus(WorkTask):
+    @property
     def name(self):
         return type(self).__name__
 
@@ -123,7 +129,7 @@ class DownloadCorpus(WorkTask):
         # TODO: Change the working dir
         download_file(
             "https://zenodo.org/record/4498364/files/public_dataset.zip",
-            "_workdir/corpus.zip",
+            os.path.join(self.workdir, "corpus.zip"),
         )
         with self.output().open("w") as outfile:
             pass
@@ -131,14 +137,20 @@ class DownloadCorpus(WorkTask):
 
 class ExtractCorpus(WorkTask):
     def requires(self):
-        return [DownloadCorpus()]
+        return DownloadCorpus()
 
+    @property
     def name(self):
         return type(self).__name__
 
     def run(self):
-        # TODO: Do this in another directory
-        os.system("cd _workdir && unzip corpus.zip")
+        os.system(
+            "cd %s && unzip %s"
+            % (
+                self.workdir,
+                os.path.normpath(os.path.join(self.requires().workdir, "corpus.zip")),
+            )
+        )
         with self.output().open("w") as outfile:
             pass
 
@@ -150,34 +162,50 @@ def filename_to_inthash(filename):
 
 
 class SubsampleCorpus(WorkTask):
-    def requires(self):
-        return [DownloadCorpus()]
+    """
+    Subsample the corpus so that we have the appropriate number of
+    audio files.
 
+    Additionally, since the upstream data files might be in subfolders,
+    we slugify them here so that we just have one flat directory.
+    (TODO: Double check this works.)
+
+    A destructive way of implementing this task is that it removes
+    extraneous files, rather than copying them to the next task's
+    directory.
+    """
+
+    def requires(self):
+        return ExtractCorpus()
+
+    @property
     def name(self):
         return type(self).__name__
 
     def run(self):
         # Really coughvid? webm + ogg?
         audiofiles = list(
-            glob.glob("_workdir/public_dataset/*.webm")
-            + glob.glob("_workdir/public_dataset/*.ogg")
+            glob.glob(os.path.join(self.requires().workdir, "*.webm"))
+            + glob.glob(os.path.join(self.requires().workdir, "*.ogg"))
         )
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: filename_to_inthash(filename))
-        print(audiofiles[:10])
         if len(audiofiles) > max_files_per_corpus:
             print(
                 "%d audio files in corpus, keeping only %d"
                 % (len(audiofiles), max_files_per_corpus)
             )
-            for audiofile in audiofiles[max_files_per_corpus:]:
-                os.remove(audiofile)
-        assert len(
-            list(
-                glob.glob("_workdir/public_dataset/*.webm")
-                + glob.glob("_workdir/public_dataset/*.ogg")
+        # Save diskspace using symlinks
+        for audiofile in audiofiles[:max_files_per_corpus]:
+            # Extract the audio filename, excluding the old working
+            # directory, but including all subfolders
+            newaudiofile = os.path.join(
+                self.workdir,
+                slugify(os.path.relpath(audiofile, self.requires().workdir())),
             )
-        ) <= len(audiofiles)
+            # Make sure we don't have any duplicates
+            assert not os.path.exists(newaudiofile)
+            os.symlink(audiofile, newaudiofile)
         with self.output().open("w") as outfile:
             pass
 
@@ -230,6 +258,13 @@ def convert_to_mono_wav(in_file: str, out_file: str):
     assert ret == 0
 
 
+def new_basedir(filename, basedir):
+    """
+    Rewrite .../filename as basedir/filename
+    """
+    return os.path.join(basedir, os.path.split(audiofile)[1])
+
+
 class ToMonoWavCorpus(WorkTask):
     """
     Convert all audio to WAV files using Sox.
@@ -237,19 +272,22 @@ class ToMonoWavCorpus(WorkTask):
     """
 
     def requires(self):
-        return [SubsampleCorpus()]
+        return SubsampleCorpus()
 
+    @property
     def name(self):
         return type(self).__name__
 
     def run(self):
-        for audiofile in tqdm(
-            list(
-                glob.glob("_workdir/public_dataset/*.webm")
-                + glob.glob("_workdir/public_dataset/*.ogg")
+        audiofiles = list(
+            glob.glob(os.path.join(self.requires().workdir, "*.webm"))
+            + glob.glob(os.path.join(self.requires().workdir, "*.ogg"))
+        )
+        for audiofile in tqdm(audiofiles):
+            newaudiofile = new_basedir(
+                os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
-        ):
-            convert_to_mono_wav(audiofile, os.path.splitext(audiofile)[0] + ".wav")
+            convert_to_mono_wav(audiofile, newaudiofile)
         with self.output().open("w") as outfile:
             pass
 
@@ -262,13 +300,14 @@ class EnsureLengthCorpus(WorkTask):
     """
 
     def requires(self):
-        return [ToMonoWavCorpus()]
+        return ToMonoWavCorpus()
 
+    @property
     def name(self):
         return type(self).__name__
 
     def run(self):
-        for audiofile in tqdm(list(glob.glob("_workdir/public_dataset/*.wav"))):
+        for audiofile in tqdm(list(glob.glob(os.path.join(self.workdir), "*.wav"))):
             x, sr = sf.read(audiofile)
             target_length_samples = int(round(sr * SAMPLE_LENGTH_SECONDS))
             # Convert to mono
@@ -280,7 +319,8 @@ class EnsureLengthCorpus(WorkTask):
             if len(x) < target_length_samples:
                 x = np.hstack([x, np.zeros(target_length_samples - len(x))])
             assert len(x) == target_length_samples
-            sf.write(audiofile, x, sr)
+            newaudiofile = new_basedir(audiofile, self.workdir)
+            sf.write(newaudiofile, x, sr)
         with self.output().open("w") as outfile:
             pass
 
@@ -292,19 +332,20 @@ class TrainTestCorpus(WorkTask):
     """
 
     def requires(self):
-        return [EnsureLengthCorpus()]
+        return EnsureLengthCorpus()
 
+    @property
     def name(self):
         return type(self).__name__
 
     def run(self):
-        for audiofile in tqdm(list(glob.glob("_workdir/public_dataset/*.wav"))):
+        for audiofile in tqdm(list(glob.glob(f"{self.requires().workdir}/*.wav"))):
             partition = which_set(
                 audiofile, validation_percentage=0.0, testing_percentage=10.0
             )
-            partition_dir = f"_workdir/{partition}/"
+            partition_dir = f"{self.workdir}/{partition}/{os.path.split(audiofile)[1]}"
             ensure_dir(partition_dir)
-            shutil.copy2(audiofile, partition_dir)
+            os.symlink(audiofile, partition_dir)
         with self.output().open("w") as outfile:
             pass
 
@@ -335,19 +376,19 @@ class ResampledCorpus(WorkTask):
     partition = luigi.Parameter()
 
     def requires(self):
-        return [TrainTestCorpus()]
+        return TrainTestCorpus()
 
+    @property
     def name(self):
         return "%s-%d-%s" % (type(self).__name__, self.sr, self.partition)
 
     def run(self):
-        resample_dir = f"_workdir/{self.sr}/{self.partition}/"
+        resample_dir = f"{self.workdir}/{self.sr}/{self.partition}/"
         ensure_dir(resample_dir)
-        for audiofile in tqdm(list(glob.glob(f"_workdir/{self.partition}/*.wav"))):
-            resampled_audiofile = os.path.join(
-                resample_dir,
-                os.path.split(audiofile)[1],
-            )
+        for audiofile in tqdm(
+            list(glob.glob(f"{self.requires().workdir}/{self.partition}/*.wav"))
+        ):
+            resampled_audiofile = new_basedir(audiofile, resample_dir)
             resample_wav(audiofile, resampled_audiofile, self.sr)
         with self.output().open("w") as outfile:
             pass
@@ -362,6 +403,7 @@ class FinalizeCorpus(WorkTask):
             for partition in ["train", "test", "val"]
         ]
 
+    @property
     def name(self):
         return type(self).__name__
 
