@@ -2,14 +2,12 @@
 """
 WRITEME [outline the steps in the pipeline]
 
-The idea is that each of these tasks should have a separate working
-directory, and clean up the previous tasks working directory when
-the current task is done.
+The idea is that each of these tasks should has a separate working
+directory in _workdir. We remove it only when the entire pipeline
+is done. This is safer, even tho it uses more disk space.
 
-Perhaps we should move to having all tasks write to
-`_workdir/{type(self).__name__}/` and the final output is
-`_workdir/done-{type(self).__name__}/`. That way, intermediate
-working directories can be easily removed.
+When hacking on this file, consider only enabling one Task at a
+time in __main__.
 
 TODO:
 * We also want everything to run in separate taskname/ directories
@@ -144,13 +142,13 @@ class ExtractCorpus(WorkTask):
         return type(self).__name__
 
     def run(self):
-        os.system(
-            "cd %s && unzip %s"
-            % (
-                self.workdir,
-                os.path.normpath(os.path.join(self.requires().workdir, "corpus.zip")),
-            )
+        # TODO: unzip --force ?
+        cmd = "cd %s && unzip %s" % (
+            self.workdir,
+            os.path.realpath(os.path.join(self.requires().workdir, "corpus.zip")),
         )
+        # TODO: Don't use os.system, we can't trap any errors
+        os.system(cmd)
         with self.output().open("w") as outfile:
             pass
 
@@ -185,8 +183,8 @@ class SubsampleCorpus(WorkTask):
     def run(self):
         # Really coughvid? webm + ogg?
         audiofiles = list(
-            glob.glob(os.path.join(self.requires().workdir, "*.webm"))
-            + glob.glob(os.path.join(self.requires().workdir, "*.ogg"))
+            glob.glob(os.path.join(self.requires().workdir, "public_dataset/*.webm"))
+            + glob.glob(os.path.join(self.requires().workdir, "public_dataset/*.ogg"))
         )
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: filename_to_inthash(filename))
@@ -201,11 +199,15 @@ class SubsampleCorpus(WorkTask):
             # directory, but including all subfolders
             newaudiofile = os.path.join(
                 self.workdir,
-                slugify(os.path.relpath(audiofile, self.requires().workdir())),
+                os.path.split(
+                    slugify(os.path.relpath(audiofile, self.requires().workdir))
+                )[0],
+                # This is pretty gnarly but we do it to not slugify the filename extension
+                os.path.split(audiofile)[1],
             )
             # Make sure we don't have any duplicates
             assert not os.path.exists(newaudiofile)
-            os.symlink(audiofile, newaudiofile)
+            os.symlink(os.path.realpath(audiofile), newaudiofile)
         with self.output().open("w") as outfile:
             pass
 
@@ -249,6 +251,7 @@ def convert_to_mono_wav(in_file: str, out_file: str):
     devnull = open(os.devnull, "w")
     # If we knew the sample rate, we could also pad/trim the audio file now, e.g.:
     # ffmpeg -i test.webm -filter_complex apad=whole_len=44100,atrim=end_sample=44100 -ac 1 -c:a pcm_f32le ./test.wav
+    # print(" ".join(["ffmpeg", "-y", "-i", in_file, "-ac", "1", "-c:a", "pcm_f32le", out_file]))
     ret = subprocess.call(
         ["ffmpeg", "-y", "-i", in_file, "-ac", "1", "-c:a", "pcm_f32le", out_file],
         stdout=devnull,
@@ -262,7 +265,7 @@ def new_basedir(filename, basedir):
     """
     Rewrite .../filename as basedir/filename
     """
-    return os.path.join(basedir, os.path.split(audiofile)[1])
+    return os.path.join(basedir, os.path.split(filename)[1])
 
 
 class ToMonoWavCorpus(WorkTask):
@@ -307,7 +310,9 @@ class EnsureLengthCorpus(WorkTask):
         return type(self).__name__
 
     def run(self):
-        for audiofile in tqdm(list(glob.glob(os.path.join(self.workdir), "*.wav"))):
+        for audiofile in tqdm(
+            list(glob.glob(os.path.join(self.requires().workdir, "*.wav")))
+        ):
             x, sr = sf.read(audiofile)
             target_length_samples = int(round(sr * SAMPLE_LENGTH_SECONDS))
             # Convert to mono
@@ -343,9 +348,10 @@ class TrainTestCorpus(WorkTask):
             partition = which_set(
                 audiofile, validation_percentage=0.0, testing_percentage=10.0
             )
-            partition_dir = f"{self.workdir}/{partition}/{os.path.split(audiofile)[1]}"
+            partition_dir = f"{self.workdir}/{partition}"
             ensure_dir(partition_dir)
-            os.symlink(audiofile, partition_dir)
+            newaudiofile = new_basedir(audiofile, partition_dir)
+            os.symlink(os.path.realpath(audiofile), newaudiofile)
         with self.output().open("w") as outfile:
             pass
 
