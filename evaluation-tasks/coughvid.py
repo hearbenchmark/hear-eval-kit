@@ -11,16 +11,17 @@ processing.)
 When hacking on this file, consider only enabling one Task at a
 time in __main__.
 
+Also keep in mind that if the S3 caching is enabled, you
+will always just retrieve your S3 cache instead of running
+the pipeline.
+
 TODO:
-* We also want everything to run in separate taskname/ directories
-so different pipelines are isolated from each other.
 * We need all the files in the README.md created for each dataset
 (task.json, train.csv, etc.).
 * After downloading from Zenodo, check that the zipfile has the
 correct MD5.
 * Would be nice to compute the 50% and 75% percentile audio length
 to the metadata.
-* Upload to S3 at end (or skip if it exists on S3).
 """
 
 import glob
@@ -29,16 +30,27 @@ import os
 import shutil
 import subprocess
 
+import boto3
 import luigi
 import numpy as np
 import requests
 import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
+from luigi.contrib.s3 import S3Client
+from botocore.client import ClientError
+
 
 TASKNAME = "coughvid-v2.0.0"
 
 # TODO: Put this in a config.py later
+# You should pick a unique handle, since this determine the S3 path
+# (which must be globally unique across all S3 users).
+HANDLE = "hear"
+S3_BUCKET = f"hear2021-{HANDLE}"
+# If this is None, boto will use whatever is in your
+# ~/.aws/config or AWS_DEFAULT_REGION environment variable
+S3_REGION_NAME = "eu-central-1"
 # Number of CPU workers for Luigi jobs
 NUM_WORKERS = 4
 # NUM_WORKERS = 1
@@ -411,6 +423,11 @@ class ResampledCorpus(WorkTask):
 
 
 class FinalizeCorpus(WorkTask):
+    """
+    Create a final corpus, no longer in _workdir but in the top-level
+    at directory TASKNAME.
+    """
+
     def requires(self):
         return [
             ResampledCorpus(sr, partition)
@@ -436,37 +453,110 @@ class FinalizeCorpus(WorkTask):
             pass
 
 
-class TarCorpus(WorkTask):
-    def requires(self):
-        return FinalizeCorpus()
+def can_access_bucket(s3, bucket):
+    try:
+        s3.head_bucket(Bucket=bucket)
+        return True
+    except ClientError:
+        return False
+
+
+class EnsureBucket(WorkTask):
+    """
+    Ensure the S3 bucket exists and is readable.
+
+    This S3 code is pretty gnarly, but I'm not sure it can be made
+    any cleaner.
+    """
 
     @property
     def name(self):
         return type(self).__name__
 
     def run(self):
-        devnull = open(os.devnull, "w")
-        ret = subprocess.call(
-            [
-                "tar",
-                "zcvf",
-                f"{self.workdir}/{TASKNAME}.tar.gz",
-                self.requires().workdir,
-            ],
-            stdout=devnull,
-            stderr=devnull,
-        )
-        # Make sure the return code is 0 and the command was successful.
-        assert ret == 0
+        if S3_REGION_NAME is None:
+            s3 = boto3.client("s3")
+        else:
+            s3 = boto3.client("s3", region_name=S3_REGION_NAME)
+        if not can_access_bucket(s3, S3_BUCKET):
+            # Try to create the bucket
+            if S3_REGION_NAME is None:
+                bucket = s3.create_bucket(Bucket=S3_BUCKET)
+            else:
+                location = {"LocationConstraint": S3_REGION_NAME}
+                bucket = s3.create_bucket(
+                    Bucket=S3_BUCKET, CreateBucketConfiguration=location
+                )
+
+        # Make sure we can access it
+        try:
+            can_access_bucket(s3, S3_BUCKET)
+        except ClientError:
+            raise ValueError(
+                f"S3 bucket {S3_BUCKET} does not exist or you don't have access. Have you changed HANDLE to something unique to you?"
+            )
 
         with self.output().open("w") as outfile:
             pass
 
 
-# TODO: Load from S3 + un-tar if available
+class CacheTarCorpus(WorkTask):
+    """
+    If the tar file is cached in S3, we simply retrieve it and untar
+    it, and skip the pipeline.
+
+    If the tar file is NOT in S3, we run the pipeline, create the
+    tar-file, and upload it to S3.
+    """
+
+    def requires(self):
+        return EnsureBucket()
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+        tarfile = f"{TASKNAME}.tar.gz"
+        pathtarfile = f"{self.workdir}/{tarfile}"
+        client = S3Client()
+        s3cache = os.path.join(f"s3://{S3_BUCKET}/", tarfile)
+        if client.exists(s3cache):
+            client.get(s3cache, pathtarfile)
+        else:
+            # If you yield FinalizeCorpus, this task is suspended
+            # and FinalizeCorpus is run, and a LocalFileTarget is
+            # returned.
+            finalize_corpus = yield FinalizeCorpus()
+
+            # Tar the file
+            devnull = open(os.devnull, "w")
+            ret = subprocess.call(
+                [
+                    "tar",
+                    "zcvf",
+                    pathtarfile,
+                    # Unfortunately, we have to hardcode
+                    # FinalizeCorpus.workdir()
+                    # because we don't have a Task
+                    # just a Target in finalize_corpus.
+                    TASKNAME,
+                ],
+                stdout=devnull,
+                stderr=devnull,
+            )
+            # Make sure the return code is 0 and the command was successful.
+            assert ret == 0
+
+            # Cache to S3
+            print("Putting file to S3")
+            client.put_multipart(pathtarfile, s3cache)
+
+        with self.output().open("w") as outfile:
+            pass
+
 
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % max_files_per_corpus)
     ensure_dir("_workdir")
-    # luigi.build([FinalizeCorpus()], workers=NUM_WORKERS, local_scheduler=True)
-    luigi.build([TarCorpus()], workers=NUM_WORKERS, local_scheduler=True)
+    luigi.build([CacheTarCorpus()], workers=NUM_WORKERS, local_scheduler=True)
