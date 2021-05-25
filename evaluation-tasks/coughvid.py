@@ -40,10 +40,15 @@ from tqdm.auto import tqdm
 from luigi.contrib.s3 import S3Client
 from botocore.client import ClientError
 
+import coughvid_config as config
+import s3utils
 
-TASKNAME = "coughvid-v2.0.0"
+
+# TASKNAME = "coughvid-v2.0.0"
 
 # TODO: Put this in a config.py later
+# If set to true will cache results in S3
+S3_CACHE = False
 # You should pick a unique handle, since this determine the S3 path
 # (which must be globally unique across all S3 users).
 HANDLE = "hear"
@@ -425,7 +430,7 @@ class ResampledCorpus(WorkTask):
 class FinalizeCorpus(WorkTask):
     """
     Create a final corpus, no longer in _workdir but in the top-level
-    at directory TASKNAME.
+    at directory config.TASKNAME.
     """
 
     def requires(self):
@@ -443,7 +448,7 @@ class FinalizeCorpus(WorkTask):
     # the finalized top-level task directory
     @property
     def workdir(self):
-        return TASKNAME
+        return config.TASKNAME
 
     def run(self):
         if os.path.exists(self.workdir):
@@ -451,14 +456,6 @@ class FinalizeCorpus(WorkTask):
         shutil.copytree(self.requires()[0].workdir, self.workdir)
         with self.output().open("w") as outfile:
             pass
-
-
-def can_access_bucket(s3, bucket):
-    try:
-        s3.head_bucket(Bucket=bucket)
-        return True
-    except ClientError:
-        return False
 
 
 class EnsureBucket(WorkTask):
@@ -474,28 +471,7 @@ class EnsureBucket(WorkTask):
         return type(self).__name__
 
     def run(self):
-        if S3_REGION_NAME is None:
-            s3 = boto3.client("s3")
-        else:
-            s3 = boto3.client("s3", region_name=S3_REGION_NAME)
-        if not can_access_bucket(s3, S3_BUCKET):
-            # Try to create the bucket
-            if S3_REGION_NAME is None:
-                bucket = s3.create_bucket(Bucket=S3_BUCKET)
-            else:
-                location = {"LocationConstraint": S3_REGION_NAME}
-                bucket = s3.create_bucket(
-                    Bucket=S3_BUCKET, CreateBucketConfiguration=location
-                )
-
-        # Make sure we can access it
-        try:
-            can_access_bucket(s3, S3_BUCKET)
-        except ClientError:
-            raise ValueError(
-                f"S3 bucket {S3_BUCKET} does not exist or you don't have access. Have you changed HANDLE to something unique to you?"
-            )
-
+        s3utils.check_bucket(config.S3_BUCKET, config.S3_REGION_NAME)
         with self.output().open("w") as outfile:
             pass
 
@@ -517,7 +493,7 @@ class CacheTarCorpus(WorkTask):
         return type(self).__name__
 
     def run(self):
-        tarfile = f"{TASKNAME}.tar.gz"
+        tarfile = f"{config.TASKNAME}.tar.gz"
         pathtarfile = f"{self.workdir}/{tarfile}"
         client = S3Client()
         s3cache = os.path.join(f"s3://{S3_BUCKET}/", tarfile)
@@ -540,7 +516,7 @@ class CacheTarCorpus(WorkTask):
                     # FinalizeCorpus.workdir()
                     # because we don't have a Task
                     # just a Target in finalize_corpus.
-                    TASKNAME,
+                    config.TASKNAME,
                 ],
                 stdout=devnull,
                 stderr=devnull,
