@@ -7,8 +7,8 @@ directory, and clean up the previous tasks working directory when
 the current task is done.
 
 Perhaps we should move to having all tasks write to
-`_checkpoints/{type(self).__name__}/` and the final output is
-`_checkpoints/done-{type(self).__name__}/`. That way, intermediate
+`_workdir/{type(self).__name__}/` and the final output is
+`_workdir/done-{type(self).__name__}/`. That way, intermediate
 working directories can be easily removed.
 
 TODO:
@@ -18,6 +18,7 @@ so different pipelines are isolated from each other.
 (task.json, train.csv, etc.).
 * After downloading from Zenodo, check that the zipfile has the
 correct MD5.
+* Upload to S3 at end (or skip if it exists on S3)
 """
 
 import glob
@@ -49,7 +50,7 @@ FRAME_RATE = 4
 # NOTE: This will be, expected, 225 test files only :\
 # NOTE: You can make this smaller during development of this
 # preprocessing script, to keep the pipeline fast.
-# WARNING: If you change this value, you *must* delete _checkpoints
+# WARNING: If you change this value, you *must* delete _workdir
 # or working dir.
 # Most of the tasks iterate over every audio file present,
 # except for the one that downsamples the corpus.
@@ -85,30 +86,59 @@ def download_file(url, local_filename):
     return local_filename
 
 
-class DownloadCorpus(luigi.Task):
+class WorkTask(luigi.Task):
+    """
+    We assume following conventions:
+        * Each luigi Task will have a name property:
+            {classname}-{task parameters}
+            * The "output" of each task is a touch'ed file,
+        indicating that the task is done:
+            `_workdir/done-{name}`
+            * The working output of each task will go into:
+            `_workdir/{name}`
+    Downstream dependencies should be cautious of automatically
+    removing the working output, unless they are sure they are the
+    only downstream dependency of a particular task (i.e. no
+    triangular dependencies).
+    """
+
+    @property
+    def name(self):
+        ...
+
     def output(self):
-        return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
+        return luigi.LocalTarget("_workdir/done-%s" % self.name)
+
+    def workdir(self):
+        d = "_workdir/%s/" % self.name
+        ensure_dir(d)
+        return d
+
+
+class DownloadCorpus(WorkTask):
+    def name(self):
+        return type(self).__name__
 
     def run(self):
         # TODO: Change the working dir
         download_file(
             "https://zenodo.org/record/4498364/files/public_dataset.zip",
-            "_checkpoints/corpus.zip",
+            "_workdir/corpus.zip",
         )
         with self.output().open("w") as outfile:
             pass
 
 
-class ExtractCorpus(luigi.Task):
+class ExtractCorpus(WorkTask):
     def requires(self):
         return [DownloadCorpus()]
 
-    def output(self):
-        return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
+    def name(self):
+        return type(self).__name__
 
     def run(self):
         # TODO: Do this in another directory
-        os.system("cd _checkpoints && unzip corpus.zip")
+        os.system("cd _workdir && unzip corpus.zip")
         with self.output().open("w") as outfile:
             pass
 
@@ -119,18 +149,18 @@ def filename_to_inthash(filename):
     return int(hash_name_hashed, 16)
 
 
-class SubsampleCorpus(luigi.Task):
+class SubsampleCorpus(WorkTask):
     def requires(self):
         return [DownloadCorpus()]
 
-    def output(self):
-        return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
+    def name(self):
+        return type(self).__name__
 
     def run(self):
         # Really coughvid? webm + ogg?
         audiofiles = list(
-            glob.glob("_checkpoints/public_dataset/*.webm")
-            + glob.glob("_checkpoints/public_dataset/*.ogg")
+            glob.glob("_workdir/public_dataset/*.webm")
+            + glob.glob("_workdir/public_dataset/*.ogg")
         )
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: filename_to_inthash(filename))
@@ -144,8 +174,8 @@ class SubsampleCorpus(luigi.Task):
                 os.remove(audiofile)
         assert len(
             list(
-                glob.glob("_checkpoints/public_dataset/*.webm")
-                + glob.glob("_checkpoints/public_dataset/*.ogg")
+                glob.glob("_workdir/public_dataset/*.webm")
+                + glob.glob("_workdir/public_dataset/*.ogg")
             )
         ) <= len(audiofiles)
         with self.output().open("w") as outfile:
@@ -200,7 +230,7 @@ def convert_to_mono_wav(in_file: str, out_file: str):
     assert ret == 0
 
 
-class ToMonoWavCorpus(luigi.Task):
+class ToMonoWavCorpus(WorkTask):
     """
     Convert all audio to WAV files using Sox.
     We convert to mono, and also ensure that all files are the same length.
@@ -209,14 +239,14 @@ class ToMonoWavCorpus(luigi.Task):
     def requires(self):
         return [SubsampleCorpus()]
 
-    def output(self):
-        return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
+    def name(self):
+        return type(self).__name__
 
     def run(self):
         for audiofile in tqdm(
             list(
-                glob.glob("_checkpoints/public_dataset/*.webm")
-                + glob.glob("_checkpoints/public_dataset/*.ogg")
+                glob.glob("_workdir/public_dataset/*.webm")
+                + glob.glob("_workdir/public_dataset/*.ogg")
             )
         ):
             convert_to_mono_wav(audiofile, os.path.splitext(audiofile)[0] + ".wav")
@@ -224,7 +254,7 @@ class ToMonoWavCorpus(luigi.Task):
             pass
 
 
-class EnsureLengthCorpus(luigi.Task):
+class EnsureLengthCorpus(WorkTask):
     """
     Ensure all WAV files are a particular length.
     There might be a one-liner in ffmpeg that we can convert to WAV
@@ -234,11 +264,11 @@ class EnsureLengthCorpus(luigi.Task):
     def requires(self):
         return [ToMonoWavCorpus()]
 
-    def output(self):
-        return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
+    def name(self):
+        return type(self).__name__
 
     def run(self):
-        for audiofile in tqdm(list(glob.glob("_checkpoints/public_dataset/*.wav"))):
+        for audiofile in tqdm(list(glob.glob("_workdir/public_dataset/*.wav"))):
             x, sr = sf.read(audiofile)
             target_length_samples = int(round(sr * SAMPLE_LENGTH_SECONDS))
             # Convert to mono
@@ -255,7 +285,7 @@ class EnsureLengthCorpus(luigi.Task):
             pass
 
 
-class TrainTestCorpus(luigi.Task):
+class TrainTestCorpus(WorkTask):
     """
     If there is already a train/test split, we use that.
     Otherwise we deterministically
@@ -264,15 +294,15 @@ class TrainTestCorpus(luigi.Task):
     def requires(self):
         return [EnsureLengthCorpus()]
 
-    def output(self):
-        return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
+    def name(self):
+        return type(self).__name__
 
     def run(self):
-        for audiofile in tqdm(list(glob.glob("_checkpoints/public_dataset/*.wav"))):
+        for audiofile in tqdm(list(glob.glob("_workdir/public_dataset/*.wav"))):
             partition = which_set(
                 audiofile, validation_percentage=0.0, testing_percentage=10.0
             )
-            partition_dir = f"_checkpoints/{partition}/"
+            partition_dir = f"_workdir/{partition}/"
             ensure_dir(partition_dir)
             shutil.copy2(audiofile, partition_dir)
         with self.output().open("w") as outfile:
@@ -300,22 +330,20 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
     assert ret == 0
 
 
-class ResampledCorpus(luigi.Task):
+class ResampledCorpus(WorkTask):
     sr = luigi.IntParameter()
     partition = luigi.Parameter()
 
     def requires(self):
         return [TrainTestCorpus()]
 
-    def output(self):
-        return luigi.LocalTarget(
-            "_checkpoints/%s-%d-%s" % (type(self).__name__, self.sr, self.partition)
-        )
+    def name(self):
+        return "%s-%d-%s" % (type(self).__name__, self.sr, self.partition)
 
     def run(self):
-        resample_dir = f"_checkpoints/{self.sr}/{self.partition}/"
+        resample_dir = f"_workdir/{self.sr}/{self.partition}/"
         ensure_dir(resample_dir)
-        for audiofile in tqdm(list(glob.glob(f"_checkpoints/{self.partition}/*.wav"))):
+        for audiofile in tqdm(list(glob.glob(f"_workdir/{self.partition}/*.wav"))):
             resampled_audiofile = os.path.join(
                 resample_dir,
                 os.path.split(audiofile)[1],
@@ -326,7 +354,7 @@ class ResampledCorpus(luigi.Task):
 
 
 # TODO: Load from S3 + un-tar if available
-class FinalizeCorpus(luigi.Task):
+class FinalizeCorpus(WorkTask):
     def requires(self):
         return [
             ResampledCorpus(sr, partition)
@@ -334,8 +362,8 @@ class FinalizeCorpus(luigi.Task):
             for partition in ["train", "test", "val"]
         ]
 
-    def output(self):
-        return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
+    def name(self):
+        return type(self).__name__
 
     def run(self):
         with self.output().open("w") as outfile:
@@ -344,5 +372,5 @@ class FinalizeCorpus(luigi.Task):
 
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % max_files_per_corpus)
-    ensure_dir("_checkpoints")
+    ensure_dir("_workdir")
     luigi.build([FinalizeCorpus()], workers=NUM_WORKERS, local_scheduler=True)
