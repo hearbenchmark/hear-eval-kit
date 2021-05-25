@@ -5,6 +5,8 @@ WRITEME [outline the steps in the pipeline]
 The idea is that each of these tasks should has a separate working
 directory in _workdir. We remove it only when the entire pipeline
 is done. This is safer, even tho it uses more disk space.
+(The principle here is we don't remove any working dirs during
+processing.)
 
 When hacking on this file, consider only enabling one Task at a
 time in __main__.
@@ -18,7 +20,7 @@ so different pipelines are isolated from each other.
 correct MD5.
 * Would be nice to compute the 50% and 75% percentile audio length
 to the metadata.
-* Upload to S3 at end (or skip if it exists on S3)
+* Upload to S3 at end (or skip if it exists on S3).
 """
 
 import glob
@@ -33,6 +35,8 @@ import requests
 import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
+
+TASKNAME = "coughvid-v2.0.0"
 
 # TODO: Put this in a config.py later
 # Number of CPU workers for Luigi jobs
@@ -91,7 +95,12 @@ class WorkTask(luigi.Task):
     """
     We assume following conventions:
         * Each luigi Task will have a name property:
+            {classname}
+            or
             {classname}-{task parameters}
+            depending upon what your want the name to be.
+            (TODO: Since we always use {classname}, just
+            make this constant?)
         * The "output" of each task is a touch'ed file,
         indicating that the task is done. Each .run()
         method should end with this command:
@@ -107,6 +116,7 @@ class WorkTask(luigi.Task):
     @property
     def name(self):
         ...
+        # return type(self).__name__
 
     def output(self):
         return luigi.LocalTarget("_workdir/done-%s" % self.name)
@@ -386,7 +396,7 @@ class ResampledCorpus(WorkTask):
 
     @property
     def name(self):
-        return "%s-%d-%s" % (type(self).__name__, self.sr, self.partition)
+        return type(self).__name__
 
     def run(self):
         resample_dir = f"{self.workdir}/{self.sr}/{self.partition}/"
@@ -400,7 +410,6 @@ class ResampledCorpus(WorkTask):
             pass
 
 
-# TODO: Load from S3 + un-tar if available
 class FinalizeCorpus(WorkTask):
     def requires(self):
         return [
@@ -413,12 +422,51 @@ class FinalizeCorpus(WorkTask):
     def name(self):
         return type(self).__name__
 
+    # We overwrite workdir here, because we want the output to be
+    # the finalized top-level task directory
+    @property
+    def workdir(self):
+        return TASKNAME
+
     def run(self):
+        if os.path.exists(self.workdir):
+            shutil.rmtree(self.workdir)
+        shutil.copytree(self.requires()[0].workdir, self.workdir)
         with self.output().open("w") as outfile:
             pass
 
 
+class TarCorpus(WorkTask):
+    def requires(self):
+        return FinalizeCorpus()
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+        devnull = open(os.devnull, "w")
+        ret = subprocess.call(
+            [
+                "tar",
+                "zcvf",
+                f"{self.workdir}/{TASKNAME}.tar.gz",
+                self.requires().workdir,
+            ],
+            stdout=devnull,
+            stderr=devnull,
+        )
+        # Make sure the return code is 0 and the command was successful.
+        assert ret == 0
+
+        with self.output().open("w") as outfile:
+            pass
+
+
+# TODO: Load from S3 + un-tar if available
+
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % max_files_per_corpus)
     ensure_dir("_workdir")
-    luigi.build([FinalizeCorpus()], workers=NUM_WORKERS, local_scheduler=True)
+    # luigi.build([FinalizeCorpus()], workers=NUM_WORKERS, local_scheduler=True)
+    luigi.build([TarCorpus()], workers=NUM_WORKERS, local_scheduler=True)
