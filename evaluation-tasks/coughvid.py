@@ -12,9 +12,6 @@ Perhaps we should move to having all tasks write to
 working directories can be easily removed.
 
 TODO:
-* For tasks with large tqdm lists, it might make sense to add
-multiprocessing, e.g. as per
-https://github.com/neuralaudio/hear2021-eval-kit/pull/3/files#diff-2ac814f07851f8ddbb7cf1b456ab8ff5947ba33f1bf884e279eecc0cfc9b5262R48
 * We also want everything to run in separate taskname/ directories
 so different pipelines are isolated from each other.
 * We need all the files in the README.md created for each dataset
@@ -37,7 +34,8 @@ from tqdm.auto import tqdm
 
 # TODO: Put this in a config.py later
 # Number of CPU workers for Luigi jobs
-NUM_WORKERS = 1
+NUM_WORKERS = 4
+# NUM_WORKERS = 1
 # If you only use one sample rate, you should have an array with
 # one sample rate in it.
 # However, if you are evaluating multiple embeddings, you might
@@ -304,24 +302,25 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
 
 class ResampledCorpus(luigi.Task):
     sr = luigi.IntParameter()
+    partition = luigi.Parameter()
 
     def requires(self):
         return [TrainTestCorpus()]
 
     def output(self):
-        return luigi.LocalTarget("_checkpoints/%s-%d" % (type(self).__name__, self.sr))
+        return luigi.LocalTarget(
+            "_checkpoints/%s-%d-%s" % (type(self).__name__, self.sr, self.partition)
+        )
 
     def run(self):
-        for partition in ["train", "test", "val"]:
-            for audiofile in tqdm(list(glob.glob(f"_checkpoints/{partition}/*.wav"))):
-                for target_sr in SAMPLE_RATES:
-                    resample_dir = f"_checkpoints/{target_sr}/{partition}/"
-                    ensure_dir(resample_dir)
-                    resampled_audiofile = os.path.join(
-                        resample_dir,
-                        os.path.split(audiofile)[1],
-                    )
-                    resample_wav(audiofile, resampled_audiofile, target_sr)
+        resample_dir = f"_checkpoints/{self.sr}/{self.partition}/"
+        ensure_dir(resample_dir)
+        for audiofile in tqdm(list(glob.glob(f"_checkpoints/{self.partition}/*.wav"))):
+            resampled_audiofile = os.path.join(
+                resample_dir,
+                os.path.split(audiofile)[1],
+            )
+            resample_wav(audiofile, resampled_audiofile, self.sr)
         with self.output().open("w") as outfile:
             pass
 
@@ -329,7 +328,11 @@ class ResampledCorpus(luigi.Task):
 # TODO: Load from S3 + un-tar if available
 class FinalizeCorpus(luigi.Task):
     def requires(self):
-        return [ResampledCorpus(sr) for sr in SAMPLE_RATES]
+        return [
+            ResampledCorpus(sr, partition)
+            for sr in SAMPLE_RATES
+            for partition in ["train", "test", "val"]
+        ]
 
     def output(self):
         return luigi.LocalTarget("_checkpoints/%s" % (type(self).__name__))
