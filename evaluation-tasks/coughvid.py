@@ -30,7 +30,6 @@ import os
 import shutil
 import subprocess
 
-import boto3
 import luigi
 import numpy as np
 import requests
@@ -38,10 +37,12 @@ import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
 from luigi.contrib.s3 import S3Client
-from botocore.client import ClientError
 
-import coughvid_config as config
-import s3utils
+import config.coughvid as config
+from util.luigi import ensure_dir, WorkTask
+import util.s3 as s3util
+
+# from .hearluigi import ensure_dir, WorkTask
 
 
 # TASKNAME = "coughvid-v2.0.0"
@@ -82,11 +83,6 @@ MAX_FRAMES_PER_CORPUS = 20 * 3600
 max_files_per_corpus = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
 
 
-def ensure_dir(dirname):
-    if not os.path.exists(dirname):
-        os.makedirs(dirname)
-
-
 def download_file(url, local_filename):
     """
     The downside of this approach versus `wget -c` is that this
@@ -106,43 +102,6 @@ def download_file(url, local_filename):
                 # if chunk:
                 f.write(chunk)
     return local_filename
-
-
-class WorkTask(luigi.Task):
-    """
-    We assume following conventions:
-        * Each luigi Task will have a name property:
-            {classname}
-            or
-            {classname}-{task parameters}
-            depending upon what your want the name to be.
-            (TODO: Since we always use {classname}, just
-            make this constant?)
-        * The "output" of each task is a touch'ed file,
-        indicating that the task is done. Each .run()
-        method should end with this command:
-            `_workdir/done-{name}`
-            * Optionally, working output of each task will go into:
-            `_workdir/{name}`
-    Downstream dependencies should be cautious of automatically
-    removing the working output, unless they are sure they are the
-    only downstream dependency of a particular task (i.e. no
-    triangular dependencies).
-    """
-
-    @property
-    def name(self):
-        ...
-        # return type(self).__name__
-
-    def output(self):
-        return luigi.LocalTarget("_workdir/done-%s" % self.name)
-
-    @property
-    def workdir(self):
-        d = "_workdir/%s/" % self.name
-        ensure_dir(d)
-        return d
 
 
 class DownloadCorpus(WorkTask):
@@ -471,7 +430,7 @@ class EnsureBucket(WorkTask):
         return type(self).__name__
 
     def run(self):
-        s3utils.check_bucket(config.S3_BUCKET, config.S3_REGION_NAME)
+        s3util.check_bucket(config.S3_BUCKET, config.S3_REGION_NAME)
         with self.output().open("w") as outfile:
             pass
 
