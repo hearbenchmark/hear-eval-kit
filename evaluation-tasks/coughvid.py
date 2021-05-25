@@ -53,6 +53,8 @@ SAMPLE_LENGTH_SECONDS = 8.0
 FRAME_RATE = 4
 # Set this to None if you want to use ALL the data.
 # NOTE: This will be, expected, 225 test files only :\
+# NOTE: You can make this smaller during development of this
+# preprocessing script, to keep the pipeline fast.
 # WARNING: If you change this value, you *must* delete _checkpoints
 # or working dir.
 # Most of the tasks iterate over every audio file present,
