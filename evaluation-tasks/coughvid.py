@@ -63,7 +63,7 @@ MAX_FRAMES_PER_CORPUS = 20 * 3600
 max_files_per_corpus = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
 
 
-def require_dir(dirname):
+def ensure_dir(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
 
@@ -277,7 +277,7 @@ class TrainTestCorpus(luigi.Task):
                 audiofile, validation_percentage=0.0, testing_percentage=10.0
             )
             partition_dir = f"_checkpoints/{partition}/"
-            require_dir(partition_dir)
+            ensure_dir(partition_dir)
             shutil.copy2(audiofile, partition_dir)
         with self.output().open("w") as outfile:
             pass
@@ -317,8 +317,10 @@ class ResampledCorpus(luigi.Task):
         for partition in ["train", "test", "val"]:
             for audiofile in tqdm(list(glob.glob(f"_checkpoints/{partition}/*.wav"))):
                 for target_sr in SAMPLE_RATES:
+                    resample_dir = f"_checkpoints/{target_sr}/{partition}/"
+                    ensure_dir(resample_dir)
                     resampled_audiofile = os.path.join(
-                        f"_checkpoints/{target_sr}/{partition}/",
+                        resample_dir,
                         os.path.split(audiofile)[1],
                     )
                     resample_wav(audiofile, resampled_audiofile, target_sr)
@@ -341,5 +343,5 @@ class FinalizeCorpus(luigi.Task):
 
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % max_files_per_corpus)
-    require_dir("_checkpoints")
+    ensure_dir("_checkpoints")
     luigi.build([FinalizeCorpus()], workers=NUM_WORKERS, local_scheduler=True)
