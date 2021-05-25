@@ -1,0 +1,8 @@
+boto3
+luigi
+numpy
+requests
+soundfile
+slugify
+tqdm
+
