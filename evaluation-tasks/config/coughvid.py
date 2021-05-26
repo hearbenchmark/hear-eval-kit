@@ -5,7 +5,7 @@ Configuration for the coughvid task
 TASKNAME = "coughvid-v2.0.0"
 
 # If set to true will cache results in S3
-S3_CACHE = True
+S3_CACHE = False
 # You should pick a unique handle, since this determine the S3 path
 # (which must be globally unique across all S3 users).
 HANDLE = "hear"
