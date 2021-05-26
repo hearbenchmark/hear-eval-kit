@@ -25,7 +25,6 @@ to the metadata.
 """
 
 import glob
-import hashlib
 import os
 import shutil
 import subprocess
@@ -35,7 +34,6 @@ import numpy as np
 import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
-from luigi.contrib.s3 import S3Client
 
 import config.coughvid as config
 import util.audio as audio_util
@@ -74,21 +72,12 @@ class ExtractCorpus(WorkTask):
         return type(self).__name__
 
     def run(self):
-
+        # Location of zip file to extract. Figure this out before changing
+        # the working directory.
         corpus_zip = os.path.realpath(
             os.path.join(self.requires().workdir, "corpus.zip")
         )
-
-        # Move to workdir, then try to run the unzip command.
-        # subprocess.check_output will raise an error if the command doesn't
-        # complete successfully.
-        wd = os.getcwd()
-        os.chdir(self.workdir)
-        try:
-            subprocess.check_output(["unzip", "-o", corpus_zip])
-        finally:
-            # Move back to original working directory.
-            os.chdir(wd)
+        subprocess.check_output(["unzip", "-o", corpus_zip, "-d", self.workdir])
 
         with self.output().open("w") as outfile:
             pass
@@ -121,6 +110,11 @@ class SubsampleCorpus(WorkTask):
             glob.glob(os.path.join(self.requires().workdir, "public_dataset/*.webm"))
             + glob.glob(os.path.join(self.requires().workdir, "public_dataset/*.ogg"))
         )
+
+        # Make sure we found audio files to work with
+        if len(audiofiles) == 0:
+            raise RunTimeError(f"No audio files found in {self.requires().workdir}!")
+
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: filename_to_int_hash(filename))
         if len(audiofiles) > config.MAX_FILES_PER_CORPUS:

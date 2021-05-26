@@ -6,6 +6,7 @@ import hashlib
 import os
 import luigi
 import requests
+from tqdm import tqdm
 
 
 class WorkTask(luigi.Task):
@@ -52,17 +53,20 @@ def download_file(url, local_filename):
     The benefit is that we are sure if the download completely
     successfuly, otherwise we should have an exception.
     From: https://stackoverflow.com/a/16696317/82733
-    TODO: Would be nice to have a TQDM progress bar here.
     """
     # NOTE the stream=True parameter below
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
+        total_length = int(r.headers.get("content-length"))
         with open(local_filename, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
+            pbar = tqdm(total=total_length)
+            chunk_size = 8192
+            for chunk in r.iter_content(chunk_size=chunk_size):
                 # If you have chunk encoded response uncomment if
                 # and set chunk_size parameter to None.
-                # if chunk:
                 f.write(chunk)
+                pbar.update(chunk_size)
+            pbar.close()
     return local_filename
 
 
