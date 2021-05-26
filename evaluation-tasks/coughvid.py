@@ -287,6 +287,7 @@ if __name__ == "__main__":
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     ensure_dir("_workdir")
 
+    # If caching in S3, that becomes the final task in the pipeline
     if config.S3_CACHE:
         final_task = [
             s3_util.CacheTarCorpus(

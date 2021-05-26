@@ -59,3 +59,19 @@ If the dataset provides a validation.csv, that will be included
 too. Otherwise, participants do partition train into train/val
 however they like.
 
+## Caching with S3
+
+1. Download and configure the AWS CLI if you haven't done that already:
+    * [Intallation](https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html)
+    * [Configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
+
+2. Update the S3 config file: `config/s3.py`
+    * `S3_CACHE = True` enables S3 caching. Set this to False if you want to disable
+        caching for all tasks.
+    * `HANDLE` is a string that is used to create an S3 bucket for all the evaluation
+        tasks. Every S3 bucket must have a unique name, so you should use this to create
+        one for yourself. The value of `HANDLE` is appended to `hear2021-`. For example,
+        if I set `HANDLE=jordie` then all my tasks will be cached in a bucket named
+        `hear2021-jordie`.
+    * `S3_REGION_NAME` sets the region for your S3 buckets. You can set this to `None`
+        to use the default value set during CLI configuration.
