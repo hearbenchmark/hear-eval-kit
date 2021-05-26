@@ -280,87 +280,20 @@ class FinalizeCorpus(WorkTask):
             pass
 
 
-class EnsureBucket(WorkTask):
-    """
-    Ensure the S3 bucket exists and is readable.
-
-    This S3 code is pretty gnarly, but I'm not sure it can be made
-    any cleaner.
-    """
-
-    @property
-    def name(self):
-        return type(self).__name__
-
-    def run(self):
-        s3_util.check_bucket(config.S3_BUCKET, config.S3_REGION_NAME)
-        with self.output().open("w") as outfile:
-            pass
-
-
-class CacheTarCorpus(WorkTask):
-    """
-    If the tar file is cached in S3, we simply retrieve it and untar
-    it, and skip the pipeline.
-
-    If the tar file is NOT in S3, we run the pipeline, create the
-    tar-file, and upload it to S3.
-    """
-
-    def requires(self):
-        return EnsureBucket()
-
-    @property
-    def name(self):
-        return type(self).__name__
-
-    def run(self):
-        tarfile = f"{config.TASKNAME}.tar.gz"
-        pathtarfile = f"{self.workdir}/{tarfile}"
-        client = S3Client()
-        s3cache = os.path.join(f"s3://{config.S3_BUCKET}/", tarfile)
-        if client.exists(s3cache):
-            client.get(s3cache, pathtarfile)
-        else:
-            # If you yield FinalizeCorpus, this task is suspended
-            # and FinalizeCorpus is run, and a LocalFileTarget is
-            # returned.
-            finalize_corpus = yield FinalizeCorpus()
-
-            # Tar the file
-            devnull = open(os.devnull, "w")
-            ret = subprocess.call(
-                [
-                    "tar",
-                    "zcvf",
-                    pathtarfile,
-                    # Unfortunately, we have to hardcode
-                    # FinalizeCorpus.workdir()
-                    # because we don't have a Task
-                    # just a Target in finalize_corpus.
-                    config.TASKNAME,
-                ],
-                stdout=devnull,
-                stderr=devnull,
-            )
-            # Make sure the return code is 0 and the command was successful.
-            assert ret == 0
-
-            # Cache to S3
-            print("Putting file to S3")
-            client.put_multipart(pathtarfile, s3cache)
-
-        with self.output().open("w") as outfile:
-            pass
-
-
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     ensure_dir("_workdir")
 
     if config.S3_CACHE:
-        final_task = [CacheTarCorpus()]
+        final_task = [
+            s3_util.CacheTarCorpus(
+                task_name=config.TASKNAME,
+                bucket=config.S3_BUCKET,
+                region=config.S3_REGION_NAME,
+                next_task=FinalizeCorpus,
+            )
+        ]
     else:
         final_task = [FinalizeCorpus()]
 
-    luigi.build([FinalizeCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)
+    luigi.build(final_task, workers=config.NUM_WORKERS, local_scheduler=True)
