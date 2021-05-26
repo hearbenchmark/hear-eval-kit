@@ -32,76 +32,14 @@ import subprocess
 
 import luigi
 import numpy as np
-import requests
 import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
 from luigi.contrib.s3 import S3Client
 
 import config.coughvid as config
-from util.luigi import ensure_dir, WorkTask
+from util.luigi import download_file, ensure_dir, WorkTask
 import util.s3 as s3util
-
-# from .hearluigi import ensure_dir, WorkTask
-
-
-# TASKNAME = "coughvid-v2.0.0"
-
-# TODO: Put this in a config.py later
-# If set to true will cache results in S3
-S3_CACHE = False
-# You should pick a unique handle, since this determine the S3 path
-# (which must be globally unique across all S3 users).
-HANDLE = "hear"
-S3_BUCKET = f"hear2021-{HANDLE}"
-# If this is None, boto will use whatever is in your
-# ~/.aws/config or AWS_DEFAULT_REGION environment variable
-S3_REGION_NAME = "eu-central-1"
-# Number of CPU workers for Luigi jobs
-NUM_WORKERS = 4
-# NUM_WORKERS = 1
-# If you only use one sample rate, you should have an array with
-# one sample rate in it.
-# However, if you are evaluating multiple embeddings, you might
-# want them all.
-SAMPLE_RATES = [48000, 44100, 22050, 16000]
-# TODO: Pick the 75th percentile length?
-SAMPLE_LENGTH_SECONDS = 8.0
-# TODO: Do we want to call this FRAME_RATE or HOP_SIZE
-FRAME_RATE = 4
-# Set this to None if you want to use ALL the data.
-# NOTE: This will be, expected, 225 test files only :\
-# NOTE: You can make this smaller during development of this
-# preprocessing script, to keep the pipeline fast.
-# WARNING: If you change this value, you *must* delete _workdir
-# or working dir.
-# Most of the tasks iterate over every audio file present,
-# except for the one that downsamples the corpus.
-# (This is why we should have one working directory per task)
-MAX_FRAMES_PER_CORPUS = 20 * 3600
-
-max_files_per_corpus = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
-
-
-def download_file(url, local_filename):
-    """
-    The downside of this approach versus `wget -c` is that this
-    code does not resume.
-    The benefit is that we are sure if the download completely
-    successfuly, otherwise we should have an exception.
-    From: https://stackoverflow.com/a/16696317/82733
-    TODO: Would be nice to have a TQDM progress bar here.
-    """
-    # NOTE the stream=True parameter below
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(local_filename, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                # If you have chunk encoded response uncomment if
-                # and set chunk_size parameter to None.
-                # if chunk:
-                f.write(chunk)
-    return local_filename
 
 
 class DownloadCorpus(WorkTask):
@@ -174,13 +112,13 @@ class SubsampleCorpus(WorkTask):
         )
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: filename_to_inthash(filename))
-        if len(audiofiles) > max_files_per_corpus:
+        if len(audiofiles) > config.MAX_FILES_PER_CORPUS:
             print(
                 "%d audio files in corpus, keeping only %d"
-                % (len(audiofiles), max_files_per_corpus)
+                % (len(audiofiles), config.MAX_FILES_PER_CORPUS)
             )
         # Save diskspace using symlinks
-        for audiofile in audiofiles[:max_files_per_corpus]:
+        for audiofile in audiofiles[: config.MAX_FILES_PER_CORPUS]:
             # Extract the audio filename, excluding the old working
             # directory, but including all subfolders
             newaudiofile = os.path.join(
@@ -300,7 +238,7 @@ class EnsureLengthCorpus(WorkTask):
             list(glob.glob(os.path.join(self.requires().workdir, "*.wav")))
         ):
             x, sr = sf.read(audiofile)
-            target_length_samples = int(round(sr * SAMPLE_LENGTH_SECONDS))
+            target_length_samples = int(round(sr * config.SAMPLE_LENGTH_SECONDS))
             # Convert to mono
             if x.ndim == 2:
                 x = np.mean(x, axis=1)
@@ -395,7 +333,7 @@ class FinalizeCorpus(WorkTask):
     def requires(self):
         return [
             ResampledCorpus(sr, partition)
-            for sr in SAMPLE_RATES
+            for sr in config.SAMPLE_RATES
             for partition in ["train", "test", "val"]
         ]
 
@@ -455,7 +393,7 @@ class CacheTarCorpus(WorkTask):
         tarfile = f"{config.TASKNAME}.tar.gz"
         pathtarfile = f"{self.workdir}/{tarfile}"
         client = S3Client()
-        s3cache = os.path.join(f"s3://{S3_BUCKET}/", tarfile)
+        s3cache = os.path.join(f"s3://{config.S3_BUCKET}/", tarfile)
         if client.exists(s3cache):
             client.get(s3cache, pathtarfile)
         else:
@@ -492,6 +430,6 @@ class CacheTarCorpus(WorkTask):
 
 
 if __name__ == "__main__":
-    print("max_files_per_corpus = %d" % max_files_per_corpus)
+    print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     ensure_dir("_workdir")
-    luigi.build([CacheTarCorpus()], workers=NUM_WORKERS, local_scheduler=True)
+    luigi.build([CacheTarCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)

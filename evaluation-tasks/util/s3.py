@@ -6,6 +6,8 @@ import boto3
 from luigi.contrib.s3 import S3Client
 from botocore.client import ClientError
 
+from .luigi import WorkTask
+
 
 def can_access_bucket(s3: boto3.session.Session, bucket: str) -> str:
     """

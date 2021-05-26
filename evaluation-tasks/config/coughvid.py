@@ -36,4 +36,4 @@ FRAME_RATE = 4
 # (This is why we should have one working directory per task)
 MAX_FRAMES_PER_CORPUS = 20 * 3600
 
-max_files_per_corpus = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
+MAX_FILES_PER_CORPUS = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
