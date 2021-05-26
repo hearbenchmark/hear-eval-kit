@@ -38,7 +38,14 @@ from tqdm.auto import tqdm
 from luigi.contrib.s3 import S3Client
 
 import config.coughvid as config
-from util.luigi import download_file, ensure_dir, WorkTask
+from util.luigi import (
+    download_file,
+    ensure_dir,
+    filename_to_int_hash,
+    new_basedir,
+    which_set,
+    WorkTask,
+)
 import util.s3 as s3util
 
 
@@ -77,12 +84,6 @@ class ExtractCorpus(WorkTask):
             pass
 
 
-def filename_to_inthash(filename):
-    # Adapted from Google Speech Commands convention.
-    hash_name_hashed = hashlib.sha1(filename.encode("utf-8")).hexdigest()
-    return int(hash_name_hashed, 16)
-
-
 class SubsampleCorpus(WorkTask):
     """
     Subsample the corpus so that we have the appropriate number of
@@ -111,7 +112,7 @@ class SubsampleCorpus(WorkTask):
             + glob.glob(os.path.join(self.requires().workdir, "public_dataset/*.ogg"))
         )
         # Deterministically randomly sort all files by their hash
-        audiofiles.sort(key=lambda filename: filename_to_inthash(filename))
+        audiofiles.sort(key=lambda filename: filename_to_int_hash(filename))
         if len(audiofiles) > config.MAX_FILES_PER_CORPUS:
             print(
                 "%d audio files in corpus, keeping only %d"
@@ -136,41 +137,6 @@ class SubsampleCorpus(WorkTask):
             pass
 
 
-def which_set(filename, validation_percentage, testing_percentage):
-    """
-    Code adapted from Google Speech Commands dataset.
-
-    Determines which data partition the file should belong to, based
-    upon the filename.
-
-    We want to keep files in the same training, validation, or testing
-    sets even if new ones are added over time. This makes it less
-    likely that testing samples will accidentally be reused in training
-    when long runs are restarted for example. To keep this stability,
-    a hash of the filename is taken and used to determine which set
-    it should belong to. This determination only depends on the name
-    and the set proportions, so it won't change as other files are
-    added.
-
-    Args:
-      filename: File path of the data sample.
-      validation_percentage: How much of the data set to use for validation.
-      testing_percentage: How much of the data set to use for testing.
-
-    Returns:
-      String, one of 'train', 'val', or 'test'.
-    """
-    base_name = os.path.basename(filename)
-    percentage_hash = filename_to_inthash(filename) % 100
-    if percentage_hash < validation_percentage:
-        result = "val"
-    elif percentage_hash < (testing_percentage + validation_percentage):
-        result = "test"
-    else:
-        result = "train"
-    return result
-
-
 def convert_to_mono_wav(in_file: str, out_file: str):
     devnull = open(os.devnull, "w")
     # If we knew the sample rate, we could also pad/trim the audio file now, e.g.:
@@ -183,13 +149,6 @@ def convert_to_mono_wav(in_file: str, out_file: str):
     )
     # Make sure the return code is 0 and the command was successful.
     assert ret == 0
-
-
-def new_basedir(filename, basedir):
-    """
-    Rewrite .../filename as basedir/filename
-    """
-    return os.path.join(basedir, os.path.split(filename)[1])
 
 
 class ToMonoWavCorpus(WorkTask):

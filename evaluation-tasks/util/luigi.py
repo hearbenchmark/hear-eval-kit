@@ -2,6 +2,7 @@
 Common Luigi classes and functions for evaluation tasks
 """
 
+import hashlib
 import os
 import luigi
 import requests
@@ -68,3 +69,51 @@ def download_file(url, local_filename):
 def ensure_dir(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
+
+
+def filename_to_int_hash(filename):
+    # Adapted from Google Speech Commands convention.
+    hash_name_hashed = hashlib.sha1(filename.encode("utf-8")).hexdigest()
+    return int(hash_name_hashed, 16)
+
+
+def which_set(filename, validation_percentage, testing_percentage):
+    """
+    Code adapted from Google Speech Commands dataset.
+
+    Determines which data partition the file should belong to, based
+    upon the filename.
+
+    We want to keep files in the same training, validation, or testing
+    sets even if new ones are added over time. This makes it less
+    likely that testing samples will accidentally be reused in training
+    when long runs are restarted for example. To keep this stability,
+    a hash of the filename is taken and used to determine which set
+    it should belong to. This determination only depends on the name
+    and the set proportions, so it won't change as other files are
+    added.
+
+    Args:
+      filename: File path of the data sample.
+      validation_percentage: How much of the data set to use for validation.
+      testing_percentage: How much of the data set to use for testing.
+
+    Returns:
+      String, one of 'train', 'val', or 'test'.
+    """
+    base_name = os.path.basename(filename)
+    percentage_hash = filename_to_int_hash(filename) % 100
+    if percentage_hash < validation_percentage:
+        result = "val"
+    elif percentage_hash < (testing_percentage + validation_percentage):
+        result = "test"
+    else:
+        result = "train"
+    return result
+
+
+def new_basedir(filename, basedir):
+    """
+    Rewrite .../filename as basedir/filename
+    """
+    return os.path.join(basedir, os.path.split(filename)[1])
