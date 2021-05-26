@@ -41,6 +41,8 @@ class CacheTarCorpus(WorkTask):
         client = S3Client()
         s3cache = os.path.join(f"s3://{self.bucket}/", tarfile)
         if client.exists(s3cache):
+            # TODO: Create a new task to untar this a move it out of
+            # workdir into the main evaluation dir so it is good to go.
             client.get(s3cache, pathtarfile)
         else:
             # If you yield FinalizeCorpus, this task is suspended
@@ -126,6 +128,7 @@ def check_bucket(bucket: str, region: str):
         region: region the bucket exists in
     """
 
+    # TODO: test this when region is set to None and update README on how that works.
     if region is None:
         s3 = boto3.client("s3")
     else:
