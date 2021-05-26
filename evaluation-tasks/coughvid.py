@@ -74,22 +74,20 @@ class ExtractCorpus(WorkTask):
         return type(self).__name__
 
     def run(self):
+
+        corpus_zip = os.path.realpath(
+            os.path.join(self.requires().workdir, "corpus.zip")
+        )
+
         # Move to workdir, then try to run the unzip command.
         # subprocess.check_output will raise an error if the command doesn't
         # complete successfully.
         wd = os.getcwd()
         os.chdir(self.workdir)
         try:
-            ret = subprocess.check_output(
-                [
-                    "unzip",
-                    "-o",
-                    os.path.realpath(
-                        os.path.join(self.requires().workdir, "corpus.zip")
-                    ),
-                ]
-            )
+            subprocess.check_output(["unzip", "-o", corpus_zip])
         finally:
+            # Move back to original working directory.
             os.chdir(wd)
 
         with self.output().open("w") as outfile:
