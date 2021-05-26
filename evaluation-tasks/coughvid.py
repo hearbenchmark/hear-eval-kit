@@ -38,6 +38,7 @@ from tqdm.auto import tqdm
 from luigi.contrib.s3 import S3Client
 
 import config.coughvid as config
+import util.audio as audio_util
 from util.luigi import (
     download_file,
     ensure_dir,
@@ -46,7 +47,7 @@ from util.luigi import (
     which_set,
     WorkTask,
 )
-import util.s3 as s3util
+import util.s3 as s3_util
 
 
 class DownloadCorpus(WorkTask):
@@ -137,20 +138,6 @@ class SubsampleCorpus(WorkTask):
             pass
 
 
-def convert_to_mono_wav(in_file: str, out_file: str):
-    devnull = open(os.devnull, "w")
-    # If we knew the sample rate, we could also pad/trim the audio file now, e.g.:
-    # ffmpeg -i test.webm -filter_complex apad=whole_len=44100,atrim=end_sample=44100 -ac 1 -c:a pcm_f32le ./test.wav
-    # print(" ".join(["ffmpeg", "-y", "-i", in_file, "-ac", "1", "-c:a", "pcm_f32le", out_file]))
-    ret = subprocess.call(
-        ["ffmpeg", "-y", "-i", in_file, "-ac", "1", "-c:a", "pcm_f32le", out_file],
-        stdout=devnull,
-        stderr=devnull,
-    )
-    # Make sure the return code is 0 and the command was successful.
-    assert ret == 0
-
-
 class ToMonoWavCorpus(WorkTask):
     """
     Convert all audio to WAV files using Sox.
@@ -173,7 +160,7 @@ class ToMonoWavCorpus(WorkTask):
             newaudiofile = new_basedir(
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
-            convert_to_mono_wav(audiofile, newaudiofile)
+            audio_util.convert_to_mono_wav(audiofile, newaudiofile)
         with self.output().open("w") as outfile:
             pass
 
@@ -239,27 +226,6 @@ class TrainTestCorpus(WorkTask):
             pass
 
 
-def resample_wav(in_file: str, out_file: str, out_sr: int):
-    # TODO: Don't do anything if we are already the right sample rate.
-    devnull = open(os.devnull, "w")
-    ret = subprocess.call(
-        [
-            "ffmpeg",
-            "-i",
-            in_file,
-            "-af",
-            "aresample=resampler=soxr",
-            "-ar",
-            str(out_sr),
-            out_file,
-        ],
-        stdout=devnull,
-        stderr=devnull,
-    )
-    # Make sure the return code is 0 and the command was successful.
-    assert ret == 0
-
-
 class ResampledCorpus(WorkTask):
     sr = luigi.IntParameter()
     partition = luigi.Parameter()
@@ -278,7 +244,7 @@ class ResampledCorpus(WorkTask):
             list(glob.glob(f"{self.requires().workdir}/{self.partition}/*.wav"))
         ):
             resampled_audiofile = new_basedir(audiofile, resample_dir)
-            resample_wav(audiofile, resampled_audiofile, self.sr)
+            audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
         with self.output().open("w") as outfile:
             pass
 
@@ -327,7 +293,7 @@ class EnsureBucket(WorkTask):
         return type(self).__name__
 
     def run(self):
-        s3util.check_bucket(config.S3_BUCKET, config.S3_REGION_NAME)
+        s3_util.check_bucket(config.S3_BUCKET, config.S3_REGION_NAME)
         with self.output().open("w") as outfile:
             pass
 
@@ -391,4 +357,10 @@ class CacheTarCorpus(WorkTask):
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     ensure_dir("_workdir")
-    luigi.build([CacheTarCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)
+
+    if config.S3_CACHE:
+        final_task = [CacheTarCorpus()]
+    else:
+        final_task = [FinalizeCorpus()]
+
+    luigi.build([FinalizeCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)
