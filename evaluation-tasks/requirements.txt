@@ -4,6 +4,6 @@ numpy
 pre-commit
 requests
 soundfile
-slugify
+python-slugify
 tqdm
 

@@ -113,7 +113,7 @@ class SubsampleCorpus(WorkTask):
 
         # Make sure we found audio files to work with
         if len(audiofiles) == 0:
-            raise RunTimeError(f"No audio files found in {self.requires().workdir}!")
+            raise RuntimeError(f"No audio files found in {self.requires().workdir}")
 
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: filename_to_int_hash(filename))
