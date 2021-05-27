@@ -188,7 +188,7 @@ class TestModel:
 
 
 class TestLayerbyLayer:
-    def test_layers_find_error():
+    def test_layers_find_error(self):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         model = load_model("", device=device)
 
@@ -276,7 +276,7 @@ if __name__ == "__main__":
         print("Test Model Sliced is not working")
 
     # Layer by layer testing for understanding why the above are failing
-    test_layerbylayer = TestLayerbyLayer
+    test_layerbylayer = TestLayerbyLayer()
     try:
         test_layerbylayer.test_layers_find_error()
     except BaseException:
