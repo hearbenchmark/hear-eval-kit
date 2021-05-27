@@ -28,6 +28,7 @@ class TestEmbeddingsTimestamps:
         )
 
     def test_embeddings_replicability(self):
+        # Test if all the embeddings are replicable if center is True
         embeddings_ct, _ = get_audio_embedding(
             audio=self.audio,
             model=self.model,
@@ -40,6 +41,7 @@ class TestEmbeddingsTimestamps:
         ):
             assert torch.all(torch.abs(embeddinga - embeddingb) < 1e-5)
 
+        # Test if all the embeddings are replicable if center is False
         embeddings_not_ct, _ = get_audio_embedding(
             audio=self.audio,
             model=self.model,
@@ -53,12 +55,15 @@ class TestEmbeddingsTimestamps:
             assert torch.all(torch.abs(embeddinga - embeddingb) < 1e-5)
 
     def test_embeddings_batched(self):
-
+        # methodA - Pass two audios individually and get embeddings. methodB -
+        # Pass the two audio in a batch and get the embeddings. All
+        # corresponding embeddings by method A and method B should be similar.
         audioa = self.audio[0, ...].unsqueeze(0)
         audiob = self.audio[1, ...].unsqueeze(0)
         audioab = self.audio[:2, ...]
         assert torch.all(torch.cat([audioa, audiob]) == audioab)
 
+        # Test for both centered and not centered.
         for center in [True, False]:
             embeddingsa, _ = get_audio_embedding(
                 audio=audioa,
@@ -82,15 +87,20 @@ class TestEmbeddingsTimestamps:
                 center=center,
             )
             for embeddinga, embeddingb, embeddingab in zip(
-                    embeddingsa.values(), embeddingsb.values(), embeddingsab.values()):
+                embeddingsa.values(), embeddingsb.values(), embeddingsab.values()
+            ):
                 assert torch.all(
-                    torch.abs(
-                        torch.cat([embeddinga, embeddingb]) - embeddingab) < 1e-5
+                    torch.abs(torch.cat([embeddinga, embeddingb]) - embeddingab) < 1e-5
                 )
 
     def test_embeddings_sliced(self):
+        # Slice the audio to select every even audio in the batch. Produce the
+        # embedding for this sliced audio batch. The embeddings for
+        # corresponding audios should match the embeddings when the full batch
+        # was passed.
         audio_sliced = self.audio[::2, ...]
 
+        # Test for centered
         embeddings_sliced, _ = get_audio_embedding(
             audio=audio_sliced,
             model=self.model,
@@ -105,6 +115,7 @@ class TestEmbeddingsTimestamps:
                 torch.abs(embedding_sliced - embedding_ct[::2, ...]) < 1e-5
             )
 
+        # Test for not centered
         embeddings_sliced, _ = get_audio_embedding(
             audio=audio_sliced,
             model=self.model,
@@ -120,19 +131,23 @@ class TestEmbeddingsTimestamps:
             )
 
     def test_embeddings_shape(self):
+        # Test the embeddings shape for centered and not centered.
+        # The embeddings size in these two cases are different by the codes
+        # logic.
         for size, embedding in self.embeddings_not_ct.items():
             assert embedding.shape == (64, 96000 // 256, int(size))
 
         for size, embedding in self.embeddings_ct.items():
-            assert embedding.shape == (
-                64, (4096 // 2 + 96000) // 256, int(size))
+            assert embedding.shape == (64, (4096 // 2 + 96000) // 256, int(size))
 
     def test_embeddings_nan(self):
+        # Test for null values in the embeddings.
         for embeddings in [self.embeddings_ct, self.embeddings_not_ct]:
             for size, embedding in embeddings.items():
                 assert not torch.any(torch.isnan(embedding))
 
     def test_embeddings_type(self):
+        # Test the data type of the embeddings.
         for embeddings in [self.embeddings_ct, self.embeddings_not_ct]:
             for size, embedding in embeddings.items():
                 if size != 20:
@@ -141,27 +156,29 @@ class TestEmbeddingsTimestamps:
                     assert embedding[size].dtype == torch.int8
 
     def test_timestamps_begin(self):
+        # Test the beginning of the time stamp in case of centered and not
+        # centered.
         assert self.ts_ct[0] == 0
         assert (
-            torch.abs(self.ts_not_ct[0] - int(4096 //
-                      2) / input_sample_rate()) < 1e-5
+            torch.abs(self.ts_not_ct[0] - int(4096 // 2) / input_sample_rate()) < 1e-5
         )
 
     def test_timestamps_spacing(self):
-        assert torch.all(torch.abs(torch.diff(
-            self.ts_ct) - self.ts_ct[1]) < 1e-5)
+        # Test the spacing between the time stamp in case of centered and not
+        # centered.
+        assert torch.all(torch.abs(torch.diff(self.ts_ct) - self.ts_ct[1]) < 1e-5)
         assert torch.all(
             torch.abs(
-                torch.diff(self.ts_not_ct) -
-                (self.ts_not_ct[2] - self.ts_not_ct[1])
+                torch.diff(self.ts_not_ct) - (self.ts_not_ct[2] - self.ts_not_ct[1])
             )
             < 1e-5
         )
 
     def test_timestamps_end(self):
+        # Test the end of the timestamp. This should technically not exceed the
+        # time of the audio. However it is hapenning in our case though?
         assert torch.abs(self.ts_ct[-1] - 96000 / input_sample_rate()) < 1e-5
-        assert torch.abs(self.ts_not_ct[-1] -
-                         96000 / input_sample_rate()) < 1e-5
+        assert torch.abs(self.ts_not_ct[-1] - 96000 / input_sample_rate()) < 1e-5
 
 
 class TestModel:
@@ -179,12 +196,10 @@ class TestModel:
         outputs = self.model(self.frames)
         outputs_sliced = self.model(frames_sliced)
 
-        for output, output_sliced in zip(
-                outputs.values(), outputs_sliced.values()):
+        for output, output_sliced in zip(outputs.values(), outputs_sliced.values()):
             assert torch.all(torch.abs(output_sliced[0] - output[0]) < 1e-5)
             assert torch.all(torch.abs(output_sliced[1] - output[2]) < 1e-5)
-            assert torch.all(
-                torch.abs(output_sliced - output[::2, ...]) < 1e-5)
+            assert torch.all(torch.abs(output_sliced - output[::2, ...]) < 1e-5)
 
 
 class TestLayerbyLayer:
@@ -196,9 +211,9 @@ class TestLayerbyLayer:
         frames_sliced = frames[::2, ...]
         assert torch.all(torch.abs(frames[2] - frames_sliced[1]) == 0)
 
-        # Layer by the layer the same operations are performed and the best
-        # possible cap is set. These cap have been tested. The purpose is to
-        # understand why the batched inputs are failing
+        # Layer by the layer perform the same operation on the sliced and the whole frame.
+        # The current error cap is set by changing layer by layer and setting the max possible error.
+        # The purpose is to understand why the batched tests are failing.
         x = torch.fft.rfft(frames * model.window)
         y = torch.fft.rfft(frames_sliced * model.window)
         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-25)
@@ -207,6 +222,7 @@ class TestLayerbyLayer:
         y = torch.abs(y) ** 2.0
         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-25)
 
+        # The matmul here is the first point where the error increases to 1e-5
         x = torch.matmul(x, model.mel_scale.transpose(0, 1))
         y = torch.matmul(y, model.mel_scale.transpose(0, 1))
         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-5)
@@ -215,6 +231,8 @@ class TestLayerbyLayer:
         y = torch.log(y + model.epsilon)
         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-6)
 
+        # Subsequent increase in error is at the matmuls for the different
+        # embeddings shape.
         x4096 = x.matmul(model.emb4096)
         y4096 = y.matmul(model.emb4096)
         assert torch.all(torch.abs(x4096[::2, ...] - y4096) < 1e-4)
@@ -247,7 +265,7 @@ class TestLayerbyLayer:
 
 
 if __name__ == "__main__":
-    # Embedding testings
+    # Embedding and Time stamps testings
     test_embedding_timestamp = TestEmbeddingsTimestamps()
     test_embedding_timestamp.test_embeddings_replicability()
     test_embedding_timestamp.test_embeddings_shape()
@@ -255,6 +273,11 @@ if __name__ == "__main__":
     test_embedding_timestamp.test_timestamps_begin()
     test_embedding_timestamp.test_timestamps_spacing()
 
+    # These tests are not passing. Possibly due the error introduced at the
+    # Matmuls inside the model. Have done a operation by operation test to see
+    # which operation is leading to the error. Surprisingly the model is
+    # replicable but not across different batch sizes which is tested by
+    # sliced and batched tests.
     try:
         test_embedding_timestamp.test_timestamps_end()
     except BaseException:
