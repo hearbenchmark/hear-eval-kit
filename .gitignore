@@ -129,7 +129,7 @@ dmypy.json
 .pyre/
 
 # Working directory for luigi pipelines
-hearevalkit/tasks/_workdir/
+*_workdir/
 
 # Completed evaluation taks
 hearevalkit/tasks/coughvid-*/

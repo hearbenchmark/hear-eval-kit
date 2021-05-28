@@ -26,6 +26,9 @@ setup(
     },
     packages=find_packages(),
     python_requires=">=3.6",
+    entry_points={
+        "console_scripts": ["hear2021_tasks_coughvid=hearevalkit.tasks.coughvid:main"]
+    },
     install_requires=[
         "boto3",
         "luigi",

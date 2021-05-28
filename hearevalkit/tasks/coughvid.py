@@ -289,7 +289,11 @@ class FinalizeCorpus(luigi_util.WorkTask):
             pass
 
 
-if __name__ == "__main__":
+def main():
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     luigi_util.ensure_dir("_workdir")
     luigi.build([FinalizeCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)
+
+
+if __name__ == "__main__":
+    main()
