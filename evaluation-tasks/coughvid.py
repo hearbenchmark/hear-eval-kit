@@ -206,7 +206,7 @@ class EnsureLengthCorpus(WorkTask):
             pass
 
 
-class TrainTestCorpus(WorkTask):
+class SplitTrainTestCorpus(WorkTask):
     """
     If there is already a train/test split, we use that.
     Otherwise we deterministically
@@ -232,16 +232,26 @@ class TrainTestCorpus(WorkTask):
             pass
 
 
-class ResampledCorpus(WorkTask):
+class ResampleSubCorpus(WorkTask):
     sr = luigi.IntParameter()
     partition = luigi.Parameter()
 
     def requires(self):
-        return TrainTestCorpus()
+        return SplitTrainTestCorpus()
 
     @property
     def name(self):
         return type(self).__name__
+
+    # Since these tasks have parameters but share the same working
+    # directory and name, we postpend the parameters to the output
+    # filename, so we can track if one ResampleSubCorpus task finished
+    # but others didn't.
+    def output(self):
+        return luigi.LocalTarget(
+            "_workdir/%02d-%s-%d-%s.done"
+            % (self.stage_number, self.name, self.sr, self.partition)
+        )
 
     def run(self):
         resample_dir = f"{self.workdir}/{self.sr}/{self.partition}/"
@@ -263,7 +273,7 @@ class FinalizeCorpus(WorkTask):
 
     def requires(self):
         return [
-            ResampledCorpus(sr, partition)
+            ResampleSubCorpus(sr, partition)
             for sr in config.SAMPLE_RATES
             for partition in ["train", "test", "val"]
         ]
