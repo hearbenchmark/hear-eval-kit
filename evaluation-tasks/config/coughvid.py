@@ -2,8 +2,8 @@
 Configuration for the coughvid task
 """
 
-# Load in all global config files
-from .s3 import *
+# TODO: move some of these to a global config and import that here
+# See: https://github.com/neuralaudio/hear2021-eval-kit/issues/10
 
 TASKNAME = "coughvid-v2.0.0"
 

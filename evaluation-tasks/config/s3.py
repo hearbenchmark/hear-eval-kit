@@ -2,9 +2,6 @@
 Configuration specific to AWS S3
 """
 
-# If set to true will cache results in S3
-S3_CACHE = True
-
 # You should pick a unique handle, since this determine the S3 path
 # (which must be globally unique across all S3 users).
 HANDLE = "hear"
