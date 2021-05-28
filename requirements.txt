@@ -1,0 +1,9 @@
+boto3
+luigi
+numpy
+pre-commit
+requests
+soundfile
+python-slugify
+tqdm
+
