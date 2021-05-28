@@ -299,10 +299,8 @@ class SplitTrainTestMetadata(WorkTask):
 
     def requires(self):
         """
-        This depends upon ToMonoWavCorpus to get the final WAV
-        filenames (which should not change after this point,
-        besides being sorted into {sr}/{partition}/ subdirectories),
-        and the metadata in FilterLabeledMetadata.
+        This depends upon SplitTrainTestCorpus to get the partitioned WAV
+        filenames, and the subsampled metadata in SubsampleMetadata.
         """
         return [SplitTrainTestCorpus(), FilterLabeledMetadata()]
 
