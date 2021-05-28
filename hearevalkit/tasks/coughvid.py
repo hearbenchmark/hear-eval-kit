@@ -2,6 +2,9 @@
 """
 WRITEME [outline the steps in the pipeline]
 
+This pipeline preprocesses CoughVid 2.0 data.
+The target is the self-reported multiclass diagnosis.
+
 The idea is that each of these tasks should has a separate working
 directory in _workdir. We remove it only when the entire pipeline
 is done. This is safer, even tho it uses more disk space.
@@ -31,6 +34,7 @@ import subprocess
 
 import luigi
 import numpy as np
+import pandas as pd
 import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
@@ -38,9 +42,10 @@ from tqdm.auto import tqdm
 import hearevalkit.tasks.config.coughvid as config
 import hearevalkit.tasks.util.audio as audio_util
 import hearevalkit.tasks.util.luigi as luigi_util
+from hearevalkit.tasks.util.luigi import WorkTask
 
 
-class DownloadCorpus(luigi_util.WorkTask):
+class DownloadCorpus(WorkTask):
     @property
     def name(self):
         return type(self).__name__
@@ -59,7 +64,7 @@ class DownloadCorpus(luigi_util.WorkTask):
         return 0
 
 
-class ExtractCorpus(luigi_util.WorkTask):
+class ExtractCorpus(WorkTask):
     def requires(self):
         return DownloadCorpus()
 
@@ -79,7 +84,7 @@ class ExtractCorpus(luigi_util.WorkTask):
             pass
 
 
-class SubsampleCorpus(luigi_util.WorkTask):
+class SubsampleCorpus(WorkTask):
     """
     Subsample the corpus so that we have the appropriate number of
     audio files.
@@ -90,7 +95,10 @@ class SubsampleCorpus(luigi_util.WorkTask):
 
     A destructive way of implementing this task is that it removes
     extraneous files, rather than copying them to the next task's
-    directory.
+    directory. However, one safety convention we apply is doing
+    non-destructive work, one working directory per task (or set
+    of related tasks of the same class, like resampling with different
+    SRs).
     """
 
     def requires(self):
@@ -137,7 +145,7 @@ class SubsampleCorpus(luigi_util.WorkTask):
             pass
 
 
-class ToMonoWavCorpus(luigi_util.WorkTask):
+class ToMonoWavCorpus(WorkTask):
     """
     Convert all audio to WAV files using Sox.
     We convert to mono, and also ensure that all files are the same length.
@@ -164,7 +172,61 @@ class ToMonoWavCorpus(luigi_util.WorkTask):
             pass
 
 
-class EnsureLengthCorpus(luigi_util.WorkTask):
+class SubsampleMetadata(WorkTask):
+    """
+    Subsample the metadata (labels), and normalize it the CSV format
+    described in README.md.
+    """
+
+    def requires(self):
+        """
+        This depends upon ToMonoWavCorpus to get the final WAV
+        filenames (which should not change after this point,
+        besides being sorted into {sr}/{partition}/ subdirectories),
+        and the metadata in ExtractCorpus.
+        """
+        return [ToMonoWavCorpus(), ExtractCorpus()]
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+        # Unfortunately, this somewhat fragilely depends upon the order
+        # of self.requires
+
+        audiofiles = list(glob.glob(os.path.join(self.requires()[0].workdir, "*.wav")))
+
+        # Make sure we found audio files to work with
+        if len(audiofiles) == 0:
+            raise RuntimeError(f"No audio files found in {self.requires()[0].workdir}")
+
+        labeldf = pd.read_csv(
+            os.path.join(
+                self.requires()[1].workdir, "public_dataset/metadata_compiled.csv"
+            )
+        )
+        labeldf["uuid"] = labeldf["uuid"] + ".wav"
+        audiodf = pd.DataFrame(
+            [os.path.split(a)[1] for a in audiofiles], columns=["uuid"]
+        )
+        # Sanity check there aren't duplicates in the metadata's
+        # list of audiofiles
+        assert len(audiofiles) == len(audiodf.drop_duplicates())
+
+        sublabeldf = labeldf.merge(audiodf, on="uuid")
+        sublabeldf.to_csv(
+            os.path.join(self.workdir, "metadata.csv"),
+            columns=["uuid", "status"],
+            index=False,
+            header=False,
+        )
+
+        with self.output().open("w") as outfile:
+            pass
+
+
+class EnsureLengthCorpus(WorkTask):
     """
     Ensure all WAV files are a particular length.
     There might be a one-liner in ffmpeg that we can convert to WAV
@@ -199,7 +261,7 @@ class EnsureLengthCorpus(luigi_util.WorkTask):
             pass
 
 
-class SplitTrainTestCorpus(luigi_util.WorkTask):
+class SplitTrainTestCorpus(WorkTask):
     """
     If there is already a train/test split, we use that.
     Otherwise we deterministically
@@ -225,7 +287,68 @@ class SplitTrainTestCorpus(luigi_util.WorkTask):
             pass
 
 
-class ResampleSubCorpus(luigi_util.WorkTask):
+class SplitTrainTestMetadata(WorkTask):
+    """
+    Split the metadata into train / test.
+    """
+
+    def requires(self):
+        """
+        This depends upon SplitTrainTestCorpus to get the partitioned WAV
+        filenames, and the subsampled metadata in SubsampleMetadata.
+        """
+        return [SplitTrainTestCorpus(), SubsampleMetadata()]
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+        # Unfortunately, this somewhat fragilely depends upon the order
+        # of self.requires
+
+        # Might also want "val" for some corpora
+        splittotal = 0
+        origtotal = None
+        for partition in ["train", "test"]:
+            audiofiles = list(
+                glob.glob(os.path.join(self.requires()[0].workdir, partition, "*.wav"))
+            )
+
+            # Make sure we found audio files to work with
+            if len(audiofiles) == 0:
+                raise RuntimeError(
+                    f"No audio files found in {self.requires()[0].workdir}/{partition}"
+                )
+
+            labeldf = pd.read_csv(
+                os.path.join(self.requires()[1].workdir, "metadata.csv"),
+                header=None,
+                names=["filename", "label"],
+            )
+            audiodf = pd.DataFrame(
+                [os.path.split(a)[1] for a in audiofiles], columns=["filename"]
+            )
+            assert len(audiofiles) == len(audiodf.drop_duplicates())
+
+            sublabeldf = labeldf.merge(audiodf, on="filename")
+
+            origtotal = len(labeldf)
+            splittotal += len(sublabeldf)
+            sublabeldf.to_csv(
+                os.path.join(self.workdir, f"{partition}.csv"),
+                columns=["filename", "label"],
+                index=False,
+                header=False,
+            )
+
+        assert origtotal == splittotal
+
+        with self.output().open("w") as outfile:
+            pass
+
+
+class ResampleSubCorpus(WorkTask):
     sr = luigi.IntParameter()
     partition = luigi.Parameter()
 
@@ -258,7 +381,7 @@ class ResampleSubCorpus(luigi_util.WorkTask):
             pass
 
 
-class FinalizeCorpus(luigi_util.WorkTask):
+class FinalizeCorpus(WorkTask):
     """
     Create a final corpus, no longer in _workdir but in the top-level
     at directory config.TASKNAME.
@@ -269,7 +392,7 @@ class FinalizeCorpus(luigi_util.WorkTask):
             ResampleSubCorpus(sr, partition)
             for sr in config.SAMPLE_RATES
             for partition in ["train", "test", "val"]
-        ]
+        ] + [SplitTrainTestMetadata()]
 
     @property
     def name(self):
@@ -284,7 +407,14 @@ class FinalizeCorpus(luigi_util.WorkTask):
     def run(self):
         if os.path.exists(self.workdir):
             shutil.rmtree(self.workdir)
+        # Fragilely depends upon the order of the requires
         shutil.copytree(self.requires()[0].workdir, self.workdir)
+        # Might also want "val" for some corpora
+        for partition in ["train", "test"]:
+            shutil.copy(
+                os.path.join(self.requires()[-1].workdir, f"{partition}.csv"),
+                self.workdir,
+            )
         with self.output().open("w") as outfile:
             pass
 
