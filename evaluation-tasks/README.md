@@ -59,6 +59,8 @@ If the dataset provides a validation.csv, that will be included
 too. Otherwise, participants do partition train into train/val
 however they like.
 
+<!-- Caching with S3 isn't available yet:
+
 ## Caching with S3
 
 1. Download and configure the AWS CLI if you haven't done that already:
@@ -75,3 +77,4 @@ however they like.
         `hear2021-jordie`.
     * `S3_REGION_NAME` sets the region for your S3 buckets. You can set this to `None`
         to use the default value set during CLI configuration.
+-->
