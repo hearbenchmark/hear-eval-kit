@@ -45,7 +45,6 @@ from util.luigi import (
     which_set,
     WorkTask,
 )
-import util.s3 as s3_util
 
 
 class DownloadCorpus(WorkTask):
@@ -286,18 +285,4 @@ class FinalizeCorpus(WorkTask):
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     ensure_dir("_workdir")
-
-    # If caching in S3, that becomes the final task in the pipeline
-    if config.S3_CACHE:
-        final_task = [
-            s3_util.CacheTarCorpus(
-                task_name=config.TASKNAME,
-                bucket=config.S3_BUCKET,
-                region=config.S3_REGION_NAME,
-                next_task=FinalizeCorpus,
-            )
-        ]
-    else:
-        final_task = [FinalizeCorpus()]
-
-    luigi.build(final_task, workers=config.NUM_WORKERS, local_scheduler=True)
+    luigi.build([FinalizeCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)
