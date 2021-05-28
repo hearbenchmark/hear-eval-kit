@@ -35,26 +35,19 @@ import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
 
-import config.coughvid as config
-import util.audio as audio_util
-from util.luigi import (
-    download_file,
-    ensure_dir,
-    filename_to_int_hash,
-    new_basedir,
-    which_set,
-    WorkTask,
-)
+import hearevalkit.tasks.config.coughvid as config
+import hearevalkit.tasks.util.audio as audio_util
+import hearevalkit.tasks.util.luigi as luigi_util
 
 
-class DownloadCorpus(WorkTask):
+class DownloadCorpus(luigi_util.WorkTask):
     @property
     def name(self):
         return type(self).__name__
 
     def run(self):
         # TODO: Change the working dir
-        download_file(
+        luigi_util.download_file(
             "https://zenodo.org/record/4498364/files/public_dataset.zip",
             os.path.join(self.workdir, "corpus.zip"),
         )
@@ -66,7 +59,7 @@ class DownloadCorpus(WorkTask):
         return 0
 
 
-class ExtractCorpus(WorkTask):
+class ExtractCorpus(luigi_util.WorkTask):
     def requires(self):
         return DownloadCorpus()
 
@@ -86,7 +79,7 @@ class ExtractCorpus(WorkTask):
             pass
 
 
-class SubsampleCorpus(WorkTask):
+class SubsampleCorpus(luigi_util.WorkTask):
     """
     Subsample the corpus so that we have the appropriate number of
     audio files.
@@ -119,7 +112,7 @@ class SubsampleCorpus(WorkTask):
             raise RuntimeError(f"No audio files found in {self.requires().workdir}")
 
         # Deterministically randomly sort all files by their hash
-        audiofiles.sort(key=lambda filename: filename_to_int_hash(filename))
+        audiofiles.sort(key=lambda filename: luigi_util.filename_to_int_hash(filename))
         if len(audiofiles) > config.MAX_FILES_PER_CORPUS:
             print(
                 "%d audio files in corpus, keeping only %d"
@@ -144,7 +137,7 @@ class SubsampleCorpus(WorkTask):
             pass
 
 
-class ToMonoWavCorpus(WorkTask):
+class ToMonoWavCorpus(luigi_util.WorkTask):
     """
     Convert all audio to WAV files using Sox.
     We convert to mono, and also ensure that all files are the same length.
@@ -163,7 +156,7 @@ class ToMonoWavCorpus(WorkTask):
             + glob.glob(os.path.join(self.requires().workdir, "*.ogg"))
         )
         for audiofile in tqdm(audiofiles):
-            newaudiofile = new_basedir(
+            newaudiofile = luigi_util.new_basedir(
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
             audio_util.convert_to_mono_wav(audiofile, newaudiofile)
@@ -171,7 +164,7 @@ class ToMonoWavCorpus(WorkTask):
             pass
 
 
-class EnsureLengthCorpus(WorkTask):
+class EnsureLengthCorpus(luigi_util.WorkTask):
     """
     Ensure all WAV files are a particular length.
     There might be a one-liner in ffmpeg that we can convert to WAV
@@ -200,13 +193,13 @@ class EnsureLengthCorpus(WorkTask):
             if len(x) < target_length_samples:
                 x = np.hstack([x, np.zeros(target_length_samples - len(x))])
             assert len(x) == target_length_samples
-            newaudiofile = new_basedir(audiofile, self.workdir)
+            newaudiofile = luigi_util.new_basedir(audiofile, self.workdir)
             sf.write(newaudiofile, x, sr)
         with self.output().open("w") as outfile:
             pass
 
 
-class SplitTrainTestCorpus(WorkTask):
+class SplitTrainTestCorpus(luigi_util.WorkTask):
     """
     If there is already a train/test split, we use that.
     Otherwise we deterministically
@@ -221,18 +214,18 @@ class SplitTrainTestCorpus(WorkTask):
 
     def run(self):
         for audiofile in tqdm(list(glob.glob(f"{self.requires().workdir}/*.wav"))):
-            partition = which_set(
+            partition = luigi_util.which_set(
                 audiofile, validation_percentage=0.0, testing_percentage=10.0
             )
             partition_dir = f"{self.workdir}/{partition}"
-            ensure_dir(partition_dir)
-            newaudiofile = new_basedir(audiofile, partition_dir)
+            luigi_util.ensure_dir(partition_dir)
+            newaudiofile = luigi_util.new_basedir(audiofile, partition_dir)
             os.symlink(os.path.realpath(audiofile), newaudiofile)
         with self.output().open("w") as outfile:
             pass
 
 
-class ResampleSubCorpus(WorkTask):
+class ResampleSubCorpus(luigi_util.WorkTask):
     sr = luigi.IntParameter()
     partition = luigi.Parameter()
 
@@ -255,17 +248,17 @@ class ResampleSubCorpus(WorkTask):
 
     def run(self):
         resample_dir = f"{self.workdir}/{self.sr}/{self.partition}/"
-        ensure_dir(resample_dir)
+        luigi_util.ensure_dir(resample_dir)
         for audiofile in tqdm(
             list(glob.glob(f"{self.requires().workdir}/{self.partition}/*.wav"))
         ):
-            resampled_audiofile = new_basedir(audiofile, resample_dir)
+            resampled_audiofile = luigi_util.new_basedir(audiofile, resample_dir)
             audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
         with self.output().open("w") as outfile:
             pass
 
 
-class FinalizeCorpus(WorkTask):
+class FinalizeCorpus(luigi_util.WorkTask):
     """
     Create a final corpus, no longer in _workdir but in the top-level
     at directory config.TASKNAME.
@@ -298,5 +291,5 @@ class FinalizeCorpus(WorkTask):
 
 if __name__ == "__main__":
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
-    ensure_dir("_workdir")
+    luigi_util.ensure_dir("_workdir")
     luigi.build([FinalizeCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)

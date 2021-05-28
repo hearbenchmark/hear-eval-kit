@@ -10,7 +10,7 @@ from setuptools import find_packages, setup
 long_description = open("README.md", "r", encoding="utf-8").read()
 
 setup(
-    name="hear2021-eval-kit",
+    name="hearevalkit",
     version="0.0.1",
     description="Holistic Evaluation of Audio Representations (HEAR) 2021 -- Evaluation Kit",
     author="",
@@ -25,7 +25,7 @@ setup(
         "Source Code": "https://github.com/neuralaudio/hear2021-eval-kit",
     },
     packages=find_packages(),
-    python_requires=">=3.7",
+    python_requires=">=3.6",
     install_requires=[
         "boto3",
         "luigi",
@@ -44,7 +44,7 @@ setup(
         ],
         "dev": [
             "pre-commit",
-            "black",  # Used in precommit hooks
+            "black",  # Used in pre-commit hooks
             "pytest",
             "pytest-cov",
             "pytest-env",
