@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Working directory for luigi pipelines
+evaluation-tasks/_workdir/
+
+# Completed evaluation taks
+evaluation-tasks/coughvid-*/

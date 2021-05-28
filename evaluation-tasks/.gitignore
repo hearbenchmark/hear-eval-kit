@@ -1,6 +1,0 @@
-# Working directory for luigi pipelines
-_workdir/
-
-# Completed evaluation taks
-coughvid-*/
-
