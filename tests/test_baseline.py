@@ -1,16 +1,15 @@
 import torch
 import os
-from baseline import load_model, get_audio_embedding, input_sample_rate
+from heareval.baseline import load_model, get_audio_embedding, input_sample_rate
 
 torch.backends.cudnn.deterministic = True
 
 
 class TestEmbeddingsTimestamps:
-    def __init__(self):
-        self.model = load_model(
-            "", device="cuda:0" if torch.cuda.is_available() else "cpu"
-        )
-        self.audio = torch.rand(64, 96000) * 2 - 1
+    def setup(self):
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.model = load_model("", device=self.device)
+        self.audio = torch.rand(64, 96000, device=self.device) * 2 - 1
         self.embeddings_ct, self.ts_ct = get_audio_embedding(
             audio=self.audio,
             model=self.model,
@@ -26,6 +25,14 @@ class TestEmbeddingsTimestamps:
             batch_size=512,
             center=False,
         )
+
+    def teardown(self):
+        del self.model
+        del self.audio
+        del self.embeddings_ct
+        del self.ts_ct
+        del self.embeddings_not_ct
+        del self.ts_not_ct
 
     def test_embeddings_replicability(self):
         # Test if all the embeddings are replicable if center is True
@@ -151,9 +158,9 @@ class TestEmbeddingsTimestamps:
         for embeddings in [self.embeddings_ct, self.embeddings_not_ct]:
             for size, embedding in embeddings.items():
                 if size != 20:
-                    assert embedding[size].dtype == torch.float32
+                    assert embedding.dtype == torch.float32
                 else:
-                    assert embedding[size].dtype == torch.int8
+                    assert embedding.dtype == torch.int8
 
     def test_timestamps_begin(self):
         # Test the beginning of the time stamp in case of centered and not
@@ -182,10 +189,14 @@ class TestEmbeddingsTimestamps:
 
 
 class TestModel:
-    def __init__(self):
+    def setup(self):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         self.model = load_model("", device=device)
-        self.frames = torch.rand(512, self.model.n_fft) * 2 - 1
+        self.frames = torch.rand(512, self.model.n_fft, device=device) * 2 - 1
+
+    def teardown(self):
+        del self.model
+        del self.frames
 
     def test_model_sliced(self):
         frames_sliced = self.frames[::2, ...]
@@ -207,7 +218,7 @@ class TestLayerbyLayer:
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         model = load_model("", device=device)
 
-        frames = torch.rand(512, model.n_fft)
+        frames = torch.rand(512, model.n_fft, device=device)
         frames_sliced = frames[::2, ...]
         assert torch.all(torch.abs(frames[2] - frames_sliced[1]) == 0)
 
@@ -262,45 +273,3 @@ class TestLayerbyLayer:
         y20 = y20 * (int8_max - int8_min) + int8_min
         y20 = y20.type(torch.int8)
         assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-1)
-
-
-if __name__ == "__main__":
-    # Embedding and Time stamps testings
-    test_embedding_timestamp = TestEmbeddingsTimestamps()
-    test_embedding_timestamp.test_embeddings_replicability()
-    test_embedding_timestamp.test_embeddings_shape()
-    test_embedding_timestamp.test_embeddings_nan()
-    test_embedding_timestamp.test_timestamps_begin()
-    test_embedding_timestamp.test_timestamps_spacing()
-
-    # These tests are not passing. Possibly due the error introduced at the
-    # Matmuls inside the model. Have done a operation by operation test to see
-    # which operation is leading to the error. Surprisingly the model is
-    # replicable but not across different batch sizes which is tested by
-    # sliced and batched tests.
-    try:
-        test_embedding_timestamp.test_timestamps_end()
-    except BaseException:
-        print("Test Time Stamps End is not working")
-    try:
-        test_embedding_timestamp.test_embeddings_batched()
-    except BaseException:
-        print("Test Embedding Batched is not working")
-    try:
-        test_embedding_timestamp.test_embeddings_sliced()
-    except BaseException:
-        print("Test Embedding Sliced is not working")
-
-    # Model testing to see errors at a frame level
-    test_model = TestModel()
-    try:
-        test_model.test_model_sliced()
-    except BaseException:
-        print("Test Model Sliced is not working")
-
-    # Layer by layer testing for understanding why the above are failing
-    test_layerbylayer = TestLayerbyLayer()
-    try:
-        test_layerbylayer.test_layers_find_error()
-    except BaseException:
-        print("Test Layer by layer is not working")
