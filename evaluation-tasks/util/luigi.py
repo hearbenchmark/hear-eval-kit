@@ -38,7 +38,7 @@ class WorkTask(luigi.Task):
 
     def output(self):
         return luigi.LocalTarget(
-            "_workdir/%02d-done-%s" % (self.stage_number, self.name)
+            "_workdir/%02d-%s.done" % (self.stage_number, self.name)
         )
 
     @property
