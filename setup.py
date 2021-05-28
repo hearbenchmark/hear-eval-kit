@@ -10,7 +10,7 @@ from setuptools import find_packages, setup
 long_description = open("README.md", "r", encoding="utf-8").read()
 
 setup(
-    name="hear2021-evalkit",
+    name="hear2021-eval-kit",
     version="0.0.1",
     description="Holistic Evaluation of Audio Representations (HEAR) 2021 -- Evaluation Kit",
     author="",
@@ -27,44 +27,27 @@ setup(
     packages=find_packages(),
     python_requires=">=3.7",
     install_requires=[
+        "boto3",
+        "luigi",
         "numpy",
-        "scipy",
-        "torch>=1.8",
-        "pytorch-lightning",
-        # pypi release (only master) doesn't support OrderedDict typing
-        # "typing-extensions",
+        "pandas",
+        "python-slugify",
+        "requests",
+        "soundfile",
+        "tqdm",
     ],
     extras_require={
         "test": [
             "pytest",
             "pytest-cov",
-            "pygments>=2.7.4",  # not directly required, pinned by Snyk to avoid a vulnerability
             "pytest-env",
         ],
         "dev": [
             "pre-commit",
-            "nbstripout==0.3.9",  # Used in precommit hooks
-            "black==20.8b1",  # Used in precommit hooks
-            "jupytext==v1.10.3",  # Used in precommit hooks
+            "black",  # Used in precommit hooks
             "pytest",
             "pytest-cov",
-            "ipython",
-            "librosa",
-            "scikit-learn>=0.24.2",  # not directly required, pinned by Snyk to avoid a vulnerability
-            "matplotlib",
-            "numba>=0.49.0",  # not directly required, pinned by Snyk to avoid a vulnerability
-            "pygments>=2.7.4",  # not directly required, pinned by Snyk to avoid a vulnerability
             "pytest-env",
-            "sphinx>=3.0.4",  # not directly required, pinned by Snyk to avoid a vulnerability
-            "unofficial-pt-lightning-sphinx-theme",
-            # Temporarily disabled so we can push to pypi
-            # "pt-lightning-sphinx-theme @ https://github.com/PyTorchLightning/lightning_sphinx_theme/tarball/master#egg=pt-lightning-sphinx-theme",
-            "sphinxcontrib-napoleon",
-            "sphinx-autodoc-typehints",
-            "mock",
-            "sphinx_rtd_theme",
-            "myst_parser",
-            "linkify-it-py",
         ],
     },
     classifiers=[],
