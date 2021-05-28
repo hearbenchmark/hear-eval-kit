@@ -37,13 +37,30 @@ class WorkTask(luigi.Task):
         # return type(self).__name__
 
     def output(self):
-        return luigi.LocalTarget("_workdir/done-%s" % self.name)
+        return luigi.LocalTarget(
+            "_workdir/%02d-done-%s" % (self.stage_number, self.name)
+        )
 
     @property
     def workdir(self):
-        d = "_workdir/%s/" % self.name
+        d = "_workdir/%02d-%s/" % (self.stage_number, self.name)
         ensure_dir(d)
         return d
+
+    @property
+    def stage_number(self) -> int:
+        """
+        Numerically sort the DAG tasks.
+        This stage number will go into the name.
+            This should be overridden as 0 by any task that has no
+        requirements.
+        """
+        if isinstance(self.requires(), WorkTask):
+            return 1 + self.requires().stage_number
+        elif isinstance(self.requires(), list):
+            return 1 + max([task.stage_number for task in self.requires()])
+        else:
+            raise ValueError("Unknown requires: %s" % self.requires())
 
 
 def download_file(url, local_filename):

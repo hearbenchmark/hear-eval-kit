@@ -61,6 +61,10 @@ class DownloadCorpus(WorkTask):
         with self.output().open("w") as outfile:
             pass
 
+    @property
+    def stage_number(self) -> int:
+        return 0
+
 
 class ExtractCorpus(WorkTask):
     def requires(self):
