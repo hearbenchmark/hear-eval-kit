@@ -186,8 +186,8 @@ class SubsampleMetadata(WorkTask):
 
     def requires(self):
         """
-            This depends upon ToMonoWavCorpus to get the final WAV
-            filenames (which should not change after this point,
+        This depends upon ToMonoWavCorpus to get the final WAV
+        filenames (which should not change after this point,
         besides being sorted into {sr}/{partition}/ subdirectories),
         and the metadata in ExtractCorpus.
         """
@@ -216,6 +216,8 @@ class SubsampleMetadata(WorkTask):
         audiodf = pd.DataFrame(
             [os.path.split(a)[1] for a in audiofiles], columns=["uuid"]
         )
+        # Sanity check there aren't duplicates in the metadata's
+        # list of audiofiles
         assert len(audiofiles) == len(audiodf.drop_duplicates())
 
         sublabeldf = labeldf.merge(audiodf, on="uuid")
@@ -298,10 +300,8 @@ class SplitTrainTestMetadata(WorkTask):
 
     def requires(self):
         """
-            This depends upon ToMonoWavCorpus to get the final WAV
-            filenames (which should not change after this point,
-        besides being sorted into {sr}/{partition}/ subdirectories),
-        and the metadata in ExtractCorpus.
+        This depends upon SplitTrainTestCorpus to get the partitioned WAV
+        filenames, and the subsampled metadata in SubsampleMetadata.
         """
         return [SplitTrainTestCorpus(), SubsampleMetadata()]
 
