@@ -84,10 +84,44 @@ class ExtractCorpus(WorkTask):
             pass
 
 
+class FilterLabeledMetadata(WorkTask):
+    """
+    Filter the metadata (labels) to only contain audiofiles that
+    are labeled, and save it in metadata.csv with columns:
+    filename (without extension), label
+    """
+
+    def requires(self):
+        return ExtractCorpus()
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+        labeldf = pd.read_csv(
+            os.path.join(
+                self.requires().workdir, "public_dataset/metadata_compiled.csv"
+            )
+        )
+        sublabeldf = labeldf[labeldf["status"].notnull()]
+        sublabeldf.to_csv(
+            os.path.join(self.workdir, "metadata.csv"),
+            columns=["uuid", "status"],
+            index=False,
+            header=False,
+        )
+
+        with self.output().open("w") as outfile:
+            pass
+
+
 class SubsampleCorpus(WorkTask):
     """
     Subsample the corpus so that we have the appropriate number of
     audio files.
+
+    NOTE: We skip audio files that aren't in FilterLabeledMetadata.
 
     Additionally, since the upstream data files might be in subfolders,
     we slugify them here so that we just have one flat directory.
@@ -102,7 +136,7 @@ class SubsampleCorpus(WorkTask):
     """
 
     def requires(self):
-        return ExtractCorpus()
+        return [ExtractCorpus(), FilterLabeledMetadata()]
 
     @property
     def name(self):
@@ -111,13 +145,32 @@ class SubsampleCorpus(WorkTask):
     def run(self):
         # Really coughvid? webm + ogg?
         audiofiles = list(
-            glob.glob(os.path.join(self.requires().workdir, "public_dataset/*.webm"))
-            + glob.glob(os.path.join(self.requires().workdir, "public_dataset/*.ogg"))
+            glob.glob(os.path.join(self.requires()[0].workdir, "public_dataset/*.webm"))
+            + glob.glob(
+                os.path.join(self.requires()[0].workdir, "public_dataset/*.ogg")
+            )
         )
+
+        labeldf = pd.read_csv(
+            os.path.join(self.requires()[1].workdir, "metadata.csv"),
+            header=None,
+            names=["filename", "label"],
+        )
+        filename_with_labels = list(labeldf["filename"].to_numpy())
+        assert len(filename_with_labels) == len(set(filename_with_labels))
+        filename_with_labels = set(filename_with_labels)
+
+        # Filter audiofiles to only ones with labels
+        audiofiles = [
+            a
+            for a in audiofiles
+            if os.path.splitext(os.path.split(a)[1])[0] in filename_with_labels
+        ]
+        assert len(audiofiles) == len(filename_with_labels)
 
         # Make sure we found audio files to work with
         if len(audiofiles) == 0:
-            raise RuntimeError(f"No audio files found in {self.requires().workdir}")
+            raise RuntimeError(f"No audio files found in {self.requires()[0].workdir}")
 
         # Deterministically randomly sort all files by their hash
         audiofiles.sort(key=lambda filename: luigi_util.filename_to_int_hash(filename))
@@ -133,7 +186,7 @@ class SubsampleCorpus(WorkTask):
             newaudiofile = os.path.join(
                 self.workdir,
                 os.path.split(
-                    slugify(os.path.relpath(audiofile, self.requires().workdir))
+                    slugify(os.path.relpath(audiofile, self.requires()[0].workdir))
                 )[0],
                 # This is pretty gnarly but we do it to not slugify the filename extension
                 os.path.split(audiofile)[1],
@@ -168,60 +221,6 @@ class ToMonoWavCorpus(WorkTask):
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
             audio_util.convert_to_mono_wav(audiofile, newaudiofile)
-        with self.output().open("w") as outfile:
-            pass
-
-
-class SubsampleMetadata(WorkTask):
-    """
-    Subsample the metadata (labels), and normalize it the CSV format
-    described in README.md.
-    """
-
-    def requires(self):
-        """
-        This depends upon ToMonoWavCorpus to get the final WAV
-        filenames (which should not change after this point,
-        besides being sorted into {sr}/{partition}/ subdirectories),
-        and the metadata in ExtractCorpus.
-        """
-        return [ToMonoWavCorpus(), ExtractCorpus()]
-
-    @property
-    def name(self):
-        return type(self).__name__
-
-    def run(self):
-        # Unfortunately, this somewhat fragilely depends upon the order
-        # of self.requires
-
-        audiofiles = list(glob.glob(os.path.join(self.requires()[0].workdir, "*.wav")))
-
-        # Make sure we found audio files to work with
-        if len(audiofiles) == 0:
-            raise RuntimeError(f"No audio files found in {self.requires()[0].workdir}")
-
-        labeldf = pd.read_csv(
-            os.path.join(
-                self.requires()[1].workdir, "public_dataset/metadata_compiled.csv"
-            )
-        )
-        labeldf["uuid"] = labeldf["uuid"] + ".wav"
-        audiodf = pd.DataFrame(
-            [os.path.split(a)[1] for a in audiofiles], columns=["uuid"]
-        )
-        # Sanity check there aren't duplicates in the metadata's
-        # list of audiofiles
-        assert len(audiofiles) == len(audiodf.drop_duplicates())
-
-        sublabeldf = labeldf.merge(audiodf, on="uuid")
-        sublabeldf.to_csv(
-            os.path.join(self.workdir, "metadata.csv"),
-            columns=["uuid", "status"],
-            index=False,
-            header=False,
-        )
-
         with self.output().open("w") as outfile:
             pass
 
@@ -297,7 +296,7 @@ class SplitTrainTestMetadata(WorkTask):
         This depends upon SplitTrainTestCorpus to get the partitioned WAV
         filenames, and the subsampled metadata in SubsampleMetadata.
         """
-        return [SplitTrainTestCorpus(), SubsampleMetadata()]
+        return [SplitTrainTestCorpus(), FilterLabeledMetadata()]
 
     @property
     def name(self):
@@ -308,8 +307,6 @@ class SplitTrainTestMetadata(WorkTask):
         # of self.requires
 
         # Might also want "val" for some corpora
-        splittotal = 0
-        origtotal = None
         for partition in ["train", "test"]:
             audiofiles = list(
                 glob.glob(os.path.join(self.requires()[0].workdir, partition, "*.wav"))
@@ -326,6 +323,8 @@ class SplitTrainTestMetadata(WorkTask):
                 header=None,
                 names=["filename", "label"],
             )
+            # Add WAV extension
+            labeldf["filename"] = labeldf["filename"] + ".wav"
             audiodf = pd.DataFrame(
                 [os.path.split(a)[1] for a in audiofiles], columns=["filename"]
             )
@@ -333,16 +332,12 @@ class SplitTrainTestMetadata(WorkTask):
 
             sublabeldf = labeldf.merge(audiodf, on="filename")
 
-            origtotal = len(labeldf)
-            splittotal += len(sublabeldf)
             sublabeldf.to_csv(
                 os.path.join(self.workdir, f"{partition}.csv"),
                 columns=["filename", "label"],
                 index=False,
                 header=False,
             )
-
-        assert origtotal == splittotal
 
         with self.output().open("w") as outfile:
             pass
