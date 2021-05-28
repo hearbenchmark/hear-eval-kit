@@ -10,7 +10,7 @@ from setuptools import find_packages, setup
 long_description = open("README.md", "r", encoding="utf-8").read()
 
 setup(
-    name="hearevalkit",
+    name="heareval",
     version="0.0.1",
     description="Holistic Evaluation of Audio Representations (HEAR) 2021 -- Evaluation Kit",
     author="",
@@ -27,7 +27,7 @@ setup(
     packages=find_packages(),
     python_requires=">=3.6",
     entry_points={
-        "console_scripts": ["hear2021_tasks_coughvid=hearevalkit.tasks.coughvid:main"]
+        "console_scripts": ["hear2021_tasks_coughvid=heareval.tasks.coughvid:main"]
     },
     install_requires=[
         "boto3",

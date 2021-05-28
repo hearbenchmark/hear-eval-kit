@@ -132,4 +132,4 @@ dmypy.json
 *_workdir/
 
 # Completed evaluation taks
-hearevalkit/tasks/coughvid-*/
+heareval/tasks/coughvid-*/

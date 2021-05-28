@@ -39,10 +39,10 @@ import soundfile as sf
 from slugify import slugify
 from tqdm.auto import tqdm
 
-import hearevalkit.tasks.config.coughvid as config
-import hearevalkit.tasks.util.audio as audio_util
-import hearevalkit.tasks.util.luigi as luigi_util
-from hearevalkit.tasks.util.luigi import WorkTask
+import heareval.tasks.config.coughvid as config
+import heareval.tasks.util.audio as audio_util
+import heareval.tasks.util.luigi as luigi_util
+from heareval.tasks.util.luigi import WorkTask
 
 
 class DownloadCorpus(WorkTask):
