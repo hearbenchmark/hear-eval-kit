@@ -121,21 +121,27 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
     """
     batch_size, num_samples = audio.shape
 
-    # Adjust the number of samples if centering to allow for a half
-    # frame size number of padded samples padded at the start.
+    # If centering, we are going to pad the start and end of the clip
+    # by frame_size // 2. Here, we increase the number of samples to that
+    # size before calculating the number of frames for this hop size.
     start_pad = 0
     if is_centered:
-        half_frame_size = int(frame_size // 2)
-        num_samples += half_frame_size
-        start_pad = half_frame_size
+        start_pad = int(frame_size // 2)
+        num_samples += start_pad * 2
 
-    # Number of frames is the number of hops that can occur within num_samples
-    num_frames = math.ceil(num_samples / hop_size)
+    # Number of frames that will fully fit with num_samples.
+    num_frames = 1 + (num_samples - frame_size) // hop_size
 
-    # Pad audio to facilitate centered frames.
-    padded_num_samples = (num_frames - 1) * hop_size + frame_size
-    end_pad = padded_num_samples - num_samples
-    audio = F.pad(audio, (start_pad, end_pad))
+    # Number of samples after applying framing.
+    framed_num_samples = (num_frames - 1) * hop_size + frame_size
+
+    # If we are centering then we will need to pad the audio, if not
+    # centering then we will possible be truncating the input audio.
+    if is_centered:
+        end_pad = framed_num_samples - audio.shape[1] - start_pad
+        audio = F.pad(audio, (start_pad, end_pad))
+    else:
+        audio = audio[:, :framed_num_samples]
 
     # Frame.
     shape = (batch_size, num_frames, frame_size)
