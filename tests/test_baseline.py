@@ -1,5 +1,10 @@
+"""
+Tests for the baseline model
+"""
+
+import numpy as np
 import torch
-import os
+
 from heareval.baseline import load_model, get_audio_embedding, input_sample_rate
 
 torch.backends.cudnn.deterministic = True
@@ -182,10 +187,21 @@ class TestEmbeddingsTimestamps:
         )
 
     def test_timestamps_end(self):
-        # Test the end of the timestamp. This should technically not exceed the
-        # time of the audio. However it is hapenning in our case though?
-        assert torch.abs(self.ts_ct[-1] - 96000 / input_sample_rate()) < 1e-5
-        assert torch.abs(self.ts_not_ct[-1] - 96000 / input_sample_rate()) < 1e-5
+        # Test the end of the timestamp.
+        duration = self.audio.shape[1] / input_sample_rate()
+
+        # For a centered frame the difference between the end and the duration should
+        # be zero (an equal number of frames fit into the padded signal, so the center
+        # of the last frame should be right at the end of the input). This is just for
+        # this particular input signal.
+        centered_diff = duration - self.ts_ct[-1]
+        assert np.isclose(centered_diff.detach().cpu().numpy(), 0.0)
+
+        # In the case of a non-centered frame there is no padding so the
+        # closest that we can get to the end is frame_size // 2.
+        non_centered_diff = duration - self.ts_not_ct[-1]
+        expected = 4096 // 2 / input_sample_rate()
+        assert np.isclose(non_centered_diff.detach().cpu().numpy(), expected)
 
 
 class TestModel:
