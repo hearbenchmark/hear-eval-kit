@@ -129,14 +129,14 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
         start_pad = int(frame_size // 2)
         num_samples += start_pad * 2
 
-    # Number of frames that will fully fit with num_samples.
+    # Number of frames that will fully fit within num_samples.
     num_frames = 1 + (num_samples - frame_size) // hop_size
 
     # Number of samples after applying framing.
     framed_num_samples = (num_frames - 1) * hop_size + frame_size
 
-    # If we are centering then we will need to pad the audio, if not
-    # centering then we will possible be truncating the input audio.
+    # If we are centering, then we will need to pad the audio, if not
+    # centering, then we will possibly be truncating the input audio.
     if is_centered:
         end_pad = framed_num_samples - audio.shape[1] - start_pad
         audio = F.pad(audio, (start_pad, end_pad))
