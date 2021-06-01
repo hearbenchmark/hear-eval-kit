@@ -142,9 +142,8 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
     else:
         audio = audio[:, :framed_num_samples]
 
-    # Frame.
     shape = (batch_size, num_frames, frame_size)
-    stride = (framed_num_samples, hop_size, 1)
+    stride = (audio.stride()[0], hop_size, 1)
     frames = torch.as_strided(audio, shape, stride)
 
     return frames

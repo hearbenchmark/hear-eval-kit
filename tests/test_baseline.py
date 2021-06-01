@@ -5,7 +5,12 @@ Tests for the baseline model
 import numpy as np
 import torch
 
-from heareval.baseline import load_model, get_audio_embedding, input_sample_rate
+from heareval.baseline import (
+    load_model,
+    get_audio_embedding,
+    input_sample_rate,
+    frame_audio,
+)
 
 torch.backends.cudnn.deterministic = True
 
@@ -109,7 +114,16 @@ class TestEmbeddingsTimestamps:
         # embedding for this sliced audio batch. The embeddings for
         # corresponding audios should match the embeddings when the full batch
         # was passed.
-        audio_sliced = self.audio[::2, ...]
+        audio_sliced = self.audio[::2]
+
+        # Ensure framing is identical for both centered and uncentered frames
+        audio_sliced_framed = frame_audio(audio_sliced, 4096, 256, True)
+        audio_framed = frame_audio(self.audio, 4096, 256, True)
+        assert torch.all(audio_sliced_framed == audio_framed[::2])
+
+        audio_sliced_framed = frame_audio(audio_sliced, 4096, 256, False)
+        audio_framed = frame_audio(self.audio, 4096, 256, False)
+        assert torch.all(audio_sliced_framed == audio_framed[::2])
 
         # Test for centered
         embeddings_sliced, _ = get_audio_embedding(
@@ -122,9 +136,7 @@ class TestEmbeddingsTimestamps:
         for embedding_sliced, embedding_ct in zip(
             embeddings_sliced.values(), self.embeddings_ct.values()
         ):
-            assert torch.all(
-                torch.abs(embedding_sliced - embedding_ct[::2, ...]) < 1e-5
-            )
+            assert torch.allclose(embedding_sliced, embedding_ct[::2])
 
         # Test for not centered
         embeddings_sliced, _ = get_audio_embedding(
@@ -137,9 +149,7 @@ class TestEmbeddingsTimestamps:
         for embedding_sliced, embedding_not_ct in zip(
             embeddings_sliced.values(), self.embeddings_not_ct.values()
         ):
-            assert torch.all(
-                torch.abs(embedding_sliced - embedding_not_ct[::2, ...]) < 1e-5
-            )
+            assert torch.allclose(embedding_sliced, embedding_not_ct[::2])
 
     def test_embeddings_shape(self):
         # Test the embeddings shape for centered and not centered.
