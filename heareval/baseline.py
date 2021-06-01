@@ -35,13 +35,12 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         self.register_buffer("mel_scale", mel_scale)
 
         # Projection matrices.
-        self.emb4096 = torch.nn.Parameter(
-            torch.rand(self.n_mels, 4096) / math.sqrt(self.n_mels)
-        )
-        self.emb2048 = torch.nn.Parameter(torch.rand(4096, 2048) / math.sqrt(4096))
-        self.emb512 = torch.nn.Parameter(torch.rand(2048, 512) / math.sqrt(2048))
-        self.emb128 = torch.nn.Parameter(torch.rand(512, 128) / math.sqrt(512))
-        self.emb20 = torch.nn.Parameter(torch.rand(128, 20) / math.sqrt(128))
+        normalization = math.sqrt(self.n_mels)
+        self.emb4096 = torch.nn.Parameter(torch.rand(self.n_mels, 4096) / normalization)
+        self.emb2048 = torch.nn.Parameter(torch.rand(self.n_mels, 2048) / normalization)
+        self.emb512 = torch.nn.Parameter(torch.rand(self.n_mels, 512) / normalization)
+        self.emb128 = torch.nn.Parameter(torch.rand(self.n_mels, 128) / normalization)
+        self.emb20 = torch.nn.Parameter(torch.rand(self.n_mels, 20) / normalization)
 
         # An activation to squash the 20D embedding to a [0, 1] range.
         self.activation = torch.nn.Sigmoid()
@@ -61,10 +60,10 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
 
         # Apply projections to get all required embeddings
         x4096 = x.matmul(self.emb4096)
-        x2048 = x4096.matmul(self.emb2048)
-        x512 = x2048.matmul(self.emb512)
-        x128 = x512.matmul(self.emb128)
-        x20 = x128.matmul(self.emb20)
+        x2048 = x.matmul(self.emb2048)
+        x512 = x.matmul(self.emb512)
+        x128 = x.matmul(self.emb128)
+        x20 = x.matmul(self.emb20)
 
         # The 20-dimensional embedding is specified to be int8. To cast to int8 we'll
         # apply an activation to ensure the embedding is in a 0 to 1 range first.
@@ -145,7 +144,7 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
 
     # Frame.
     shape = (batch_size, num_frames, frame_size)
-    stride = (1, hop_size, 1)
+    stride = (framed_num_samples, hop_size, 1)
     frames = torch.as_strided(audio, shape, stride)
 
     return frames

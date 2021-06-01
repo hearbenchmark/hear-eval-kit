@@ -70,9 +70,9 @@ class TestEmbeddingsTimestamps:
         # methodA - Pass two audios individually and get embeddings. methodB -
         # Pass the two audio in a batch and get the embeddings. All
         # corresponding embeddings by method A and method B should be similar.
-        audioa = self.audio[0, ...].unsqueeze(0)
-        audiob = self.audio[1, ...].unsqueeze(0)
-        audioab = self.audio[:2, ...]
+        audioa = self.audio[0].unsqueeze(0)
+        audiob = self.audio[1].unsqueeze(0)
+        audioab = self.audio[:2]
         assert torch.all(torch.cat([audioa, audiob]) == audioab)
 
         # Test for both centered and not centered.
@@ -98,12 +98,11 @@ class TestEmbeddingsTimestamps:
                 batch_size=512,
                 center=center,
             )
+
             for embeddinga, embeddingb, embeddingab in zip(
                 embeddingsa.values(), embeddingsb.values(), embeddingsab.values()
             ):
-                assert torch.all(
-                    torch.abs(torch.cat([embeddinga, embeddingb]) - embeddingab) < 1e-5
-                )
+                assert torch.allclose(torch.cat([embeddinga, embeddingb]), embeddingab)
 
     def test_embeddings_sliced(self):
         # Slice the audio to select every even audio in the batch. Produce the
