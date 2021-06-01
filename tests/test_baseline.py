@@ -153,13 +153,15 @@ class TestEmbeddingsTimestamps:
 
     def test_embeddings_shape(self):
         # Test the embeddings shape for centered and not centered.
-        # The embeddings size in these two cases are different by the codes
-        # logic.
+        # The shape returned is (batch_size, num_frames, embedding_size). We expect
+        # num_frames to be equal to the number of full audio frames that can fit into
+        # the audio sample. The centered example is padded with frame_size (4096) number
+        # of samples, so we don't need to subtract that in that test.
         for size, embedding in self.embeddings_not_ct.items():
-            assert embedding.shape == (64, 96000 // 256, int(size))
+            assert embedding.shape == (64, (96000 - 4096) // 256 + 1, int(size))
 
         for size, embedding in self.embeddings_ct.items():
-            assert embedding.shape == (64, (4096 // 2 + 96000) // 256, int(size))
+            assert embedding.shape == (64, 96000 // 256 + 1, int(size))
 
     def test_embeddings_nan(self):
         # Test for null values in the embeddings.
@@ -224,22 +226,23 @@ class TestModel:
         del self.frames
 
     def test_model_sliced(self):
-        frames_sliced = self.frames[::2, ...]
-        assert torch.all(frames_sliced[0] - self.frames[0] == 0)
-        assert torch.all(frames_sliced[1] - self.frames[2] == 0)
-        assert torch.all(frames_sliced - self.frames[::2, ...] == 0)
+        frames_sliced = self.frames[::2]
+        assert torch.allclose(frames_sliced[0], self.frames[0])
+        assert torch.allclose(frames_sliced[1], self.frames[2])
+        assert torch.allclose(frames_sliced, self.frames[::2])
 
         outputs = self.model(self.frames)
         outputs_sliced = self.model(frames_sliced)
 
         for output, output_sliced in zip(outputs.values(), outputs_sliced.values()):
-            assert torch.all(torch.abs(output_sliced[0] - output[0]) < 1e-5)
-            assert torch.all(torch.abs(output_sliced[1] - output[2]) < 1e-5)
-            assert torch.all(torch.abs(output_sliced - output[::2, ...]) < 1e-5)
+            assert torch.allclose(output_sliced[0], output[0])
+            assert torch.allclose(output_sliced[1], output[2])
+            assert torch.allclose(output_sliced, output[::2])
 
 
 class TestLayerbyLayer:
     def test_layers_find_error(self):
+
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         model = load_model("", device=device)
 
@@ -271,30 +274,30 @@ class TestLayerbyLayer:
         # embeddings shape.
         x4096 = x.matmul(model.emb4096)
         y4096 = y.matmul(model.emb4096)
-        assert torch.all(torch.abs(x4096[::2, ...] - y4096) < 1e-4)
+        assert torch.all(torch.abs(x4096[::2, ...] - y4096) < 1e-5)
 
-        x2048 = x4096.matmul(model.emb2048)
-        y2048 = y4096.matmul(model.emb2048)
-        assert torch.all(torch.abs(x2048[::2, ...] - y2048) < 1e-3)
+        x2048 = x.matmul(model.emb2048)
+        y2048 = y.matmul(model.emb2048)
+        assert torch.all(torch.abs(x2048[::2, ...] - y2048) < 1e-4)
 
-        x512 = x2048.matmul(model.emb512)
-        y512 = y2048.matmul(model.emb512)
-        assert torch.all(torch.abs(x512[::2, ...] - y512) < 1e-2)
+        x512 = x.matmul(model.emb512)
+        y512 = y.matmul(model.emb512)
+        assert torch.all(torch.abs(x512[::2, ...] - y512) < 1e-4)
 
-        x128 = x512.matmul(model.emb128)
-        y128 = y512.matmul(model.emb128)
-        assert torch.all(torch.abs(x128[::2, ...] - y128) < 1e-1)
+        x128 = x.matmul(model.emb128)
+        y128 = y.matmul(model.emb128)
+        assert torch.all(torch.abs(x128[::2, ...] - y128) < 1e-5)
 
         int8_max = torch.iinfo(torch.int8).max
         int8_min = torch.iinfo(torch.int8).min
 
-        x20 = x128.matmul(model.emb20)
+        x20 = x.matmul(model.emb20)
         x20 = model.activation(x20)
         x20 = x20 * (int8_max - int8_min) + int8_min
         x20 = x20.type(torch.int8)
 
-        y20 = y128.matmul(model.emb20)
+        y20 = y.matmul(model.emb20)
         y20 = model.activation(y20)
         y20 = y20 * (int8_max - int8_min) + int8_min
         y20 = y20.type(torch.int8)
-        assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-1)
+        assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-5)
