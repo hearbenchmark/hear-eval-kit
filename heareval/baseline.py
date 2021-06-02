@@ -35,13 +35,12 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         self.register_buffer("mel_scale", mel_scale)
 
         # Projection matrices.
-        self.emb4096 = torch.nn.Parameter(
-            torch.rand(self.n_mels, 4096) / math.sqrt(self.n_mels)
-        )
-        self.emb2048 = torch.nn.Parameter(torch.rand(4096, 2048) / math.sqrt(4096))
-        self.emb512 = torch.nn.Parameter(torch.rand(2048, 512) / math.sqrt(2048))
-        self.emb128 = torch.nn.Parameter(torch.rand(512, 128) / math.sqrt(512))
-        self.emb20 = torch.nn.Parameter(torch.rand(128, 20) / math.sqrt(128))
+        normalization = math.sqrt(self.n_mels)
+        self.emb4096 = torch.nn.Parameter(torch.rand(self.n_mels, 4096) / normalization)
+        self.emb2048 = torch.nn.Parameter(torch.rand(self.n_mels, 2048) / normalization)
+        self.emb512 = torch.nn.Parameter(torch.rand(self.n_mels, 512) / normalization)
+        self.emb128 = torch.nn.Parameter(torch.rand(self.n_mels, 128) / normalization)
+        self.emb20 = torch.nn.Parameter(torch.rand(self.n_mels, 20) / normalization)
 
         # An activation to squash the 20D embedding to a [0, 1] range.
         self.activation = torch.nn.Sigmoid()
@@ -61,10 +60,10 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
 
         # Apply projections to get all required embeddings
         x4096 = x.matmul(self.emb4096)
-        x2048 = x4096.matmul(self.emb2048)
-        x512 = x2048.matmul(self.emb512)
-        x128 = x512.matmul(self.emb128)
-        x20 = x128.matmul(self.emb20)
+        x2048 = x.matmul(self.emb2048)
+        x512 = x.matmul(self.emb512)
+        x128 = x.matmul(self.emb128)
+        x20 = x.matmul(self.emb20)
 
         # The 20-dimensional embedding is specified to be int8. To cast to int8 we'll
         # apply an activation to ensure the embedding is in a 0 to 1 range first.
@@ -121,25 +120,34 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
     """
     batch_size, num_samples = audio.shape
 
-    # Adjust the number of samples if centering to allow for a half
-    # frame size number of padded samples padded at the start.
+    # If centering, we pad the input audio by frame_size // 2 samples at both the start
+    # and end before splitting into frames. Then, when splitting into frames we often
+    # need to truncate the end of the input so a whole number of frames fit. To avoid
+    # padding and then truncating some the padded zeros we calculate num_samples as if
+    # we padded, perform calculation on that value, and then only pad with as many
+    # zeros as we need.
     start_pad = 0
     if is_centered:
-        half_frame_size = int(frame_size // 2)
-        num_samples += half_frame_size
-        start_pad = half_frame_size
+        start_pad = int(frame_size // 2)
+        num_samples += start_pad * 2
 
-    # Number of frames is the number of hops that can occur within num_samples
-    num_frames = math.ceil(num_samples / hop_size)
+    # Number of frames that will fully fit within num_samples.
+    num_frames = 1 + (num_samples - frame_size) // hop_size
 
-    # Pad audio to facilitate centered frames.
-    padded_num_samples = (num_frames - 1) * hop_size + frame_size
-    end_pad = padded_num_samples - num_samples
-    audio = F.pad(audio, (start_pad, end_pad))
+    # Number of samples after applying framing. This will be equal to num_samples
+    # if a whole number of frames fit into num_samples, and less than otherwise.
+    framed_num_samples = (num_frames - 1) * hop_size + frame_size
 
-    # Frame.
+    # If we are centering, then we will need to pad the audio, if not
+    # centering, then we will possibly be truncating the input audio.
+    if is_centered:
+        end_pad = framed_num_samples - audio.shape[1] - start_pad
+        audio = F.pad(audio, (start_pad, end_pad))
+    else:
+        audio = audio[:, :framed_num_samples]
+
     shape = (batch_size, num_frames, frame_size)
-    stride = (1, hop_size, 1)
+    stride = (audio.stride()[0], hop_size, 1)
     frames = torch.as_strided(audio, shape, stride)
 
     return frames
