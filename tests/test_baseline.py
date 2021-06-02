@@ -1,6 +1,16 @@
+"""
+Tests for the baseline model
+"""
+
+import numpy as np
 import torch
-import os
-from heareval.baseline import load_model, get_audio_embedding, input_sample_rate
+
+from heareval.baseline import (
+    load_model,
+    get_audio_embedding,
+    input_sample_rate,
+    frame_audio,
+)
 
 torch.backends.cudnn.deterministic = True
 
@@ -65,9 +75,9 @@ class TestEmbeddingsTimestamps:
         # methodA - Pass two audios individually and get embeddings. methodB -
         # Pass the two audio in a batch and get the embeddings. All
         # corresponding embeddings by method A and method B should be similar.
-        audioa = self.audio[0, ...].unsqueeze(0)
-        audiob = self.audio[1, ...].unsqueeze(0)
-        audioab = self.audio[:2, ...]
+        audioa = self.audio[0].unsqueeze(0)
+        audiob = self.audio[1].unsqueeze(0)
+        audioab = self.audio[:2]
         assert torch.all(torch.cat([audioa, audiob]) == audioab)
 
         # Test for both centered and not centered.
@@ -93,19 +103,27 @@ class TestEmbeddingsTimestamps:
                 batch_size=512,
                 center=center,
             )
+
             for embeddinga, embeddingb, embeddingab in zip(
                 embeddingsa.values(), embeddingsb.values(), embeddingsab.values()
             ):
-                assert torch.all(
-                    torch.abs(torch.cat([embeddinga, embeddingb]) - embeddingab) < 1e-5
-                )
+                assert torch.allclose(torch.cat([embeddinga, embeddingb]), embeddingab)
 
     def test_embeddings_sliced(self):
         # Slice the audio to select every even audio in the batch. Produce the
         # embedding for this sliced audio batch. The embeddings for
         # corresponding audios should match the embeddings when the full batch
         # was passed.
-        audio_sliced = self.audio[::2, ...]
+        audio_sliced = self.audio[::2]
+
+        # Ensure framing is identical for both centered and uncentered frames
+        audio_sliced_framed = frame_audio(audio_sliced, 4096, 256, True)
+        audio_framed = frame_audio(self.audio, 4096, 256, True)
+        assert torch.all(audio_sliced_framed == audio_framed[::2])
+
+        audio_sliced_framed = frame_audio(audio_sliced, 4096, 256, False)
+        audio_framed = frame_audio(self.audio, 4096, 256, False)
+        assert torch.all(audio_sliced_framed == audio_framed[::2])
 
         # Test for centered
         embeddings_sliced, _ = get_audio_embedding(
@@ -118,9 +136,7 @@ class TestEmbeddingsTimestamps:
         for embedding_sliced, embedding_ct in zip(
             embeddings_sliced.values(), self.embeddings_ct.values()
         ):
-            assert torch.all(
-                torch.abs(embedding_sliced - embedding_ct[::2, ...]) < 1e-5
-            )
+            assert torch.allclose(embedding_sliced, embedding_ct[::2])
 
         # Test for not centered
         embeddings_sliced, _ = get_audio_embedding(
@@ -133,19 +149,19 @@ class TestEmbeddingsTimestamps:
         for embedding_sliced, embedding_not_ct in zip(
             embeddings_sliced.values(), self.embeddings_not_ct.values()
         ):
-            assert torch.all(
-                torch.abs(embedding_sliced - embedding_not_ct[::2, ...]) < 1e-5
-            )
+            assert torch.allclose(embedding_sliced, embedding_not_ct[::2])
 
     def test_embeddings_shape(self):
         # Test the embeddings shape for centered and not centered.
-        # The embeddings size in these two cases are different by the codes
-        # logic.
+        # The shape returned is (batch_size, num_frames, embedding_size). We expect
+        # num_frames to be equal to the number of full audio frames that can fit into
+        # the audio sample. The centered example is padded with frame_size (4096) number
+        # of samples, so we don't need to subtract that in that test.
         for size, embedding in self.embeddings_not_ct.items():
-            assert embedding.shape == (64, 96000 // 256, int(size))
+            assert embedding.shape == (64, (96000 - 4096) // 256 + 1, int(size))
 
         for size, embedding in self.embeddings_ct.items():
-            assert embedding.shape == (64, (4096 // 2 + 96000) // 256, int(size))
+            assert embedding.shape == (64, 96000 // 256 + 1, int(size))
 
     def test_embeddings_nan(self):
         # Test for null values in the embeddings.
@@ -182,10 +198,21 @@ class TestEmbeddingsTimestamps:
         )
 
     def test_timestamps_end(self):
-        # Test the end of the timestamp. This should technically not exceed the
-        # time of the audio. However it is hapenning in our case though?
-        assert torch.abs(self.ts_ct[-1] - 96000 / input_sample_rate()) < 1e-5
-        assert torch.abs(self.ts_not_ct[-1] - 96000 / input_sample_rate()) < 1e-5
+        # Test the end of the timestamp.
+        duration = self.audio.shape[1] / input_sample_rate()
+
+        # For a centered frame the difference between the end and the duration should
+        # be zero (an equal number of frames fit into the padded signal, so the center
+        # of the last frame should be right at the end of the input). This is just for
+        # this particular input signal.
+        centered_diff = duration - self.ts_ct[-1]
+        assert np.isclose(centered_diff.detach().cpu().numpy(), 0.0)
+
+        # In the case of a non-centered frame there is no padding so the
+        # closest that we can get to the end is frame_size // 2.
+        non_centered_diff = duration - self.ts_not_ct[-1]
+        expected = 4096 // 2 / input_sample_rate()
+        assert np.isclose(non_centered_diff.detach().cpu().numpy(), expected)
 
 
 class TestModel:
@@ -199,22 +226,23 @@ class TestModel:
         del self.frames
 
     def test_model_sliced(self):
-        frames_sliced = self.frames[::2, ...]
-        assert torch.all(frames_sliced[0] - self.frames[0] == 0)
-        assert torch.all(frames_sliced[1] - self.frames[2] == 0)
-        assert torch.all(frames_sliced - self.frames[::2, ...] == 0)
+        frames_sliced = self.frames[::2]
+        assert torch.allclose(frames_sliced[0], self.frames[0])
+        assert torch.allclose(frames_sliced[1], self.frames[2])
+        assert torch.allclose(frames_sliced, self.frames[::2])
 
         outputs = self.model(self.frames)
         outputs_sliced = self.model(frames_sliced)
 
         for output, output_sliced in zip(outputs.values(), outputs_sliced.values()):
-            assert torch.all(torch.abs(output_sliced[0] - output[0]) < 1e-5)
-            assert torch.all(torch.abs(output_sliced[1] - output[2]) < 1e-5)
-            assert torch.all(torch.abs(output_sliced - output[::2, ...]) < 1e-5)
+            assert torch.allclose(output_sliced[0], output[0])
+            assert torch.allclose(output_sliced[1], output[2])
+            assert torch.allclose(output_sliced, output[::2])
 
 
 class TestLayerbyLayer:
     def test_layers_find_error(self):
+
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
         model = load_model("", device=device)
 
@@ -246,30 +274,30 @@ class TestLayerbyLayer:
         # embeddings shape.
         x4096 = x.matmul(model.emb4096)
         y4096 = y.matmul(model.emb4096)
-        assert torch.all(torch.abs(x4096[::2, ...] - y4096) < 1e-4)
+        assert torch.all(torch.abs(x4096[::2, ...] - y4096) < 1e-5)
 
-        x2048 = x4096.matmul(model.emb2048)
-        y2048 = y4096.matmul(model.emb2048)
-        assert torch.all(torch.abs(x2048[::2, ...] - y2048) < 1e-3)
+        x2048 = x.matmul(model.emb2048)
+        y2048 = y.matmul(model.emb2048)
+        assert torch.all(torch.abs(x2048[::2, ...] - y2048) < 1e-4)
 
-        x512 = x2048.matmul(model.emb512)
-        y512 = y2048.matmul(model.emb512)
-        assert torch.all(torch.abs(x512[::2, ...] - y512) < 1e-2)
+        x512 = x.matmul(model.emb512)
+        y512 = y.matmul(model.emb512)
+        assert torch.all(torch.abs(x512[::2, ...] - y512) < 1e-4)
 
-        x128 = x512.matmul(model.emb128)
-        y128 = y512.matmul(model.emb128)
-        assert torch.all(torch.abs(x128[::2, ...] - y128) < 1e-1)
+        x128 = x.matmul(model.emb128)
+        y128 = y.matmul(model.emb128)
+        assert torch.all(torch.abs(x128[::2, ...] - y128) < 1e-5)
 
         int8_max = torch.iinfo(torch.int8).max
         int8_min = torch.iinfo(torch.int8).min
 
-        x20 = x128.matmul(model.emb20)
+        x20 = x.matmul(model.emb20)
         x20 = model.activation(x20)
         x20 = x20 * (int8_max - int8_min) + int8_min
         x20 = x20.type(torch.int8)
 
-        y20 = y128.matmul(model.emb20)
+        y20 = y.matmul(model.emb20)
         y20 = model.activation(y20)
         y20 = y20 * (int8_max - int8_min) + int8_min
         y20 = y20.type(torch.int8)
-        assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-1)
+        assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-5)
