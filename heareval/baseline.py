@@ -120,9 +120,12 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
     """
     batch_size, num_samples = audio.shape
 
-    # If centering, we are going to pad the start and end of the clip
-    # by frame_size // 2. Here, we increase the number of samples to that
-    # size before calculating the number of frames for this hop size.
+    # If centering, we pad the input audio by frame_size // 2 samples at both the start
+    # and end before splitting into frames. Then, when splitting into frames we often
+    # need to truncate the end of the input so a whole number of frames fit. To avoid
+    # padding and then truncating some the padded zeros we calculate num_samples as if
+    # we padded, perform calculation on that value, and then only pad with as many
+    # zeros as we need.
     start_pad = 0
     if is_centered:
         start_pad = int(frame_size // 2)
@@ -131,7 +134,8 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
     # Number of frames that will fully fit within num_samples.
     num_frames = 1 + (num_samples - frame_size) // hop_size
 
-    # Number of samples after applying framing.
+    # Number of samples after applying framing. This will be equal to num_samples
+    # if a whole number of frames fit into num_samples, and less than otherwise.
     framed_num_samples = (num_frames - 1) * hop_size + frame_size
 
     # If we are centering, then we will need to pad the audio, if not
