@@ -24,19 +24,21 @@ setup(
         "Bug Tracker": "https://github.com/neuralaudio/hear2021-eval-kit/issues",
         "Source Code": "https://github.com/neuralaudio/hear2021-eval-kit",
     },
-    packages=find_packages(),
+    packages=find_packages(exclude=("tests",)),
     python_requires=">=3.6",
     entry_points={
         "console_scripts": ["hear2021_tasks_coughvid=heareval.tasks.coughvid:main"]
     },
     install_requires=[
         "boto3",
+        "librosa",
         "luigi",
         "numpy",
         "pandas",
         "python-slugify",
         "requests",
         "soundfile",
+        "torch",
         "tqdm",
     ],
     extras_require={

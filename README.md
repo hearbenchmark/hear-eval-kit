@@ -6,8 +6,24 @@ Evaluation kit for HEAR 2021 NeurIPS competition
 pip install heareval
 ```
 
-If you are pushing code to this repo, please make sure you have
-pre-commit hooks installed:
+#### Development
+
+Clone repo:
+```
+git clone https://github.com/neuralaudio/hear2021-eval-kit
+cd hear2021-eval-kit
+```
+Install in development mode:
+```
+pip install -e ".[dev]"
+```
+
+Make sure you have pre-commit hooks installed:
 ```
 pre-commit install
+```
+
+Running tests:
+```
+python3 -m pytest
 ```
