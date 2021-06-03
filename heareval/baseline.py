@@ -6,12 +6,12 @@ This is simply a mel spectrogram followed by random projection.
 
 import math
 from collections import defaultdict
-from typing import Any, DefaultDict, Dict, List, Optional, Tuple, Union
+from typing import Any, DefaultDict, Dict, List, Optional, Tuple
 
-import torch
-from torch import Tensor
-import torch.nn.functional as F
 import librosa
+import torch
+import torch.nn.functional as F
+from torch import Tensor
 
 
 class RandomProjectionMelEmbedding(torch.nn.Module):
