@@ -268,6 +268,10 @@ if __name__ == "__main__":
     model = load_model("", device=device)
     # White noise
     audio = torch.rand(1024, 20000, device=device) * 2 - 1
-    embs, timestamps = get_audio_embedding(audio=audio, model=model, hop_size=1000)
+    embs, timestamps = get_audio_embedding(
+        audio=audio,
+        model=model,
+        frame_rate=RandomProjectionMelEmbedding.sample_rate / 1000,
+    )
 
     pairwise_distance(embs[20].float(), embs[20].float())
