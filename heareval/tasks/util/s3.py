@@ -96,7 +96,7 @@ class EnsureBucket(WorkTask):
         self.output().open("w")
 
 
-def can_access_bucket(s3: boto3.session.Session, bucket: str) -> str:
+def can_access_bucket(s3: boto3.session.Session, bucket: str) -> bool:
     """
     Checks access to bucket
 
@@ -143,7 +143,7 @@ def check_bucket(bucket: str, region: str):
 
     # Make sure we can access it
     try:
-        can_access_bucket(s3, bucket)
+        assert can_access_bucket(s3, bucket)
     except ClientError:
         raise ValueError(
             f"S3 bucket {bucket} does not exist or you don't have access. "
