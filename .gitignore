@@ -136,3 +136,6 @@ dmypy.json
 
 # Completed evaluation taks
 heareval/tasks/coughvid-*/
+
+# vim
+*.sw?
