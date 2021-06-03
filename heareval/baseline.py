@@ -109,13 +109,14 @@ def frame_audio(
 ) -> Tuple[Tensor, list]:
     """
     Slices input audio into frames that are centered and occur every
-    sample_rate / frame_rate samples. If sample_rate is not divisible by frame_rate,
-    we round to the nearest sample.
+    sample_rate / frame_rate samples. If sample_rate is not divisible
+    by frame_rate, we round to the nearest sample.
 
     Args:
-        audio: input audio, expects a 2d Tensor of shape: (batch_size, num_samples)
+            audio: input audio, expects a 2d Tensor of shape:
+            (batch_size, num_samples)
         frame_size: the number of samples each resulting frame should be
-        frame_rate: number of samples between frames.
+        frame_rate: number of frames per second of audio
         sample_rate: sampling rate of the input audio
 
     Returns:
