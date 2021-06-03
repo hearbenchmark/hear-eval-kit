@@ -104,7 +104,7 @@ def load_model(model_file_path: str, device: str = "cpu") -> Any:
     return RandomProjectionMelEmbedding().to(device)
 
 
-def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool):
+def frame_audio(audio: Tensor, frame_size: int, frame_rate: float, sample_rate: int):
     """
     Slice audio into equal length frames. Each adjacent frame is a hop_size number of
     samples apart.
@@ -116,41 +116,23 @@ def frame_audio(audio: Tensor, frame_size: int, hop_size: int, is_centered: bool
         is_centered: Pad audio by frame_size // 2 to center audio in frame
 
     Returns:
+        # TODO also return the timestamps
         A Tensor of shape (batch_size, num_frames, frame_size)
     """
-    batch_size, num_samples = audio.shape
+    audio = F.pad(audio, (frame_size // 2, frame_size - frame_size // 2))
+    num_padded_samples = audio.shape[1]
 
-    # If centering, we pad the input audio by frame_size // 2 samples at both the start
-    # and end before splitting into frames. Then, when splitting into frames we often
-    # need to truncate the end of the input so a whole number of frames fit. To avoid
-    # padding and then truncating some the padded zeros we calculate num_samples as if
-    # we padded, perform calculation on that value, and then only pad with as many
-    # zeros as we need.
-    start_pad = 0
-    if is_centered:
-        start_pad = int(frame_size // 2)
-        num_samples += start_pad * 2
+    frame_number = 0
+    frames = []
+    frame_start = 0
+    frame_end = frame_size
+    while frame_end < num_padded_samples:
+        frame_start = int(round(sample_rate * frame_number / frame_rate))
+        frame_end = frame_start + frame_size
+        frames.append(audio[:, frame_start:frame_end])
+        frame_number += 1
 
-    # Number of frames that will fully fit within num_samples.
-    num_frames = 1 + (num_samples - frame_size) // hop_size
-
-    # Number of samples after applying framing. This will be equal to num_samples
-    # if a whole number of frames fit into num_samples, and less than otherwise.
-    framed_num_samples = (num_frames - 1) * hop_size + frame_size
-
-    # If we are centering, then we will need to pad the audio, if not
-    # centering, then we will possibly be truncating the input audio.
-    if is_centered:
-        end_pad = framed_num_samples - audio.shape[1] - start_pad
-        audio = F.pad(audio, (start_pad, end_pad))
-    else:
-        audio = audio[:, :framed_num_samples]
-
-    shape = (batch_size, num_frames, frame_size)
-    stride = (audio.stride()[0], hop_size, 1)
-    frames = torch.as_strided(audio, shape, stride)
-
-    return frames
+    return torch.stack(frames, dim=1)
 
 
 def get_timestamps_for_embedding(
@@ -192,9 +174,8 @@ def get_timestamps_for_embedding(
 def get_audio_embedding(
     audio: Tensor,
     model: RandomProjectionMelEmbedding,
-    hop_size: int,
+    frame_rate: float,
     batch_size: Optional[int] = 512,
-    center: bool = True,
 ) -> Tuple[Dict[int, Tensor], Tensor]:
     """
     Args:
@@ -207,15 +188,16 @@ def get_audio_embedding(
             could be a wrapper function added later.
         model: Loaded model, in PyTorch or Tensorflow 2.x. This
             should be moved to the device the audio tensor is on.
-        hop_size: Number of audio samples between adjacent frames
+        frame_rate: Number of embeddings that the model should return
+            per second. Embeddings and the corresponding timestamps should
+            start at 0s and increment by 1/frame_rate seconds. For example,
+            if the audio is 1.1s and the frame_rate is 4.0, then we should
+            return embeddings centered at 0.0s, 0.25s, 0.5s, 0.75s and 1.0s.
         batch_size: The participants are responsible for estimating
             the batch_size that will achieve high-throughput while
             maintaining appropriate memory constraints. However,
             batch_size is a useful feature for end-users to be able to
             toggle.
-        center: If True, the timestamps correspond to the center
-            of each analysis window. center=True will be used for
-            all evaluation tasks.
 
     Returns:
             ({embedding_size: Tensor}, list(frame timestamps)) where
@@ -243,7 +225,7 @@ def get_audio_embedding(
     # Split the input audio signals into frames and then flatten to create a tensor
     # of audio frames that can be batch processed. We will unflatten back out to
     # (audio_baches, num_frames, embedding_size) after creating embeddings.
-    frames = frame_audio(audio, model.n_fft, hop_size, center)
+    frames = frame_audio(audio, model.n_fft, frame_rate)
     audio_batches, num_frames, frame_size = frames.shape
     frames = frames.flatten(end_dim=1)
 

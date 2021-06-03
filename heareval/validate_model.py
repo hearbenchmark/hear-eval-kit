@@ -21,6 +21,7 @@ class ModelError(BaseException):
 class ValidateModel:
 
     ACCEPTABLE_SAMPLE_RATE = [16000, 22050, 44100, 48000]
+    REQUIRED_FRAME_RATES = [1.0, 10.0, 100.0, 200.0]
 
     def __init__(self, module_name: str, model_file_path: str):
         self.module_name = module_name
