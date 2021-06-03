@@ -6,7 +6,7 @@ This is simply a mel spectrogram followed by random projection.
 
 import math
 from collections import defaultdict
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -106,7 +106,7 @@ def load_model(model_file_path: str, device: str = "cpu") -> Any:
 
 def frame_audio(
     audio: Tensor, frame_size: int, frame_rate: float, sample_rate: int
-) -> Tuple[Tensor, list]:
+) -> Tuple[Tensor, List[float]]:
     """
     Slices input audio into frames that are centered and occur every
     sample_rate / frame_rate samples. If sample_rate is not divisible
@@ -201,7 +201,12 @@ def get_audio_embedding(
     # Split the input audio signals into frames and then flatten to create a tensor
     # of audio frames that can be batch processed. We will unflatten back out to
     # (audio_baches, num_frames, embedding_size) after creating embeddings.
-    frames, timestamps = frame_audio(audio, model.n_fft, frame_rate)
+    frames, timestamps = frame_audio(
+        audio,
+        frame_size=model.n_fft,
+        frame_rate=frame_rate,
+        sample_rate=RandomProjectionMelEmbedding.sample_rate,
+    )
     audio_batches, num_frames, frame_size = frames.shape
     frames = frames.flatten(end_dim=1)
 
