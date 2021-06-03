@@ -185,7 +185,8 @@ class SubsampleCorpus(WorkTask):
                 os.path.split(
                     slugify(os.path.relpath(audiofile, self.requires()[0].workdir))
                 )[0],
-                # This is pretty gnarly but we do it to not slugify the filename extension
+                # This is pretty gnarly but we do it to not slugify
+                # the filename extension
                 os.path.split(audiofile)[1],
             )
             # Make sure we don't have any duplicates

@@ -48,7 +48,7 @@ class CacheTarCorpus(WorkTask):
             # If you yield FinalizeCorpus, this task is suspended
             # and FinalizeCorpus is run, and a LocalFileTarget is
             # returned.
-            finalize_corpus = yield self.next_task()
+            _ = yield self.next_task()
 
             # Tar the file
             devnull = open(os.devnull, "w")
