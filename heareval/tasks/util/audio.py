@@ -9,8 +9,11 @@ import subprocess
 def convert_to_mono_wav(in_file: str, out_file: str):
     devnull = open(os.devnull, "w")
     # If we knew the sample rate, we could also pad/trim the audio file now, e.g.:
-    # ffmpeg -i test.webm -filter_complex apad=whole_len=44100,atrim=end_sample=44100 -ac 1 -c:a pcm_f32le ./test.wav
-    # print(" ".join(["ffmpeg", "-y", "-i", in_file, "-ac", "1", "-c:a", "pcm_f32le", out_file]))
+    # ffmpeg -i test.webm -filter_complex \
+    #    apad=whole_len=44100,atrim=end_sample=44100 \
+    #    -ac 1 -c:a pcm_f32le ./test.wav
+    # print(" ".join(["ffmpeg", "-y", "-i", in_file,
+    #    "-ac", "1", "-c:a", "pcm_f32le", out_file]))
     ret = subprocess.call(
         ["ffmpeg", "-y", "-i", in_file, "-ac", "1", "-c:a", "pcm_f32le", out_file],
         stdout=devnull,
