@@ -301,3 +301,24 @@ class TestLayerbyLayer:
         y20 = y20 * (int8_max - int8_min) + int8_min
         y20 = y20.type(torch.int8)
         assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-5)
+
+
+class TestFraming:
+    def test_frame_audio(self):
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        sr = 44100
+        num_audio = 16
+        duration = 1.1
+        frame_rate = 4.0
+        frame_size = 4096
+
+        audio = torch.rand((num_audio, int(sr * duration)), device=device)
+        frames, timestamps = frame_audio(audio, frame_size, frame_rate, sr)
+
+        expected_frames_shape = (num_audio, 5, frame_size)
+        expected_timestamps = np.arange(0.0, duration, 0.25)
+
+        assert expected_frames_shape == frames.shape
+        assert np.all(expected_timestamps == timestamps)
