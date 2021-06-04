@@ -139,3 +139,5 @@ heareval/tasks/coughvid-*/
 
 # vim
 *.sw?
+
+.idea/

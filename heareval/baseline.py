@@ -6,12 +6,12 @@ This is simply a mel spectrogram followed by random projection.
 
 import math
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Tuple
 
-import torch
-from torch import Tensor
-import torch.nn.functional as F
 import librosa
+import torch
+import torch.nn.functional as F
+from torch import Tensor
 
 
 class RandomProjectionMelEmbedding(torch.nn.Module):
@@ -29,7 +29,7 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         self.register_buffer("window", torch.hann_window(self.n_fft))
 
         # Create a mel filter buffer.
-        mel_scale = Tensor(
+        mel_scale: Tensor = torch.tensor(
             librosa.filters.mel(self.sample_rate, n_fft=self.n_fft, n_mels=self.n_mels)
         )
         self.register_buffer("mel_scale", mel_scale)
@@ -221,16 +221,16 @@ def get_audio_embedding(
     model.eval()
     with torch.no_grad():
         # Iterate over all batches and accumulate the embeddings
-        embeddings = defaultdict(list)
+        list_embeddings: DefaultDict[int, List[Tensor]] = defaultdict(list)
         for batch in loader:
             result = model(batch[0])
             for size, embedding in result.items():
-                embeddings[size].append(embedding)
+                list_embeddings[size].append(embedding)
 
     # Concatenate mini-batches back together and unflatten the frames back
     # to audio batches
-    embeddings = dict(embeddings)
-    for size, embedding in embeddings.items():
+    embeddings: Dict[int, Tensor] = {}
+    for size, embedding in list_embeddings.items():
         embeddings[size] = torch.cat(embedding, dim=0)
         embeddings[size] = embeddings[size].unflatten(0, (audio_batches, num_frames))
 
