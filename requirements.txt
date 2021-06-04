@@ -1,9 +1,15 @@
+black
 boto3
+librosa
 luigi
 numpy
 pandas
 pre-commit
+pytest
+pytest-cov
+pytest-env
+python-slugify
 requests
 soundfile
-python-slugify
+torch
 tqdm
