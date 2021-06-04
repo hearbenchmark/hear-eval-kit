@@ -106,7 +106,7 @@ def load_model(model_file_path: str, device: str = "cpu") -> Any:
 
 def frame_audio(
     audio: Tensor, frame_size: int, frame_rate: float, sample_rate: int
-) -> Tuple[Tensor, List[float]]:
+) -> Tuple[Tensor, Tensor]:
     """
     Slices input audio into frames that are centered and occur every
     sample_rate / frame_rate samples. If sample_rate is not divisible
@@ -121,7 +121,8 @@ def frame_audio(
 
     Returns:
         - A Tensor of shape (batch_size, num_frames, frame_size)
-        - A list of timestamps corresponding to the frames
+        - A 1d Tensor of timestamps corresponding to the frame
+        centers.
     """
     audio = F.pad(audio, (frame_size // 2, frame_size - frame_size // 2))
     num_padded_samples = audio.shape[1]
@@ -144,7 +145,7 @@ def frame_audio(
         if not frame_end < num_padded_samples:
             break
 
-    return torch.stack(frames, dim=1), timestamps
+    return torch.stack(frames, dim=1), torch.tensor(timestamps)
 
 
 def get_audio_embedding(
@@ -176,11 +177,11 @@ def get_audio_embedding(
             toggle.
 
     Returns:
-            ({embedding_size: Tensor}, list(frame timestamps)) where
-            embedding_size can be any of [4096, 2048, 512, 128,
-            20].  Tensor is float32 (or signed int for 20-dim),
-            n_sounds x n_frames x dim.
-
+            - {embedding_size: Tensor} where embedding_size can
+                be any of [4096, 2048, 512, 128, 20]. The embedding
+                Tensor is float32 (or signed int for 20-dim),
+                n_sounds x n_frames x dim.
+            - Tensor: Frame-center timestamps, 1d.
     """
 
     # Assert audio is of correct shape
