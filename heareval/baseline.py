@@ -186,7 +186,7 @@ def get_audio_embedding(
     # Assert audio is of correct shape
     if audio.ndim != 2:
         raise ValueError(
-            f"audio input tensor must be 2D with shape (batch_size, num_samples)"
+            "audio input tensor must be 2D with shape (batch_size, num_samples)"
         )
 
     # Make sure the correct model type was passed in

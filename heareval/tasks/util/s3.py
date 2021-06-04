@@ -48,7 +48,7 @@ class CacheTarCorpus(WorkTask):
             # If you yield FinalizeCorpus, this task is suspended
             # and FinalizeCorpus is run, and a LocalFileTarget is
             # returned.
-            finalize_corpus = yield self.next_task()
+            _ = yield self.next_task()
 
             # Tar the file
             devnull = open(os.devnull, "w")
@@ -73,8 +73,7 @@ class CacheTarCorpus(WorkTask):
             print("Putting file to S3")
             client.put_multipart(pathtarfile, s3cache)
 
-        with self.output().open("w") as outfile:
-            pass
+        self.output().open("w")
 
 
 class EnsureBucket(WorkTask):
@@ -94,8 +93,7 @@ class EnsureBucket(WorkTask):
 
     def run(self):
         check_bucket(self.bucket, self.region)
-        with self.output().open("w") as outfile:
-            pass
+        self.output().open("w")
 
 
 def can_access_bucket(s3: boto3.session.Session, bucket: str) -> str:
