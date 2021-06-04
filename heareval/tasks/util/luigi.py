@@ -116,13 +116,13 @@ def which_set(filename, validation_percentage, testing_percentage):
 
     Args:
       filename: File path of the data sample.
+            NOTE: Should be a relative path.
       validation_percentage: How much of the data set to use for validation.
       testing_percentage: How much of the data set to use for testing.
 
     Returns:
       String, one of 'train', 'val', or 'test'.
     """
-    base_name = os.path.basename(filename)
     percentage_hash = filename_to_int_hash(filename) % 100
     if percentage_hash < validation_percentage:
         result = "val"
