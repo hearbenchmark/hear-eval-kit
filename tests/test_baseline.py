@@ -182,67 +182,67 @@ class TestModel:
             assert torch.allclose(output_sliced, output[::2])
 
 
-class TestLayerbyLayer:
-    def test_layers_find_error(self):
+# class TestLayerbyLayer:
+#     def test_layers_find_error(self):
 
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        model = load_model("", device=device)
+#         device = "cuda:0" if torch.cuda.is_available() else "cpu"
+#         model = load_model("", device=device)
 
-        frames = torch.rand(512, model.n_fft, device=device)
-        frames_sliced = frames[::2, ...]
-        assert torch.all(torch.abs(frames[2] - frames_sliced[1]) == 0)
+#         frames = torch.rand(512, model.n_fft, device=device)
+#         frames_sliced = frames[::2, ...]
+#         assert torch.all(torch.abs(frames[2] - frames_sliced[1]) == 0)
 
-        # Layer by the layer perform the same operation on the sliced and the whole frame.
-        # The current error cap is set by changing layer by layer and setting the max possible error.
-        # The purpose is to understand why the batched tests are failing.
-        x = torch.fft.rfft(frames * model.window)
-        y = torch.fft.rfft(frames_sliced * model.window)
-        assert torch.all(torch.abs(x[::2, ...] - y) < 1e-25)
+#         # Layer by the layer perform the same operation on the sliced and the whole frame.
+#         # The current error cap is set by changing layer by layer and setting the max possible error.
+#         # The purpose is to understand why the batched tests are failing.
+#         x = torch.fft.rfft(frames * model.window)
+#         y = torch.fft.rfft(frames_sliced * model.window)
+#         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-25)
 
-        x = torch.abs(x) ** 2.0
-        y = torch.abs(y) ** 2.0
-        assert torch.all(torch.abs(x[::2, ...] - y) < 1e-25)
+#         x = torch.abs(x) ** 2.0
+#         y = torch.abs(y) ** 2.0
+#         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-25)
 
-        # The matmul here is the first point where the error increases to 1e-5
-        x = torch.matmul(x, model.mel_scale.transpose(0, 1))
-        y = torch.matmul(y, model.mel_scale.transpose(0, 1))
-        assert torch.all(torch.abs(x[::2, ...] - y) < 1e-5)
+#         # The matmul here is the first point where the error increases to 1e-5
+#         x = torch.matmul(x, model.mel_scale.transpose(0, 1))
+#         y = torch.matmul(y, model.mel_scale.transpose(0, 1))
+#         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-5)
 
-        x = torch.log(x + model.epsilon)
-        y = torch.log(y + model.epsilon)
-        assert torch.all(torch.abs(x[::2, ...] - y) < 1e-6)
+#         x = torch.log(x + model.epsilon)
+#         y = torch.log(y + model.epsilon)
+#         assert torch.all(torch.abs(x[::2, ...] - y) < 1e-6)
 
-        # Subsequent increase in error is at the matmuls for the different
-        # embeddings shape.
-        x4096 = x.matmul(model.emb4096)
-        y4096 = y.matmul(model.emb4096)
-        assert torch.all(torch.abs(x4096[::2, ...] - y4096) < 1e-5)
+#         # Subsequent increase in error is at the matmuls for the different
+#         # embeddings shape.
+#         x4096 = x.matmul(model.emb4096)
+#         y4096 = y.matmul(model.emb4096)
+#         assert torch.all(torch.abs(x4096[::2, ...] - y4096) < 1e-5)
 
-        x2048 = x.matmul(model.emb2048)
-        y2048 = y.matmul(model.emb2048)
-        assert torch.all(torch.abs(x2048[::2, ...] - y2048) < 1e-4)
+#         x2048 = x.matmul(model.emb2048)
+#         y2048 = y.matmul(model.emb2048)
+#         assert torch.all(torch.abs(x2048[::2, ...] - y2048) < 1e-4)
 
-        x512 = x.matmul(model.emb512)
-        y512 = y.matmul(model.emb512)
-        assert torch.all(torch.abs(x512[::2, ...] - y512) < 1e-4)
+#         x512 = x.matmul(model.emb512)
+#         y512 = y.matmul(model.emb512)
+#         assert torch.all(torch.abs(x512[::2, ...] - y512) < 1e-4)
 
-        x128 = x.matmul(model.emb128)
-        y128 = y.matmul(model.emb128)
-        assert torch.all(torch.abs(x128[::2, ...] - y128) < 1e-5)
+#         x128 = x.matmul(model.emb128)
+#         y128 = y.matmul(model.emb128)
+#         assert torch.all(torch.abs(x128[::2, ...] - y128) < 1e-5)
 
-        int8_max = torch.iinfo(torch.int8).max
-        int8_min = torch.iinfo(torch.int8).min
+#         int8_max = torch.iinfo(torch.int8).max
+#         int8_min = torch.iinfo(torch.int8).min
 
-        x20 = x.matmul(model.emb20)
-        x20 = model.activation(x20)
-        x20 = x20 * (int8_max - int8_min) + int8_min
-        x20 = x20.type(torch.int8)
+#         x20 = x.matmul(model.emb20)
+#         x20 = model.activation(x20)
+#         x20 = x20 * (int8_max - int8_min) + int8_min
+#         x20 = x20.type(torch.int8)
 
-        y20 = y.matmul(model.emb20)
-        y20 = model.activation(y20)
-        y20 = y20 * (int8_max - int8_min) + int8_min
-        y20 = y20.type(torch.int8)
-        assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-5)
+#         y20 = y.matmul(model.emb20)
+#         y20 = model.activation(y20)
+#         y20 = y20 * (int8_max - int8_min) + int8_min
+#         y20 = y20.type(torch.int8)
+#         assert torch.all(torch.abs(x20[::2, ...] - y20) < 1e-5)
 
 
 class TestFraming:
