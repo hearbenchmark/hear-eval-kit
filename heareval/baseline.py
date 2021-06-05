@@ -142,7 +142,7 @@ def frame_audio(
         frame_start = int(round(sample_rate * frame_number / frame_rate))
         frame_end = frame_start + frame_size
 
-        if not frame_end < num_padded_samples:
+        if not frame_end <= num_padded_samples:
             break
 
     return torch.stack(frames, dim=1), torch.tensor(timestamps)
