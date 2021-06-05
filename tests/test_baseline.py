@@ -265,4 +265,4 @@ class TestFraming:
         expected_timestamps = np.arange(0.0, duration, 0.25)
 
         assert expected_frames_shape == frames.shape
-        assert np.all(expected_timestamps == timestamps)
+        assert np.all(expected_timestamps == timestamps.detach().cpu().numpy())
