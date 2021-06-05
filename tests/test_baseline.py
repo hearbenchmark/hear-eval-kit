@@ -86,14 +86,14 @@ class TestEmbeddingsTimestamps:
         # was passed.
         audio_sliced = self.audio[::2]
 
-        # Ensure framing is identical [.???]
-        audio_sliced_framed = frame_audio(
+        # Ensure framing is identical [.???] -> Yes ensuring that.
+        audio_sliced_framed, _ = frame_audio(
             audio_sliced,
             frame_size=4096,
             frame_rate=input_sample_rate() / 256,
             sample_rate=input_sample_rate(),
         )
-        audio_framed = frame_audio(
+        audio_framed, _ = frame_audio(
             self.audio,
             frame_size=4096,
             frame_rate=input_sample_rate() / 256,
