@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 """
-Compute the embeddings for every task.
+Compute the embeddings for every task and store to disk.
+
+Since many tasks might be too large to store in GPU memory (or even
+CPU memory), and because Wavenet-like models will be expensive at
+inference time, we cache all embeddings to disk.
+
+One benefit of this approach is that since all embeddings are cached
+as numpy arrays, the final training code can be pytorch-only,
+regardless of whether the embedding model is tensorflow based.
 
 TODO:
     * Ideally, we would run this within a docker container, for
-    security.
+    security. https://github.com/neuralaudio/hear2021-eval-kit/issues/51
     * Profiling should occur here (both embedding time AFTER loading
     to GPU, and complete wall time include disk writes).
-    * This is currently pytorch only. If we instead had a method
-    get_audio_embedding_numpy, we could instead have this work both
-    for pytorch and tensorflow.
+    * This is currently pytorch only.
+    https://github.com/neuralaudio/hear2021-eval-kit/issues/52
+    Using the included get_audio_embedding_numpy, we could instead
+    have this work both for pytorch and tensorflow.
     https://github.com/neuralaudio/hear2021-eval-kit/issues/49
 """
 
@@ -89,11 +98,13 @@ if __name__ == "__main__":
     model = EMBED.load_model(EMBEDDING_MODEL_PATH, device=device)
 
     # TODO: Would be good to include the version here
+    # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embeddir = os.path.join("embeddings", EMBED.__name__)
 
     for task in glob.glob("tasks/*"):
         # TODO: We should be reading the metadata that describes
         # the frame_rate.
+        # https://github.com/neuralaudio/hear2021-eval-kit/issues/53
         frame_rate = 10
 
         # TODO: Include "val" ?
