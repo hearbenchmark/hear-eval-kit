@@ -398,7 +398,7 @@ class FinalizeCorpus(WorkTask):
     # the finalized top-level task directory
     @property
     def workdir(self):
-        return config.TASKNAME
+        return os.path.join("tasks", config.TASKNAME)
 
     def run(self):
         if os.path.exists(self.workdir):
