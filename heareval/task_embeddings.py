@@ -83,6 +83,7 @@ def get_audio_embedding_numpy(
 ) -> Tuple[Dict[int, np.ndarray], np.ndarray]:
     # Is there a way to avoid this .float() cast? Or do it on the
     # numpy, not after the tensor creation?
+    # type: ignore
     embedding_dict, timestamps = EMBED.get_audio_embedding(
         torch.tensor(audio_numpy, device=device).float(),
         model=model,
@@ -95,10 +96,12 @@ def get_audio_embedding_numpy(
 
 
 if __name__ == "__main__":
+    # type: ignore
     model = EMBED.load_model(EMBEDDING_MODEL_PATH, device=device)
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
+    # type: ignore
     embeddir = os.path.join("embeddings", EMBED.__name__)
 
     for task in glob.glob("tasks/*"):
@@ -124,8 +127,10 @@ if __name__ == "__main__":
                 audios = []
                 for f in files:
                     x, sr = sf.read(
+                        # type: ignore
                         os.path.join(task, str(EMBED.input_sample_rate()), split, f)
                     )
+                    # type: ignore
                     assert sr == EMBED.input_sample_rate()
                     audios.append(x)
                 audios = np.vstack(audios)
