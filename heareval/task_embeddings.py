@@ -100,6 +100,7 @@ if __name__ == "__main__":
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embeddir = os.path.join("embeddings", EMBED.__name__)  # type: ignore
+    embedsr = EMBED.input_sample_rate()  # type: ignore
 
     for task in glob.glob("tasks/*"):
         # TODO: We should be reading the metadata that describes
@@ -123,10 +124,8 @@ if __name__ == "__main__":
                 files, labels = batch
                 audios = []
                 for f in files:
-                    x, sr = sf.read(
-                        os.path.join(task, str(EMBED.input_sample_rate()), split, f)  # type: ignore
-                    )
-                    assert sr == EMBED.input_sample_rate()  # type: ignore
+                    x, sr = sf.read(os.path.join(task, str(embedsr), split, f))
+                    assert sr == embedsr
                     audios.append(x)
                 audios = np.vstack(audios)
                 embedding_dict, timestamps = get_audio_embedding_numpy(
