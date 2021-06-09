@@ -56,7 +56,8 @@ class DownloadCorpus(WorkTask):
             "https://zenodo.org/record/4498364/files/public_dataset.zip",
             os.path.join(self.workdir, "corpus.zip"),
         )
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
     @property
     def stage_number(self) -> int:
@@ -79,7 +80,8 @@ class ExtractCorpus(WorkTask):
         )
         subprocess.check_output(["unzip", "-o", corpus_zip, "-d", self.workdir])
 
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class FilterLabeledMetadata(WorkTask):
@@ -110,7 +112,8 @@ class FilterLabeledMetadata(WorkTask):
             header=False,
         )
 
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class SubsampleCorpus(WorkTask):
@@ -192,7 +195,8 @@ class SubsampleCorpus(WorkTask):
             # Make sure we don't have any duplicates
             assert not os.path.exists(newaudiofile)
             os.symlink(os.path.realpath(audiofile), newaudiofile)
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class ToMonoWavCorpus(WorkTask):
@@ -218,7 +222,8 @@ class ToMonoWavCorpus(WorkTask):
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
             audio_util.convert_to_mono_wav(audiofile, newaudiofile)
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class EnsureLengthCorpus(WorkTask):
@@ -252,7 +257,8 @@ class EnsureLengthCorpus(WorkTask):
             assert len(x) == target_length_samples
             newaudiofile = luigi_util.new_basedir(audiofile, self.workdir)
             sf.write(newaudiofile, x, sr)
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class SplitTrainTestCorpus(WorkTask):
@@ -277,7 +283,8 @@ class SplitTrainTestCorpus(WorkTask):
             luigi_util.ensure_dir(partition_dir)
             newaudiofile = luigi_util.new_basedir(audiofile, partition_dir)
             os.symlink(os.path.realpath(audiofile), newaudiofile)
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class SplitTrainTestMetadata(WorkTask):
@@ -333,7 +340,8 @@ class SplitTrainTestMetadata(WorkTask):
                 header=False,
             )
 
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class ResampleSubCorpus(WorkTask):
@@ -365,7 +373,8 @@ class ResampleSubCorpus(WorkTask):
         ):
             resampled_audiofile = luigi_util.new_basedir(audiofile, resample_dir)
             audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 class FinalizeCorpus(WorkTask):
@@ -389,7 +398,7 @@ class FinalizeCorpus(WorkTask):
     # the finalized top-level task directory
     @property
     def workdir(self):
-        return config.TASKNAME
+        return os.path.join("tasks", config.TASKNAME)
 
     def run(self):
         if os.path.exists(self.workdir):
@@ -402,7 +411,8 @@ class FinalizeCorpus(WorkTask):
                 os.path.join(self.requires()[-1].workdir, f"{partition}.csv"),
                 self.workdir,
             )
-        self.output().open("w")
+        with self.output().open("w") as _:
+            pass
 
 
 def main():
