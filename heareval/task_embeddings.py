@@ -81,10 +81,8 @@ def get_audio_embedding_numpy(
     model: Any,
     frame_rate: float,
 ) -> Tuple[Dict[int, np.ndarray], np.ndarray]:
-    # Is there a way to avoid this .float() cast? Or do it on the
-    # numpy, not after the tensor creation?
     embedding_dict, timestamps = EMBED.get_audio_embedding(  # type: ignore
-        torch.tensor(audio_numpy, device=device).float(),
+        torch.tensor(audio_numpy, device=device),
         model=model,
         frame_rate=frame_rate,
     )
@@ -94,7 +92,7 @@ def get_audio_embedding_numpy(
     return embedding_dict, timestamps
 
 
-if __name__ == "__main__":
+def task_embeddings():
     model = EMBED.load_model(EMBEDDING_MODEL_PATH, device=device)  # type: ignore
 
     # TODO: Would be good to include the version here
@@ -124,7 +122,9 @@ if __name__ == "__main__":
                 files, labels = batch
                 audios = []
                 for f in files:
-                    x, sr = sf.read(os.path.join(task, str(embedsr), split, f))
+                    x, sr = sf.read(
+                        os.path.join(task, str(embedsr), split, f), dtype=np.float32
+                    )
                     assert sr == embedsr
                     audios.append(x)
                 audios = np.vstack(audios)
@@ -140,3 +140,7 @@ if __name__ == "__main__":
                         file_embedding_dict,
                         open(os.path.join(outdir, filename + ".pkl"), "wb"),
                     )
+
+
+if __name__ == "__main__":
+    task_embeddings()
