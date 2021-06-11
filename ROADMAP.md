@@ -24,6 +24,10 @@ and `predicted-test.csv` files, Christian is starting this task.)
 See [heareval/tasks/README.md](heareval/tasks/README.md) for more
 details.
 
+Ideally, `predicted-test.csv` would have identical format as
+`test.csv`. In practice, for AUC which depends upon the predicted
+score, we might need to change the format slightly.
+
 ### Learning Based Tasks
 
 Entire audio, multiclass:
