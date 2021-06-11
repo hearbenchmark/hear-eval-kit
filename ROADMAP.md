@@ -27,9 +27,21 @@ into train/test, and creates CSV files `train.csv` and `test.csv`
 with the labels. See [tasks/README.md](tasks/README.md) for more
 details about the task format spec.
 
-This should be run from the repository root directory, and will generate:
-* `_workdir` - intermediate temporary work
-* `tasks` - 
+Once the heareval package has been installed on your system: 
+(i.e. `pip install -e ".[dev]"`from project root for development), you can run the 
+pipeline for a particular task using the following command 
+from any directory:
+```python
+python3 -m heareval.tasks.<taskname>
+```
+Example, for coughvid:
+```python
+python3 -m heareval.tasks.coughvid
+```
+This will create the following:
+* `_workdir` - intermediate temporary work directory used by Luigi to checkpoint and 
+  save output from each stage of the pipeline
+* `tasks` - directory that holds the finalized preprocessed data for each task
 
 
 We currently only have COUGHVID implemented. Once we have a second
