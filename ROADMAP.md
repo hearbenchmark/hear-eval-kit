@@ -17,9 +17,9 @@ entire competition API, including simple framing, etc.
 ### Tasks
 
 These are pipelines that you literally run only once as a preprocessing
-step, to put the tasks in a common format. We use the Luigi pipeline
-library to break down preprocessing into a series of repeatable
-steps.
+step, to put the tasks in a common format, deterministically. We
+use the Luigi pipeline library to break down preprocessing into a
+series of repeatable steps.
 
 * `heareval/tasks/` - Preprocessing code that, for each task,
 downloads it, standardizes the audio length, resamples, partitions
