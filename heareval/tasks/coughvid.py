@@ -445,7 +445,7 @@ class FinalizeCorpus(WorkTask):
                 self.workdir,
             )
         shutil.copy(
-            os.path.join(self.requires()[-1].workdir, f"labelvocabulary.csv"),
+            os.path.join(self.requires()[-1].workdir, "labelvocabulary.csv"),
             self.workdir,
         )
         with self.output().open("w") as _:
