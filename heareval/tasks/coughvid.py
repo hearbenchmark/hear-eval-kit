@@ -14,10 +14,6 @@ processing.)
 When hacking on this file, consider only enabling one Task at a
 time in __main__.
 
-Also keep in mind that if the S3 caching is enabled, you
-will always just retrieve your S3 cache instead of running
-the pipeline.
-
 TODO:
 * We need all the files in the README.md created for each dataset
 (task.json, train.csv, etc.).
@@ -27,6 +23,7 @@ correct MD5.
 to the metadata.
 """
 
+import csv
 import glob
 import os
 import shutil
@@ -344,6 +341,38 @@ class SplitTrainTestMetadata(WorkTask):
             pass
 
 
+class MetadataVocabulary(WorkTask):
+    """
+    Mapping from metadata labels to non-negative integers.
+    """
+
+    def requires(self):
+        return SplitTrainTestMetadata()
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+        labelset = set()
+        # Might also want "val" for some corpora
+        for partition in ["train", "test"]:
+            labeldf = pd.read_csv(
+                os.path.join(self.requires().workdir, f"{partition}.csv"),
+                header=None,
+                names=["filename", "label"],
+            )
+            labelset = labelset | set(labeldf["label"].unique().tolist())
+        labelcsv = csv.writer(
+            open(os.path.join(self.workdir, "labelvocabulary.csv"), "wt")
+        )
+        for idx, label in enumerate(sorted(list(labelset))):
+            labelcsv.writerow([label, idx])
+
+        with self.output().open("w") as _:
+            pass
+
+
 class ResampleSubCorpus(WorkTask):
     sr = luigi.IntParameter()
     partition = luigi.Parameter()
@@ -384,11 +413,15 @@ class FinalizeCorpus(WorkTask):
     """
 
     def requires(self):
-        return [
-            ResampleSubCorpus(sr, partition)
-            for sr in config.SAMPLE_RATES
-            for partition in ["train", "test", "val"]
-        ] + [SplitTrainTestMetadata()]
+        return (
+            [
+                ResampleSubCorpus(sr, partition)
+                for sr in config.SAMPLE_RATES
+                for partition in ["train", "test", "val"]
+            ]
+            + [SplitTrainTestMetadata()]
+            + [MetadataVocabulary()]
+        )
 
     @property
     def name(self):
@@ -408,9 +441,13 @@ class FinalizeCorpus(WorkTask):
         # Might also want "val" for some corpora
         for partition in ["train", "test"]:
             shutil.copy(
-                os.path.join(self.requires()[-1].workdir, f"{partition}.csv"),
+                os.path.join(self.requires()[-2].workdir, f"{partition}.csv"),
                 self.workdir,
             )
+        shutil.copy(
+            os.path.join(self.requires()[-1].workdir, f"labelvocabulary.csv"),
+            self.workdir,
+        )
         with self.output().open("w") as _:
             pass
 
