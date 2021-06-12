@@ -39,7 +39,15 @@ class DownloadCorpus(WorkTask):
 def main():
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     luigi_util.ensure_dir("_workdir")
-    luigi.build([DownloadCorpus()], workers=config.NUM_WORKERS, local_scheduler=True)
+
+    download = luigi_util.DownloadCorpus(
+        url="http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",
+        outfile="corpus.tar.gz",
+    )
+
+    luigi.build(
+        [download], workers=config.NUM_WORKERS, local_scheduler=True, log_level="INFO"
+    )
 
 
 if __name__ == "__main__":

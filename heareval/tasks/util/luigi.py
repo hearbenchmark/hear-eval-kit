@@ -75,6 +75,29 @@ class WorkTask(luigi.Task):
             raise ValueError("Unknown requires: %s" % self.requires())
 
 
+class DownloadCorpus(WorkTask):
+    """
+    Task for downloading a dataset to a specific filename
+    """
+
+    # URL to download dataset from
+    url = luigi.Parameter()
+    outfile = luigi.Parameter()
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+        download_file(self.url, os.path.join(self.workdir, self.outfile))
+        with self.output().open("w") as _:
+            pass
+
+    @property
+    def stage_number(self) -> int:
+        return 0
+
+
 def download_file(url, local_filename):
     """
     The downside of this approach versus `wget -c` is that this
