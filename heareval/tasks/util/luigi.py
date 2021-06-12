@@ -31,21 +31,33 @@ class WorkTask(luigi.Task):
     triangular dependencies).
     """
 
+    # Class attribute sets the task name for all inheriting luigi tasks
+    task_name = None
+
     @property
     def name(self):
         ...
         # return type(self).__name__
 
     def output(self):
-        return luigi.LocalTarget(
-            "_workdir/%02d-%s.done" % (self.stage_number, self.name)
-        )
+        f = os.path.join(self.task_subdir, f"{self.stage_number:02d}-{self.name}.done")
+        return luigi.LocalTarget(f)
 
     @property
     def workdir(self):
-        d = "_workdir/%02d-%s/" % (self.stage_number, self.name)
+        d = os.path.join(self.task_subdir, f"{self.stage_number:02d}-{self.name}")
         ensure_dir(d)
         return d
+
+    @property
+    def task_subdir(self):
+        """
+        Task specific subdirectory
+        """
+        # You must specify a task name for WorkTask
+        assert self.task_name is not None
+        d = ["_workdir", str(self.task_name)]
+        return os.path.join(*d)
 
     @property
     def stage_number(self) -> int:

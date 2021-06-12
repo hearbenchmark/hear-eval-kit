@@ -140,8 +140,5 @@ heareval/tasks/coughvid-*/
 # vim
 *.sw?
 
+# Pycharm
 .idea/
-
-# Output directories for task audio and embeddings
-tasks/
-embeddings/
