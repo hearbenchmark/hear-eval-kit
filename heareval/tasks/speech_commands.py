@@ -27,6 +27,9 @@ def main():
     )
 
     extract = luigi_util.ExtractCorpus(infile="corpus.tar.gz")
+
+    # Requires is a class method that returns a task / list of tasks that this
+    # tasks depends upon
     extract.requires = lambda: download
 
     luigi.build(
