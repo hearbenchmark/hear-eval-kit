@@ -6,6 +6,8 @@ import hashlib
 import os
 import luigi
 import requests
+import subprocess
+
 from tqdm import tqdm
 
 
@@ -96,6 +98,32 @@ class DownloadCorpus(WorkTask):
     @property
     def stage_number(self) -> int:
         return 0
+
+
+class ExtractCorpus(WorkTask):
+
+    infile = luigi.Parameter()
+
+    @property
+    def name(self):
+        return type(self).__name__
+
+    def run(self):
+
+        filename, extension = os.path.split(self.infile)
+
+        # TODO -- run correct extraction given archive type
+        print(extension)
+
+        # Location of zip file to extract. Figure this out before changing
+        # the working directory.
+        corpus_zip = os.path.realpath(
+            os.path.join(self.requires().workdir, "corpus.zip")
+        )
+        subprocess.check_output(["unzip", "-o", corpus_zip, "-d", self.workdir])
+
+        with self.output().open("w") as _:
+            pass
 
 
 def download_file(url, local_filename):

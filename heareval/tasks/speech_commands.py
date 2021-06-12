@@ -17,25 +17,6 @@ from heareval.tasks.util.luigi import WorkTask
 WorkTask.task_name = config.TASKNAME
 
 
-class DownloadCorpus(WorkTask):
-    @property
-    def name(self):
-        return type(self).__name__
-
-    def run(self):
-        # TODO: Change the working dir
-        luigi_util.download_file(
-            "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",
-            os.path.join(self.workdir, "corpus.zip"),
-        )
-        with self.output().open("w") as _:
-            pass
-
-    @property
-    def stage_number(self) -> int:
-        return 0
-
-
 def main():
     print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     luigi_util.ensure_dir("_workdir")
@@ -45,8 +26,11 @@ def main():
         outfile="corpus.tar.gz",
     )
 
+    extract = luigi_util.ExtractCorpus(infile="corpus.tar.gz")
+    extract.requires = lambda: download
+
     luigi.build(
-        [download], workers=config.NUM_WORKERS, local_scheduler=True, log_level="INFO"
+        [extract], workers=config.NUM_WORKERS, local_scheduler=True, log_level="INFO"
     )
 
 
