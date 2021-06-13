@@ -7,6 +7,9 @@ import os
 import luigi
 import requests
 import subprocess
+import shutil
+# Required for shutil to work for tar.gz
+import zipfile
 
 from tqdm import tqdm
 
@@ -42,7 +45,8 @@ class WorkTask(luigi.Task):
         # return type(self).__name__
 
     def output(self):
-        f = os.path.join(self.task_subdir, f"{self.stage_number:02d}-{self.name}.done")
+        #Replace the name with task_id as it is unique at task and parameter level
+        f = os.path.join(self.task_subdir, f"{self.stage_number:02d}-{self.task_id}.done")
         return luigi.LocalTarget(f)
 
     @property
@@ -100,31 +104,32 @@ class DownloadCorpus(WorkTask):
         return 0
 
 
-class ExtractCorpus(WorkTask):
-
+class ExtractZipFile(WorkTask):
+    
     infile = luigi.Parameter()
-
+    
     @property
     def name(self):
         return type(self).__name__
 
-    def run(self):
+    def requires(self):
+        #Some Task should be returned having a working directory from 
+        #which the infile will be picked.
+        raise NotImplementedError
 
-        filename, extension = os.path.split(self.infile)
+    def run(self):
+        #Assert if the previous task has a workdir from which the file will be picked.
+        assert hasattr(self.requires(), "workdir")
 
         # TODO -- run correct extraction given archive type
-        print(extension)
-
         # Location of zip file to extract. Figure this out before changing
         # the working directory.
         corpus_zip = os.path.realpath(
-            os.path.join(self.requires().workdir, "corpus.zip")
+            os.path.join(self.requires().workdir, self.infile)
         )
-        subprocess.check_output(["unzip", "-o", corpus_zip, "-d", self.workdir])
-
+        shutil.unpack_archive(corpus_zip, self.workdir) 
         with self.output().open("w") as _:
             pass
-
 
 def download_file(url, local_filename):
     """
