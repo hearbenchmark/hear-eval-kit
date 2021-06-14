@@ -104,7 +104,7 @@ class DownloadCorpus(WorkTask):
         return 0
 
 
-class ExtractZipFile(WorkTask):
+class ExtractArchive(WorkTask):
     
     infile = luigi.Parameter()
     

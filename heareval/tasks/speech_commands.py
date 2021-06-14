@@ -12,14 +12,14 @@ import numpy as np
 import heareval.tasks.config.speech_commands as config
 import heareval.tasks.util.audio as audio_util
 import heareval.tasks.util.luigi as luigi_util
-from heareval.tasks.util.luigi import DownloadCorpus, WorkTask, ExtractZipFile
+from heareval.tasks.util.luigi import DownloadCorpus, WorkTask, ExtractArchive
 
 
 # Set the task name for all WorkTasks
 WorkTask.task_name = config.TASKNAME
 
 
-class DownloadExtractCorpus(ExtractZipFile):
+class DownloadExtractCorpus(ExtractArchive):
         
     def requires(self):
         return DownloadCorpus(url = config.DOWNLOAD_URL, outfile = self.infile)
