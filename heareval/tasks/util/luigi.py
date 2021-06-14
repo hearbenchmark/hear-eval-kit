@@ -107,23 +107,21 @@ class DownloadCorpus(WorkTask):
 class ExtractArchive(WorkTask):
     
     infile = luigi.Parameter()
+    #The previous task will be passed in as a parameter.
+    #This must have workdir attribute and the zip file to extract should be stored inside it.
+    prev_task = luigi.TaskParameter()
     
     @property
     def name(self):
         return type(self).__name__
 
     def requires(self):
-        #Some Task should be returned having a working directory from 
-        #which the infile will be picked.
-        raise NotImplementedError
+        return self.prev_task
 
     def run(self):
-        #Assert if the previous task has a workdir from which the file will be picked.
-        assert hasattr(self.requires(), "workdir")
+        assert hasattr(self.requires(), "workdir"), \
+        "The Task requires a task with a workdir attribute from which the file to unzip will be picked"
 
-        # TODO -- run correct extraction given archive type
-        # Location of zip file to extract. Figure this out before changing
-        # the working directory.
         corpus_zip = os.path.realpath(
             os.path.join(self.requires().workdir, self.infile)
         )
