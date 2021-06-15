@@ -44,6 +44,7 @@ setup(
         # pinned by Snyk to avoid a vulnerability
         "numba>=0.49.0",
         "scikit-learn>=0.24.2",
+        "pytorch-lightning",
     ],
     extras_require={
         "test": [

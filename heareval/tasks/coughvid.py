@@ -366,8 +366,24 @@ class MetadataVocabulary(WorkTask):
         labelcsv = csv.writer(
             open(os.path.join(self.workdir, "labelvocabulary.csv"), "wt")
         )
+        label_to_idx = {}
         for idx, label in enumerate(sorted(list(labelset))):
             labelcsv.writerow([label, idx])
+            label_to_idx[label] = idx
+
+        # Might also want "val" for some corpora
+        for partition in ["train", "test"]:
+            labeldf = pd.read_csv(
+                os.path.join(self.requires().workdir, f"{partition}.csv"),
+                header=None,
+                names=["filename", "label"],
+            )
+            labeldf["label"].replace(label_to_idx, inplace=True)
+            labeldf.to_csv(
+                os.path.join(self.workdir, f"{partition}.csv"),
+                header=None,
+                index=False,
+            )
 
         with self.output().open("w") as _:
             pass
@@ -413,15 +429,11 @@ class FinalizeCorpus(WorkTask):
     """
 
     def requires(self):
-        return (
-            [
-                ResampleSubCorpus(sr, partition)
-                for sr in config.SAMPLE_RATES
-                for partition in ["train", "test", "val"]
-            ]
-            + [SplitTrainTestMetadata()]
-            + [MetadataVocabulary()]
-        )
+        return [
+            ResampleSubCorpus(sr, partition)
+            for sr in config.SAMPLE_RATES
+            for partition in ["train", "test", "val"]
+        ] + [MetadataVocabulary()]
 
     @property
     def name(self):
@@ -439,15 +451,11 @@ class FinalizeCorpus(WorkTask):
         # Fragilely depends upon the order of the requires
         shutil.copytree(self.requires()[0].workdir, self.workdir)
         # Might also want "val" for some corpora
-        for partition in ["train", "test"]:
+        for partition in ["train", "test", "labelvocabulary"]:
             shutil.copy(
-                os.path.join(self.requires()[-2].workdir, f"{partition}.csv"),
+                os.path.join(self.requires()[-1].workdir, f"{partition}.csv"),
                 self.workdir,
             )
-        shutil.copy(
-            os.path.join(self.requires()[-1].workdir, "labelvocabulary.csv"),
-            self.workdir,
-        )
         with self.output().open("w") as _:
             pass
 
