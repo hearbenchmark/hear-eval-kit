@@ -6,18 +6,19 @@ and can be cleaned up.
 """
 
 import os.path
-from importlib import import_module
+from typing import List
 
 import numpy as np
 import pytorch_lightning as pl
 import soundfile as sf
 import torch
+from csvdataset import CSVDataset
 from torch.utils.data import DataLoader, random_split
 
 import heareval.baseline
-
-from csvdataset import CSVDataset
 from heareval.baseline import RandomProjectionMelEmbedding
+
+# from importlib import import_module
 
 
 TASK = "coughvid-v2.0.0"
@@ -45,7 +46,7 @@ FINE_TUNE = True
 # TODO: Use validation if it exists
 # Not sure why I have to add .. to the path
 full_train_dataset = CSVDataset(
-    os.path.join("../tasks", TASK, f"train.csv"), labels_as_ints=True
+    os.path.join("../tasks", TASK, "train.csv"), labels_as_ints=True
 )
 n_validation = int(round(len(full_train_dataset) * VALIDATION))
 train_dataset, validation_dataset = random_split(
@@ -54,7 +55,7 @@ train_dataset, validation_dataset = random_split(
     generator=torch.Generator().manual_seed(42),
 )
 test_dataset = CSVDataset(
-    os.path.join("../tasks", TASK, f"test.csv"), labels_as_ints=True
+    os.path.join("../tasks", TASK, "test.csv"), labels_as_ints=True
 )
 
 train_dataloader = DataLoader(
@@ -96,8 +97,9 @@ class MulticlassEmbedding(pl.LightningModule):
         audio = torch.tensor(np.vstack(audio), device=device)
 
         # TODO: Lame that we copy all this code from get_audio_embedding
-        # I'm concerned that if we have module functions and not class functions in the model
-        # that we won't be able to backprop thru it
+        # I'm concerned that if we have module functions and
+        # not class functions in the model that we won't be able
+        # to backprop thru it
 
         # Split the input audio signals into frames and then flatten to create a tensor
         # of audio frames that can be batch processed. We will unflatten back out to

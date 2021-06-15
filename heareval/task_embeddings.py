@@ -32,10 +32,9 @@ from typing import Any, Dict, Tuple
 import numpy as np
 import soundfile as sf
 import torch
+from csvdataset import CSVDataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-
-from csvdataset import CSVDataset
 
 # This could instead be something from the participants
 EMBEDDING_PIP = "heareval.baseline"

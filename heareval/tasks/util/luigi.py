@@ -4,6 +4,7 @@ Common Luigi classes and functions for evaluation tasks
 
 import hashlib
 import os
+
 import luigi
 import requests
 from tqdm import tqdm
