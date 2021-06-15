@@ -123,7 +123,7 @@ class MulticlassEmbedding(pl.LightningModule):
         model.eval()
         with torch.no_grad():
             # Iterate over all batches and accumulate the embeddings
-            list_embeddings: List[Tensor] = []
+            list_embeddings: List[torch.Tensor] = []
             for batch in loader:
                 result = self.embedding(batch[0])
                 list_embeddings.append(result[EMBEDDING_SIZE])

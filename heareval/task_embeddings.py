@@ -22,7 +22,6 @@ TODO:
     https://github.com/neuralaudio/hear2021-eval-kit/issues/49
 """
 
-import csv
 import glob
 import os.path
 import pickle
