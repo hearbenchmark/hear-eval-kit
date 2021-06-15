@@ -153,6 +153,7 @@ def get_audio_embedding(
     model: RandomProjectionMelEmbedding,
     frame_rate: float,
     batch_size: Optional[int] = 512,
+    disable_gradients: bool = True,
 ) -> Tuple[Dict[int, Tensor], Tensor]:
     """
     Args:
@@ -175,6 +176,8 @@ def get_audio_embedding(
             maintaining appropriate memory constraints. However,
             batch_size is a useful feature for end-users to be able to
             toggle.
+            disable_gradients: Disable all gradient computations and
+                run the model in .eval() mode. Default: True.
 
     Returns:
             - {embedding_size: Tensor} where embedding_size can
@@ -217,15 +220,22 @@ def get_audio_embedding(
         dataset, batch_size=batch_size, shuffle=False, drop_last=False
     )
 
-    # Put the model into eval mode, and don't compute any gradients.
-    model.eval()
-    with torch.no_grad():
+    def compute_list_embeddings() -> DefaultDict[int, List[Tensor]]:
         # Iterate over all batches and accumulate the embeddings
         list_embeddings: DefaultDict[int, List[Tensor]] = defaultdict(list)
         for batch in loader:
             result = model(batch[0])
             for size, embedding in result.items():
                 list_embeddings[size].append(embedding)
+        return list_embeddings
+
+    if disable_gradients:
+        # Put the model into eval mode, and don't compute any gradients.
+        model.eval()
+        with torch.no_grad():
+            list_embeddings = compute_list_embeddings()
+    else:
+        list_embeddings = compute_list_embeddings()
 
     # Concatenate mini-batches back together and unflatten the frames back
     # to audio batches

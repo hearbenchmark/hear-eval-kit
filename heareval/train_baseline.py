@@ -1,8 +1,5 @@
 """
 Train the baseline model on a single multiclass task.
-
-TODO: Some of the boilerplate code is shared with task_embeddings.py
-and can be cleaned up.
 """
 
 import os.path
@@ -35,7 +32,7 @@ device = "gpu" if torch.cuda.is_available() else "cpu"
 VALIDATION = 0.2
 
 AUDIO_BATCH_SIZE = 64
-FRAME_BATCH_SIZE = 64
+# FRAME_BATCH_SIZE = 64
 EMBEDDING_SIZE = 4096
 
 # There should be a way to use this code both for fine-tuning and non-fined-prediction
@@ -82,7 +79,7 @@ class MulticlassEmbedding(pl.LightningModule):
         )
         self.fc = torch.nn.Linear(self.embedding_dim, N_LABELS)
         self.loss = torch.nn.CrossEntropyLoss()
-        print(self.named_parameters())
+        # self.squash = torch.nn.Tanh()
 
     def embeddings_from_filenames(self, filenames, split):
         # Might want to make this an option in CSVDataset
@@ -96,49 +93,17 @@ class MulticlassEmbedding(pl.LightningModule):
             audio.append(x)
         audio = torch.tensor(np.vstack(audio), device=device)
 
-        # TODO: Lame that we copy all this code from get_audio_embedding
-        # I'm concerned that if we have module functions and
-        # not class functions in the model that we won't be able
-        # to backprop thru it
-
-        # Split the input audio signals into frames and then flatten to create a tensor
-        # of audio frames that can be batch processed. We will unflatten back out to
-        # (audio_baches, num_frames, embedding_size) after creating embeddings.
-        frames, timestamps = heareval.baseline.frame_audio(
+        embeddings = heareval.baseline.get_audio_embedding(
             audio,
-            frame_size=self.embedding.n_fft,
+            self.embedding,
             frame_rate=FRAME_RATE,
-            sample_rate=self.SR,
-        )
-        audio_batches, num_frames, frame_size = frames.shape
-        frames = frames.flatten(end_dim=1)
-
-        # We're using a DataLoader to help with batching of frames
-        dataset = torch.utils.data.TensorDataset(frames)
-        loader = torch.utils.data.DataLoader(
-            dataset, batch_size=FRAME_BATCH_SIZE, shuffle=False, drop_last=False
-        )
-
-        def get_embeddings():
-            # Iterate over all batches and accumulate the embeddings
-            list_embeddings: List[torch.Tensor] = []
-            for batch in loader:
-                result = self.embedding(batch[0])
-                list_embeddings.append(result[EMBEDDING_SIZE])
-
-            embeddings = torch.cat(list_embeddings, dim=0)
-            embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
-            embeddings = embeddings.view(len(filenames), -1)
-
-        if FINE_TUNE:
-            return get_embeddings()
-        else:
-            self.embedding.eval()
-            with torch.no_grad():
-                return get_embeddings()
+            disable_gradients=not FINE_TUNE,
+        )[0][EMBEDDING_SIZE]
+        return embeddings.view(len(filenames), -1)
 
     def forward(self, filenames, split):
         embeddings = self.embeddings_from_filenames(filenames, split)
+        # embeddings = self.squash(embeddings)
         y_hat = self.fc(embeddings)
         return y_hat
 
@@ -149,6 +114,17 @@ class MulticlassEmbedding(pl.LightningModule):
         loss = self.loss(y_hat, y.flatten())
         # Logging to TensorBoard by default
         self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        filenames, y = batch
+
+        # If we did an 80/20 train/validation split,
+        # the audio files are still in the "train" directory
+        y_hat = self.forward(filenames, split="train")
+        loss = self.loss(y_hat, y.flatten())
+        # Logging to TensorBoard by default
+        self.log("val_loss", loss, prog_bar=True, logger=True)
         return loss
 
     def configure_optimizers(self):
