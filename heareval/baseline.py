@@ -8,75 +8,72 @@ import math
 from collections import defaultdict
 from typing import Any, DefaultDict, Dict, List, Optional, Tuple
 
-import librosa
+from nnAudio import Spectrogram
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+import torch.nn as nn
 
 
-class RandomProjectionMelEmbedding(torch.nn.Module):
-    n_fft = 4096
-    n_mels = 256
-    sample_rate = 44100
-    seed = 0
-    epsilon = 1e-4
+class CBRBlock(nn.Module):
+  def __init__(self,inputlayer,outputlayer,maxpool=False):
+    super(CBRBlock, self).__init__()
+    self.conv2d_1 = nn.Conv2d(inputlayer,outputlayer,3)
+    self.batchnorm_1 = nn.BatchNorm2d(outputlayer)
 
-    def __init__(self):
-        super().__init__()
-        torch.random.manual_seed(self.seed)
+    self.conv2d_2 = nn.Conv2d(outputlayer,outputlayer,3)
+    self.batchnorm_2 = nn.BatchNorm2d(outputlayer)
 
-        # Create a Hann window buffer to apply to frames prior to FFT.
-        self.register_buffer("window", torch.hann_window(self.n_fft))
+    self.maxpool = maxpool
+    if maxpool:
+      self.maxpool2d = nn.MaxPool2d(2,2)
 
-        # Create a mel filter buffer.
-        mel_scale: Tensor = torch.tensor(
-            librosa.filters.mel(self.sample_rate, n_fft=self.n_fft, n_mels=self.n_mels)
-        )
-        self.register_buffer("mel_scale", mel_scale)
+  def forward(self,x):
+    x = F.pad(x,(1,1,1,1))
+    x = self.conv2d_1(x)
+    x = self.batchnorm_1(x)
+    x = F.relu(x)
 
-        # Projection matrices.
-        normalization = math.sqrt(self.n_mels)
-        self.emb4096 = torch.nn.Parameter(torch.rand(self.n_mels, 4096) / normalization)
-        self.emb2048 = torch.nn.Parameter(torch.rand(self.n_mels, 2048) / normalization)
-        self.emb512 = torch.nn.Parameter(torch.rand(self.n_mels, 512) / normalization)
-        self.emb128 = torch.nn.Parameter(torch.rand(self.n_mels, 128) / normalization)
-        self.emb20 = torch.nn.Parameter(torch.rand(self.n_mels, 20) / normalization)
+    x = F.pad(x,(1,1,1,1))
+    x = self.conv2d_2(x)
+    x = self.batchnorm_2(x)
+    x = F.relu(x)
+    if self.maxpool:
+      x = self.maxpool2d(x)
+    return x
 
-        # An activation to squash the 20D embedding to a [0, 1] range.
-        self.activation = torch.nn.Sigmoid()
 
-    def forward(self, x: Tensor):
-        # Compute the real-valued Fourier transform on windowed input signal.
-        x = torch.fft.rfft(x * self.window)
+class Openl3Convnet(nn.Module):
+  n_fft = 4096
+  n_mels = 256
+  sample_rate = 44100
+  def __init__(self):
+    super(Openl3Convnet, self).__init__()
+    
 
-        # Convert to a power spectrum.
-        x = torch.abs(x) ** 2.0
+    self.mellayer = Spectrogram.MelSpectrogram(sr = self.sample_rate, n_fft = self.n_fft, n_mels = self.n_mels, hop_length = 242,)
+    self.batch_normalization_input = nn.BatchNorm2d(1)
 
-        # Apply the mel-scale filter to the power spectrum.
-        x = torch.matmul(x, self.mel_scale.transpose(0, 1))
+    self.block1 = CBRBlock(1,64,True)
+    self.block2 = CBRBlock(64,128,True)
+    self.block3 = CBRBlock(128,256,True)
 
-        # Convert to a log mel spectrum.
-        x = torch.log(x + self.epsilon)
+    self.block4 = CBRBlock(256,512)
 
-        # Apply projections to get all required embeddings
-        x4096 = x.matmul(self.emb4096)
-        x2048 = x.matmul(self.emb2048)
-        x512 = x.matmul(self.emb512)
-        x128 = x.matmul(self.emb128)
-        x20 = x.matmul(self.emb20)
+    self.pool = nn.MaxPool2d((8,2))
+    self.flatten = nn.Flatten()
+  def forward(self,x):
+    x = self.mellayer(x).unsqueeze(1)
+    x = self.batch_normalization_input(x)
 
-        # The 20-dimensional embedding is specified to be int8. To cast to int8 we'll
-        # apply an activation to ensure the embedding is in a 0 to 1 range first.
-        x20 = self.activation(x20)
+    x = self.block1(x)
+    x = self.block2(x)
+    x = self.block3(x)
 
-        # Scale to int8 value range and cast to int
-        int8_max = torch.iinfo(torch.int8).max
-        int8_min = torch.iinfo(torch.int8).min
-        x20 = x20 * (int8_max - int8_min) + int8_min
-        x20 = x20.type(torch.int8)
-
-        return {4096: x4096, 2048: x2048, 512: x512, 128: x128, 20: x20}
-
+    x = self.block4(x)
+    x = self.pool(x)
+    x = self.flatten(x)
+    return x
 
 def input_sample_rate() -> int:
     """
@@ -85,7 +82,7 @@ def input_sample_rate() -> int:
             To avoid resampling on-the-fly, we will query your model
             to find out what sample rate audio to provide it.
     """
-    return RandomProjectionMelEmbedding.sample_rate
+    return Openl3Convnet.sample_rate
 
 
 def load_model(model_file_path: str, device: str = "cpu") -> Any:
@@ -101,7 +98,7 @@ def load_model(model_file_path: str, device: str = "cpu") -> Any:
     Returns:
         Model
     """
-    return RandomProjectionMelEmbedding().to(device)
+    return Openl3Convnet().to(device)
 
 
 def frame_audio(
@@ -150,39 +147,11 @@ def frame_audio(
 
 def get_audio_embedding(
     audio: Tensor,
-    model: RandomProjectionMelEmbedding,
+    model: Openl3Convnet,
     frame_rate: float,
     batch_size: Optional[int] = 512,
 ) -> Tuple[Dict[int, Tensor], Tensor]:
-    """
-    Args:
-        audio: n_sounds x n_samples of mono audio in the range
-            [-1, 1]. We are making the simplifying assumption that
-            for every task, all sounds will be padded/trimmed to
-            the same length. This doesn’t preclude people from
-            using the API for corpora of variable-length sounds;
-            merely we don’t implement that as a core feature. It
-            could be a wrapper function added later.
-        model: Loaded model, in PyTorch or Tensorflow 2.x. This
-            should be moved to the device the audio tensor is on.
-        frame_rate: Number of embeddings that the model should return
-            per second. Embeddings and the corresponding timestamps should
-            start at 0s and increment by 1/frame_rate seconds. For example,
-            if the audio is 1.1s and the frame_rate is 4.0, then we should
-            return embeddings centered at 0.0s, 0.25s, 0.5s, 0.75s and 1.0s.
-        batch_size: The participants are responsible for estimating
-            the batch_size that will achieve high-throughput while
-            maintaining appropriate memory constraints. However,
-            batch_size is a useful feature for end-users to be able to
-            toggle.
 
-    Returns:
-            - {embedding_size: Tensor} where embedding_size can
-                be any of [4096, 2048, 512, 128, 20]. The embedding
-                Tensor is float32 (or signed int for 20-dim),
-                n_sounds x n_frames x dim.
-            - Tensor: Frame-center timestamps, 1d.
-    """
 
     # Assert audio is of correct shape
     if audio.ndim != 2:
@@ -191,9 +160,9 @@ def get_audio_embedding(
         )
 
     # Make sure the correct model type was passed in
-    if not isinstance(model, RandomProjectionMelEmbedding):
+    if not isinstance(model, Openl3Convnet):
         raise ValueError(
-            f"Model must be an instance of {RandomProjectionMelEmbedding.__name__}"
+            f"Model must be an instance of {Openl3Convnet.__name__}"
         )
 
     # Send the model to the same device that the audio tensor is on.
@@ -206,7 +175,7 @@ def get_audio_embedding(
         audio,
         frame_size=model.n_fft,
         frame_rate=frame_rate,
-        sample_rate=RandomProjectionMelEmbedding.sample_rate,
+        sample_rate=Openl3Convnet.sample_rate,
     )
     audio_batches, num_frames, frame_size = frames.shape
     frames = frames.flatten(end_dim=1)
@@ -221,18 +190,17 @@ def get_audio_embedding(
     model.eval()
     with torch.no_grad():
         # Iterate over all batches and accumulate the embeddings
-        list_embeddings: DefaultDict[int, List[Tensor]] = defaultdict(list)
+        embeddings = []
         for batch in loader:
-            result = model(batch[0])
-            for size, embedding in result.items():
-                list_embeddings[size].append(embedding)
+            print(batch[0].shape)
+            embedding = model(batch[0])
+            print(embedding.shape)
+            embeddings.append(embedding)
 
     # Concatenate mini-batches back together and unflatten the frames back
     # to audio batches
-    embeddings: Dict[int, Tensor] = {}
-    for size, embedding in list_embeddings.items():
-        embeddings[size] = torch.cat(embedding, dim=0)
-        embeddings[size] = embeddings[size].unflatten(0, (audio_batches, num_frames))
+        embeddings = torch.cat(embeddings, dim=0)
+        embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
 
     return embeddings, timestamps
 
@@ -272,7 +240,5 @@ if __name__ == "__main__":
     embs, timestamps = get_audio_embedding(
         audio=audio,
         model=model,
-        frame_rate=RandomProjectionMelEmbedding.sample_rate / 1000,
+        frame_rate=Openl3Convnet.sample_rate / 1000,
     )
-
-    pairwise_distance(embs[20].float(), embs[20].float())

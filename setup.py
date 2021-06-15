@@ -40,6 +40,7 @@ setup(
         "soundfile",
         "torch",
         "tqdm",
+        "nnAudio",
         # Following from librosa, not directly required,
         # pinned by Snyk to avoid a vulnerability
         "numba>=0.49.0",
