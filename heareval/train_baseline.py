@@ -20,7 +20,6 @@ from heareval.baseline import RandomProjectionMelEmbedding
 
 # from importlib import import_module
 
-
 TASK = "coughvid-v2.0.0"
 
 # For this task
@@ -83,6 +82,7 @@ class MulticlassEmbedding(pl.LightningModule):
         )
         self.fc = torch.nn.Linear(self.embedding_dim, N_LABELS)
         self.loss = torch.nn.CrossEntropyLoss()
+        print(self.named_parameters())
 
     def embeddings_from_filenames(self, filenames, split):
         # Might want to make this an option in CSVDataset
@@ -119,19 +119,23 @@ class MulticlassEmbedding(pl.LightningModule):
             dataset, batch_size=FRAME_BATCH_SIZE, shuffle=False, drop_last=False
         )
 
-        # Put the model into eval mode, and don't compute any gradients.
-        model.eval()
-        with torch.no_grad():
+        def get_embeddings():
             # Iterate over all batches and accumulate the embeddings
             list_embeddings: List[torch.Tensor] = []
             for batch in loader:
                 result = self.embedding(batch[0])
                 list_embeddings.append(result[EMBEDDING_SIZE])
 
-        embeddings = torch.cat(list_embeddings, dim=0)
-        embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
-        embeddings = embeddings.view(len(filenames), -1)
-        return embeddings
+            embeddings = torch.cat(list_embeddings, dim=0)
+            embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
+            embeddings = embeddings.view(len(filenames), -1)
+
+        if FINE_TUNE:
+            return get_embeddings()
+        else:
+            self.embedding.eval()
+            with torch.no_grad():
+                return get_embeddings()
 
     def forward(self, filenames, split):
         embeddings = self.embeddings_from_filenames(filenames, split)
