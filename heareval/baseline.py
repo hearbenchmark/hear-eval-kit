@@ -60,7 +60,7 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
 
 
 def load_model(
-    model_file_path: str, device: str = "cpu"
+    model_file_path: str = "basic", device: str = "cpu"
 ) -> Tuple[torch.nn.Module, Dict[str, Any]]:
     """
     In this baseline, we don't load anything from disk.

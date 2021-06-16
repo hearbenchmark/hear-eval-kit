@@ -8,7 +8,6 @@ import torch
 from heareval.baseline import (
     load_model,
     get_audio_embedding,
-    input_sample_rate,
     frame_audio,
 )
 
@@ -18,12 +17,13 @@ torch.backends.cudnn.deterministic = True
 class TestEmbeddingsTimestamps:
     def setup(self):
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model = load_model("", device=self.device)
+        self.model, self.model_meta = load_model("basic", device=self.device)
+        self.sample_rate = self.model_meta["sample_rate"]
         self.audio = torch.rand(64, 96000, device=self.device) * 2 - 1
         self.embeddings_ct, self.ts_ct = get_audio_embedding(
             audio=self.audio,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
 
@@ -38,7 +38,7 @@ class TestEmbeddingsTimestamps:
         embeddings_ct, _ = get_audio_embedding(
             audio=self.audio,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
 
@@ -56,19 +56,19 @@ class TestEmbeddingsTimestamps:
         embeddingsa, _ = get_audio_embedding(
             audio=audioa,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
         embeddingsb, _ = get_audio_embedding(
             audio=audiob,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
         embeddingsab, _ = get_audio_embedding(
             audio=audioab,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
 
@@ -85,14 +85,14 @@ class TestEmbeddingsTimestamps:
         audio_sliced_framed, _ = frame_audio(
             audio_sliced,
             frame_size=4096,
-            frame_rate=input_sample_rate() / 256,
-            sample_rate=input_sample_rate(),
+            frame_rate=self.sample_rate / 256,
+            sample_rate=self.sample_rate,
         )
         audio_framed, _ = frame_audio(
             self.audio,
             frame_size=4096,
-            frame_rate=input_sample_rate() / 256,
-            sample_rate=input_sample_rate(),
+            frame_rate=self.sample_rate / 256,
+            sample_rate=self.sample_rate,
         )
         assert torch.all(audio_sliced_framed == audio_framed[::2])
 
@@ -100,7 +100,7 @@ class TestEmbeddingsTimestamps:
         embeddings_sliced, _ = get_audio_embedding(
             audio=audio_sliced,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
 
@@ -132,7 +132,7 @@ class TestEmbeddingsTimestamps:
 
     def test_timestamps_end(self):
         # Test the end of the timestamp.
-        duration = self.audio.shape[1] / input_sample_rate()
+        duration = self.audio.shape[1] / self.sample_rate
 
         # For a centered frame the difference between the end and the duration should
         # be zero (an equal number of frames fit into the padded signal, so the center
@@ -145,7 +145,7 @@ class TestEmbeddingsTimestamps:
 class TestModel:
     def setup(self):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model = load_model("", device=device)
+        self.model, _ = load_model("basic", device=device)
         self.frames = torch.rand(512, self.model.n_fft, device=device) * 2 - 1
 
     def teardown(self):
