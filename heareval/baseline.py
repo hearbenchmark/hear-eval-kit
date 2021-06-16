@@ -5,7 +5,7 @@ This is simply a mel spectrogram followed by random projection.
 """
 
 import math
-from typing import Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import librosa
 import torch
@@ -16,6 +16,7 @@ from torch import Tensor
 class RandomProjectionMelEmbedding(torch.nn.Module):
     n_fft = 4096
     n_mels = 256
+    embedding_size = 4096
     sample_rate = 44100
     seed = 0
     epsilon = 1e-4
@@ -36,7 +37,7 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         # Projection matrices.
         normalization = math.sqrt(self.n_mels)
         self.projection = torch.nn.Parameter(
-            torch.rand(self.n_mels, 4096) / normalization
+            torch.rand(self.n_mels, self.embedding_size) / normalization
         )
 
     def forward(self, x: Tensor):
@@ -68,20 +69,57 @@ def input_sample_rate() -> int:
     return RandomProjectionMelEmbedding.sample_rate
 
 
-def load_model(model_file_path: str, device: str = "cpu") -> torch.nn.Module:
+def load_model(
+    model_file_path: str, device: str = "cpu"
+) -> Tuple[torch.nn.Module, Dict[str, Any]]:
     """
     In this baseline, we don't load anything from disk.
 
     Args:
-        model_file_path: Load model checkpoint from this file path.
+        model_file_path: Load model checkpoint from this file path. For this baseline
+            there is a basic version that contains no learning. To use the basic model
+            pass in 'basic' as the path. To load a random-init version of the learned
+            baseline pass in 'learned'. Passing in the location of a saved learned
+            baseline model will attempt to load that from disk.
         device: For inference on machines with multiple GPUs,
             this instructs the participant which device to use. If
             “cpu”, the CPU should be used (Multi-GPU support is not
             required).
     Returns:
-        Model
+        - Model: torch.nn.Module loaded on the specified device.
+        - Dict: A dictionary of data including the sample_rate, embedding_size, and
+            model version that may be useful for downstream tasks.
     """
-    return RandomProjectionMelEmbedding().to(device)
+
+    # We would expect that model_file_path is the location of a saved model containing
+    # model weights that we would reload. For the baseline model we have a non-learned
+    # 'basic' version, so that can be specified. If a filename is passed in then the
+    # the learned version of the baseline will be loaded.
+    if model_file_path == "basic":
+        model = RandomProjectionMelEmbedding().to(device)
+    elif model_file_path == "learned":
+        # TODO: return the random-init learned baseline embedding in this case?
+        raise NotImplementedError(
+            "Learned baseline model not implemented yet. "
+            "Call load_model with 'basic'"
+        )
+    else:
+        # TODO: otherwise attempt to load a trained baseline embedding using from disk
+        raise NotImplementedError(
+            "Learned baseline model not implemented yet. "
+            "Call load_model with 'basic'."
+        )
+
+    # Important data for downstream tasks.
+    # TODO: version should pull from something, perhaps we create an __info__.py file
+    #   for the package that includes the version that we can pull.
+    model_meta = {
+        "sample_rate": model.sample_rate,
+        "embedding_size": model.embedding_size,
+        "version": "0.0.1",
+    }
+
+    return model, model_meta
 
 
 def frame_audio(
