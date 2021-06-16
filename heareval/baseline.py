@@ -234,20 +234,3 @@ def pairwise_distance(emb1: Tensor, emb2: Tensor) -> Tensor:
     d = torch.cdist(emb1, emb2, p=1.0)
     assert d.shape == (emb1.shape[0], emb2.shape[0])
     return d
-
-
-if __name__ == "__main__":
-    if torch.cuda.is_available():
-        device = "cuda:0"
-    else:
-        device = "cpu"
-    model = load_model("", device=device)
-    # White noise
-    audio = torch.rand(1024, 20000, device=device) * 2 - 1
-    embs, timestamps = get_audio_embedding(
-        audio=audio,
-        model=model,
-        frame_rate=RandomProjectionMelEmbedding.sample_rate / 1000,
-    )
-
-    pairwise_distance(embs[20].float(), embs[20].float())
