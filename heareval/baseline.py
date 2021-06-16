@@ -5,8 +5,7 @@ This is simply a mel spectrogram followed by random projection.
 """
 
 import math
-from collections import defaultdict
-from typing import Any, DefaultDict, Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 import librosa
 import torch
@@ -69,13 +68,13 @@ def input_sample_rate() -> int:
     return RandomProjectionMelEmbedding.sample_rate
 
 
-def load_model(model_file_path: str, device: str = "cpu") -> Any:
+def load_model(model_file_path: str, device: str = "cpu") -> torch.nn.Module:
     """
     In this baseline, we don't load anything from disk.
 
     Args:
         model_file_path: Load model checkpoint from this file path.
-            device: For inference on machines with multiple GPUs,
+        device: For inference on machines with multiple GPUs,
             this instructs the participant which device to use. If
             “cpu”, the CPU should be used (Multi-GPU support is not
             required).
@@ -94,7 +93,7 @@ def frame_audio(
     by frame_rate, we round to the nearest sample.
 
     Args:
-            audio: input audio, expects a 2d Tensor of shape:
+        audio: input audio, expects a 2d Tensor of shape:
             (batch_size, num_samples)
         frame_size: the number of samples each resulting frame should be
         frame_rate: number of frames per second of audio
@@ -131,10 +130,10 @@ def frame_audio(
 
 def get_audio_embedding(
     audio: Tensor,
-    model: RandomProjectionMelEmbedding,
+    model: torch.nn.Module,
     frame_rate: float,
     batch_size: Optional[int] = 512,
-) -> Tuple[Dict[int, Tensor], Tensor]:
+) -> Tuple[Tensor, Tensor]:
     """
     Args:
         audio: n_sounds x n_samples of mono audio in the range
@@ -158,11 +157,8 @@ def get_audio_embedding(
             toggle.
 
     Returns:
-            - {embedding_size: Tensor} where embedding_size can
-                be any of [4096, 2048, 512, 128, 20]. The embedding
-                Tensor is float32 (or signed int for 20-dim),
-                n_sounds x n_frames x dim.
-            - Tensor: Frame-center timestamps, 1d.
+        - Tensor: Embeddings, `(n_sounds, n_frames, embedding_size)`.
+        - Tensor: Frame-center timestamps, 1d.
     """
 
     # Assert audio is of correct shape
@@ -227,9 +223,11 @@ def pairwise_distance(emb1: Tensor, emb2: Tensor) -> Tensor:
     """
     assert emb1.ndim == 3
     assert emb1.shape == emb2.shape
+
     # Flatten each embedding across frames
     emb1 = emb1.view(emb1.shape[0], -1)
     emb2 = emb2.view(emb2.shape[0], -1)
+
     # Compute the pairwise 1-norm distance
     d = torch.cdist(emb1, emb2, p=1.0)
     assert d.shape == (emb1.shape[0], emb2.shape[0])
