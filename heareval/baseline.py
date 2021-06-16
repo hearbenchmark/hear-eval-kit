@@ -36,14 +36,9 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
 
         # Projection matrices.
         normalization = math.sqrt(self.n_mels)
-        self.emb4096 = torch.nn.Parameter(torch.rand(self.n_mels, 4096) / normalization)
-        self.emb2048 = torch.nn.Parameter(torch.rand(self.n_mels, 2048) / normalization)
-        self.emb512 = torch.nn.Parameter(torch.rand(self.n_mels, 512) / normalization)
-        self.emb128 = torch.nn.Parameter(torch.rand(self.n_mels, 128) / normalization)
-        self.emb20 = torch.nn.Parameter(torch.rand(self.n_mels, 20) / normalization)
-
-        # An activation to squash the 20D embedding to a [0, 1] range.
-        self.activation = torch.nn.Sigmoid()
+        self.projection = torch.nn.Parameter(
+            torch.rand(self.n_mels, 4096) / normalization
+        )
 
     def forward(self, x: Tensor):
         # Compute the real-valued Fourier transform on windowed input signal.
@@ -58,24 +53,10 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         # Convert to a log mel spectrum.
         x = torch.log(x + self.epsilon)
 
-        # Apply projections to get all required embeddings
-        x4096 = x.matmul(self.emb4096)
-        x2048 = x.matmul(self.emb2048)
-        x512 = x.matmul(self.emb512)
-        x128 = x.matmul(self.emb128)
-        x20 = x.matmul(self.emb20)
+        # Apply projection to get a 4096 dimension embedding
+        embedding = x.matmul(self.projection)
 
-        # The 20-dimensional embedding is specified to be int8. To cast to int8 we'll
-        # apply an activation to ensure the embedding is in a 0 to 1 range first.
-        x20 = self.activation(x20)
-
-        # Scale to int8 value range and cast to int
-        int8_max = torch.iinfo(torch.int8).max
-        int8_min = torch.iinfo(torch.int8).min
-        x20 = x20 * (int8_max - int8_min) + int8_min
-        x20 = x20.type(torch.int8)
-
-        return {4096: x4096, 2048: x2048, 512: x512, 128: x128, 20: x20}
+        return embedding
 
 
 def input_sample_rate() -> int:
@@ -217,22 +198,16 @@ def get_audio_embedding(
         dataset, batch_size=batch_size, shuffle=False, drop_last=False
     )
 
-    # Put the model into eval mode, and don't compute any gradients.
+    # Put the model into eval mode, and not computing gradients while in inference.
+    # Iterate over all batches and accumulate the embeddings for each frame.
     model.eval()
     with torch.no_grad():
-        # Iterate over all batches and accumulate the embeddings
-        list_embeddings: DefaultDict[int, List[Tensor]] = defaultdict(list)
-        for batch in loader:
-            result = model(batch[0])
-            for size, embedding in result.items():
-                list_embeddings[size].append(embedding)
+        embeddings = [model(batch[0]) for batch in loader]
 
-    # Concatenate mini-batches back together and unflatten the frames back
-    # to audio batches
-    embeddings: Dict[int, Tensor] = {}
-    for size, embedding in list_embeddings.items():
-        embeddings[size] = torch.cat(embedding, dim=0)
-        embeddings[size] = embeddings[size].unflatten(0, (audio_batches, num_frames))
+    # Concatenate mini-batches back together and unflatten the frames
+    # to reconstruct the audio batches
+    embeddings = torch.cat(embeddings, dim=0)
+    embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
 
     return embeddings, timestamps
 
