@@ -6,7 +6,7 @@ This is simply a mel spectrogram followed by random projection.
 
 import math
 from collections import defaultdict
-from typing import Any, DefaultDict, Dict, List, Optional, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Tuple, Union
 
 from nnAudio import Spectrogram
 import torch
@@ -15,77 +15,150 @@ from torch import Tensor
 import torch.nn as nn
 
 
+class RandomProjectionMelEmbedding(torch.nn.Module):
+    n_fft = 4096
+    n_mels = 256
+    sample_rate = 44100
+    seed = 0
+    epsilon = 1e-4
+
+    def __init__(self):
+        super().__init__()
+        torch.random.manual_seed(self.seed)
+
+        # Create a Hann window buffer to apply to frames prior to FFT.
+        self.register_buffer("window", torch.hann_window(self.n_fft))
+
+        # Create a mel filter buffer.
+        mel_scale: Tensor = torch.tensor(
+            librosa.filters.mel(self.sample_rate, n_fft=self.n_fft, n_mels=self.n_mels)
+        )
+        self.register_buffer("mel_scale", mel_scale)
+
+        # Projection matrices.
+        normalization = math.sqrt(self.n_mels)
+        self.emb4096 = torch.nn.Parameter(torch.rand(self.n_mels, 4096) / normalization)
+        self.emb2048 = torch.nn.Parameter(torch.rand(self.n_mels, 2048) / normalization)
+        self.emb512 = torch.nn.Parameter(torch.rand(self.n_mels, 512) / normalization)
+        self.emb128 = torch.nn.Parameter(torch.rand(self.n_mels, 128) / normalization)
+        self.emb20 = torch.nn.Parameter(torch.rand(self.n_mels, 20) / normalization)
+
+        # An activation to squash the 20D embedding to a [0, 1] range.
+        self.activation = torch.nn.Sigmoid()
+
+    def forward(self, x: Tensor):
+        # Compute the real-valued Fourier transform on windowed input signal.
+        x = torch.fft.rfft(x * self.window)
+
+        # Convert to a power spectrum.
+        x = torch.abs(x) ** 2.0
+
+        # Apply the mel-scale filter to the power spectrum.
+        x = torch.matmul(x, self.mel_scale.transpose(0, 1))
+
+        # Convert to a log mel spectrum.
+        x = torch.log(x + self.epsilon)
+
+        # Apply projections to get all required embeddings
+        x4096 = x.matmul(self.emb4096)
+        x2048 = x.matmul(self.emb2048)
+        x512 = x.matmul(self.emb512)
+        x128 = x.matmul(self.emb128)
+        x20 = x.matmul(self.emb20)
+
+        # The 20-dimensional embedding is specified to be int8. To cast to int8 we'll
+        # apply an activation to ensure the embedding is in a 0 to 1 range first.
+        x20 = self.activation(x20)
+
+        # Scale to int8 value range and cast to int
+        int8_max = torch.iinfo(torch.int8).max
+        int8_min = torch.iinfo(torch.int8).min
+        x20 = x20 * (int8_max - int8_min) + int8_min
+        x20 = x20.type(torch.int8)
+
+        return {4096: x4096, 2048: x2048, 512: x512, 128: x128, 20: x20}
+
+
 class CBRBlock(nn.Module):
-  def __init__(self,inputlayer,outputlayer,maxpool=False):
-    super(CBRBlock, self).__init__()
-    self.conv2d_1 = nn.Conv2d(inputlayer,outputlayer,3)
-    self.batchnorm_1 = nn.BatchNorm2d(outputlayer)
+    def __init__(self, inputlayer, outputlayer, maxpool=False):
+        super(CBRBlock, self).__init__()
+        self.conv2d_1 = nn.Conv2d(inputlayer, outputlayer, 3)
+        self.batchnorm_1 = nn.BatchNorm2d(outputlayer)
 
-    self.conv2d_2 = nn.Conv2d(outputlayer,outputlayer,3)
-    self.batchnorm_2 = nn.BatchNorm2d(outputlayer)
+        self.conv2d_2 = nn.Conv2d(outputlayer, outputlayer, 3)
+        self.batchnorm_2 = nn.BatchNorm2d(outputlayer)
 
-    self.maxpool = maxpool
-    if maxpool:
-      self.maxpool2d = nn.MaxPool2d(2,2)
+        self.maxpool = maxpool
+        if maxpool:
+            self.maxpool2d = nn.MaxPool2d(2, 2)
 
-  def forward(self,x):
-    x = F.pad(x,(1,1,1,1))
-    x = self.conv2d_1(x)
-    x = self.batchnorm_1(x)
-    x = F.relu(x)
+    def forward(self, x):
+        x = F.pad(x, (1, 1, 1, 1))
+        x = self.conv2d_1(x)
+        x = self.batchnorm_1(x)
+        x = F.relu(x)
 
-    x = F.pad(x,(1,1,1,1))
-    x = self.conv2d_2(x)
-    x = self.batchnorm_2(x)
-    x = F.relu(x)
-    if self.maxpool:
-      x = self.maxpool2d(x)
-    return x
+        x = F.pad(x, (1, 1, 1, 1))
+        x = self.conv2d_2(x)
+        x = self.batchnorm_2(x)
+        x = F.relu(x)
+        if self.maxpool:
+            x = self.maxpool2d(x)
+        return x
 
 
 class Openl3Convnet(nn.Module):
-  n_fft = 4096
-  n_mels = 256
-  sample_rate = 44100
-  def __init__(self):
-    super(Openl3Convnet, self).__init__()
-    
+    n_fft = 4096
+    n_mels = 256
+    sample_rate = 44100
 
-    self.mellayer = Spectrogram.MelSpectrogram(sr = self.sample_rate, n_fft = self.n_fft, n_mels = self.n_mels, hop_length = 242,)
-    self.batch_normalization_input = nn.BatchNorm2d(1)
+    def __init__(self):
+        super(Openl3Convnet, self).__init__()
 
-    self.block1 = CBRBlock(1,64,True)
-    self.block2 = CBRBlock(64,128,True)
-    self.block3 = CBRBlock(128,256,True)
+        self.mellayer = Spectrogram.MelSpectrogram(
+            sr=self.sample_rate, n_fft=self.n_fft, n_mels=self.n_mels, hop_length=242,
+        )
+        self.batch_normalization_input = nn.BatchNorm2d(1)
 
-    self.block4 = CBRBlock(256,512)
+        self.block1 = CBRBlock(1, 64, True)
+        self.block2 = CBRBlock(64, 128, True)
+        self.block3 = CBRBlock(128, 256, True)
 
-    self.pool = nn.MaxPool2d((8,2))
-    self.flatten = nn.Flatten()
-  def forward(self,x):
-    x = self.mellayer(x).unsqueeze(1)
-    x = self.batch_normalization_input(x)
+        self.block4 = CBRBlock(256, 512)
 
-    x = self.block1(x)
-    x = self.block2(x)
-    x = self.block3(x)
+        self.pool = nn.MaxPool2d((8, 2))
+        self.flatten = nn.Flatten()
 
-    x = self.block4(x)
-    x = self.pool(x)
-    x = self.flatten(x)
-    return x
+    def forward(self, x):
+        x = self.mellayer(x).unsqueeze(1)
+        x = self.batch_normalization_input(x)
 
-def input_sample_rate() -> int:
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+
+        x = self.block4(x)
+        x = self.pool(x)
+        x = self.flatten(x)
+        return {2048: x}
+
+
+def input_sample_rate(model_name: Optional[str] = "Openl3") -> int:
     """
     Returns:
         One of the following values: [16000, 22050, 44100, 48000].
             To avoid resampling on-the-fly, we will query your model
             to find out what sample rate audio to provide it.
     """
-    return Openl3Convnet.sample_rate
+    if "openl3" in model_name:
+        return Openl3Convnet.sample_rate
+    else:
+        return RandomProjectionMelEmbedding.sample_rate
 
 
-def load_model(model_file_path: str, device: str = "cpu") -> Any:
+def load_model(
+    model_file_path: str, device: str = "cpu", model_name: Optional[str] = "Openl3"
+) -> Any:
     """
     In this baseline, we don't load anything from disk.
 
@@ -98,7 +171,10 @@ def load_model(model_file_path: str, device: str = "cpu") -> Any:
     Returns:
         Model
     """
-    return Openl3Convnet().to(device)
+    if "openl3" in model_name:
+        return Openl3Convnet().to(device)
+    else:
+        return RandomProjectionMelEmbedding().to(device)
 
 
 def frame_audio(
@@ -147,11 +223,10 @@ def frame_audio(
 
 def get_audio_embedding(
     audio: Tensor,
-    model: Openl3Convnet,
+    model: Union[Openl3Convnet, RandomProjectionMelEmbedding],
     frame_rate: float,
     batch_size: Optional[int] = 512,
 ) -> Tuple[Dict[int, Tensor], Tensor]:
-
 
     # Assert audio is of correct shape
     if audio.ndim != 2:
@@ -160,9 +235,11 @@ def get_audio_embedding(
         )
 
     # Make sure the correct model type was passed in
-    if not isinstance(model, Openl3Convnet):
+    if not isinstance(model, Openl3Convnet) or not isinstance(
+        model, RandomProjectionMelEmbedding
+    ):
         raise ValueError(
-            f"Model must be an instance of {Openl3Convnet.__name__}"
+            f"Model must be an instance of {Openl3Convnet.__name__} or {RandomProjectionMelEmbedding.__name__}"
         )
 
     # Send the model to the same device that the audio tensor is on.
@@ -188,19 +265,21 @@ def get_audio_embedding(
 
     # Put the model into eval mode, and don't compute any gradients.
     model.eval()
+
     with torch.no_grad():
         # Iterate over all batches and accumulate the embeddings
-        embeddings = []
+        list_embeddings: DefaultDict[int, List[Tensor]] = defaultdict(list)
         for batch in loader:
-            print(batch[0].shape)
-            embedding = model(batch[0])
-            print(embedding.shape)
-            embeddings.append(embedding)
+            result = model(batch[0])
+            for size, embedding in result.items():
+                list_embeddings[size].append(embedding)
 
     # Concatenate mini-batches back together and unflatten the frames back
     # to audio batches
-        embeddings = torch.cat(embeddings, dim=0)
-        embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
+    embeddings: Dict[int, Tensor] = {}
+    for size, embedding in list_embeddings.items():
+        embeddings[size] = torch.cat(embedding, dim=0)
+        embeddings[size] = embeddings[size].unflatten(0, (audio_batches, num_frames))
 
     return embeddings, timestamps
 
@@ -238,7 +317,6 @@ if __name__ == "__main__":
     # White noise
     audio = torch.rand(1024, 20000, device=device) * 2 - 1
     embs, timestamps = get_audio_embedding(
-        audio=audio,
-        model=model,
-        frame_rate=Openl3Convnet.sample_rate / 1000,
+        audio=audio, model=model, frame_rate=Openl3Convnet.sample_rate / 1000,
     )
+
