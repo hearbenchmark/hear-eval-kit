@@ -59,16 +59,6 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         return embedding
 
 
-def input_sample_rate() -> int:
-    """
-    Returns:
-        One of the following values: [16000, 22050, 44100, 48000].
-            To avoid resampling on-the-fly, we will query your model
-            to find out what sample rate audio to provide it.
-    """
-    return RandomProjectionMelEmbedding.sample_rate
-
-
 def load_model(
     model_file_path: str, device: str = "cpu"
 ) -> Tuple[torch.nn.Module, Dict[str, Any]]:
