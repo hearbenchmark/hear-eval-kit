@@ -8,7 +8,6 @@ import torch
 from heareval.baseline import (
     load_model,
     get_audio_embedding,
-    input_sample_rate,
     frame_audio,
 )
 
@@ -18,12 +17,13 @@ torch.backends.cudnn.deterministic = True
 class TestEmbeddingsTimestamps:
     def setup(self):
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model = load_model("", device=self.device)
+        self.model, self.model_meta = load_model("basic", device=self.device)
+        self.sample_rate = self.model_meta["sample_rate"]
         self.audio = torch.rand(64, 96000, device=self.device) * 2 - 1
         self.embeddings_ct, self.ts_ct = get_audio_embedding(
             audio=self.audio,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
 
@@ -38,13 +38,11 @@ class TestEmbeddingsTimestamps:
         embeddings_ct, _ = get_audio_embedding(
             audio=self.audio,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
-        for embeddinga, embeddingb in zip(
-            self.embeddings_ct.values(), embeddings_ct.values()
-        ):
-            assert torch.all(torch.abs(embeddinga - embeddingb) < 1e-5)
+
+        assert torch.allclose(self.embeddings_ct, embeddings_ct)
 
     def test_embeddings_batched(self):
         # methodA - Pass two audios individually and get embeddings. methodB -
@@ -58,26 +56,23 @@ class TestEmbeddingsTimestamps:
         embeddingsa, _ = get_audio_embedding(
             audio=audioa,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
         embeddingsb, _ = get_audio_embedding(
             audio=audiob,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
         embeddingsab, _ = get_audio_embedding(
             audio=audioab,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
 
-        for embeddinga, embeddingb, embeddingab in zip(
-            embeddingsa.values(), embeddingsb.values(), embeddingsab.values()
-        ):
-            assert torch.allclose(torch.cat([embeddinga, embeddingb]), embeddingab)
+        assert torch.allclose(torch.cat([embeddingsa, embeddingsb]), embeddingsab)
 
     def test_embeddings_sliced(self):
         # Slice the audio to select every even audio in the batch. Produce the
@@ -90,14 +85,14 @@ class TestEmbeddingsTimestamps:
         audio_sliced_framed, _ = frame_audio(
             audio_sliced,
             frame_size=4096,
-            frame_rate=input_sample_rate() / 256,
-            sample_rate=input_sample_rate(),
+            frame_rate=self.sample_rate / 256,
+            sample_rate=self.sample_rate,
         )
         audio_framed, _ = frame_audio(
             self.audio,
             frame_size=4096,
-            frame_rate=input_sample_rate() / 256,
-            sample_rate=input_sample_rate(),
+            frame_rate=self.sample_rate / 256,
+            sample_rate=self.sample_rate,
         )
         assert torch.all(audio_sliced_framed == audio_framed[::2])
 
@@ -105,13 +100,11 @@ class TestEmbeddingsTimestamps:
         embeddings_sliced, _ = get_audio_embedding(
             audio=audio_sliced,
             model=self.model,
-            frame_rate=input_sample_rate() / 256,
+            frame_rate=self.sample_rate / 256,
             batch_size=512,
         )
-        for embedding_sliced, embedding_ct in zip(
-            embeddings_sliced.values(), self.embeddings_ct.values()
-        ):
-            assert torch.allclose(embedding_sliced, embedding_ct[::2])
+
+        assert torch.allclose(embeddings_sliced, self.embeddings_ct[::2])
 
     def test_embeddings_shape(self):
         # Test the embeddings shape.
@@ -119,23 +112,15 @@ class TestEmbeddingsTimestamps:
         # num_frames to be equal to the number of full audio frames that can fit into
         # the audio sample. The centered example is padded with frame_size (4096) number
         # of samples, so we don't need to subtract that in that test.
-        for size, embedding in self.embeddings_ct.items():
-            assert embedding.shape == (64, 96000 // 256 + 1, int(size))
+        assert self.embeddings_ct.shape == (64, 96000 // 256 + 1, int(4096))
 
     def test_embeddings_nan(self):
         # Test for null values in the embeddings.
-        for embeddings in [self.embeddings_ct]:
-            for size, embedding in embeddings.items():
-                assert not torch.any(torch.isnan(embedding))
+        assert not torch.any(torch.isnan(self.embeddings_ct))
 
     def test_embeddings_type(self):
         # Test the data type of the embeddings.
-        for embeddings in [self.embeddings_ct]:
-            for size, embedding in embeddings.items():
-                if size != 20:
-                    assert embedding.dtype == torch.float32
-                else:
-                    assert embedding.dtype == torch.int8
+        assert self.embeddings_ct.dtype == torch.float32
 
     def test_timestamps_begin(self):
         # Test the beginning of the time stamp
@@ -147,7 +132,7 @@ class TestEmbeddingsTimestamps:
 
     def test_timestamps_end(self):
         # Test the end of the timestamp.
-        duration = self.audio.shape[1] / input_sample_rate()
+        duration = self.audio.shape[1] / self.sample_rate
 
         # For a centered frame the difference between the end and the duration should
         # be zero (an equal number of frames fit into the padded signal, so the center
@@ -160,7 +145,7 @@ class TestEmbeddingsTimestamps:
 class TestModel:
     def setup(self):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model = load_model("", device=device)
+        self.model, _ = load_model("basic", device=device)
         self.frames = torch.rand(512, self.model.n_fft, device=device) * 2 - 1
 
     def teardown(self):
@@ -176,10 +161,9 @@ class TestModel:
         outputs = self.model(self.frames)
         outputs_sliced = self.model(frames_sliced)
 
-        for output, output_sliced in zip(outputs.values(), outputs_sliced.values()):
-            assert torch.allclose(output_sliced[0], output[0])
-            assert torch.allclose(output_sliced[1], output[2])
-            assert torch.allclose(output_sliced, output[::2])
+        assert torch.allclose(outputs_sliced[0], outputs[0])
+        assert torch.allclose(outputs_sliced[1], outputs[2])
+        assert torch.allclose(outputs_sliced, outputs[::2])
 
 
 class TestFraming:
