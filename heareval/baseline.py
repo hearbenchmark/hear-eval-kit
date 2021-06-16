@@ -226,11 +226,11 @@ def get_audio_embedding(
     # Iterate over all batches and accumulate the embeddings for each frame.
     model.eval()
     with torch.no_grad():
-        embeddings = [model(batch[0]) for batch in loader]
+        embeddings_list = [model(batch[0]) for batch in loader]
 
     # Concatenate mini-batches back together and unflatten the frames
     # to reconstruct the audio batches
-    embeddings = torch.cat(embeddings, dim=0)
+    embeddings = torch.cat(embeddings_list, dim=0)
     embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
 
     return embeddings, timestamps
