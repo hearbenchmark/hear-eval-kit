@@ -80,11 +80,6 @@ def load_model(model_file_path: str = "", device: str = "cpu") -> torch.nn.Modul
     Returns:
         Model: torch.nn.Module loaded on the specified device.
     """
-
-    # We would expect that model_file_path is the location of a saved model containing
-    # model weights that we would reload. For the baseline model we have a non-learned
-    # 'basic' version, so that can be specified. If a filename is passed in then the
-    # the learned version of the baseline will be loaded.
     if model_file_path == "":
         model = RandomProjectionMelEmbedding().to(device)
     else:
