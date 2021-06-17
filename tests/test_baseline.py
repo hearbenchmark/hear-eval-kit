@@ -9,6 +9,7 @@ from heareval.model.baseline import (
     load_model,
     get_audio_embedding,
     frame_audio,
+    pairwise_distance,
 )
 
 torch.backends.cudnn.deterministic = True
@@ -193,3 +194,33 @@ class TestFraming:
 
         assert expected_frames_shape == frames.shape
         assert np.all(expected_timestamps == timestamps.detach().cpu().numpy())
+
+
+class TestDistance:
+    def setup(self):
+        self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.model = load_model(device=self.device)
+        self.audio = torch.rand(64, 96000, device=self.device) * 2 - 1
+
+    def teardown(self):
+        del self.device
+        del self.model
+        del self.audio
+
+    def test_pairwise_distance(self):
+
+        # Test distance of zero between same audio
+        emb1, _ = get_audio_embedding(self.audio, self.model, frame_rate=4.0)
+        emb2, _ = get_audio_embedding(self.audio, self.model, frame_rate=4.0)
+
+        distances = pairwise_distance(emb1, emb2)
+        assert distances.shape == (emb1.shape[0], emb2.shape[0])
+
+        # Pairwise distance between the same audio should be zero,
+        # all others should not be
+        for i in range(distances.shape[0]):
+            for j in range(distances.shape[1]):
+                if i == j:
+                    assert distances[i][i] == 0.0
+                else:
+                    assert distances[i][j] != 0.0
