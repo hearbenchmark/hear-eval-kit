@@ -5,7 +5,7 @@ Tests for the baseline model
 import numpy as np
 import torch
 
-from heareval.baseline import (
+from heareval.model.baseline import (
     load_model,
     get_audio_embedding,
     frame_audio,
@@ -17,8 +17,8 @@ torch.backends.cudnn.deterministic = True
 class TestEmbeddingsTimestamps:
     def setup(self):
         self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model, self.model_meta = load_model("basic", device=self.device)
-        self.sample_rate = self.model_meta["sample_rate"]
+        self.model = load_model(device=self.device)
+        self.sample_rate = self.model.sample_rate
         self.audio = torch.rand(64, 96000, device=self.device) * 2 - 1
         self.embeddings_ct, self.ts_ct = get_audio_embedding(
             audio=self.audio,
@@ -145,12 +145,18 @@ class TestEmbeddingsTimestamps:
 class TestModel:
     def setup(self):
         device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.model, _ = load_model("basic", device=device)
+        self.model = load_model(device=device)
         self.frames = torch.rand(512, self.model.n_fft, device=device) * 2 - 1
 
     def teardown(self):
         del self.model
         del self.frames
+
+    def test_model_attributes(self):
+        # Each model should have sample_rate and embedding size information
+        assert hasattr(self.model, "sample_rate")
+        assert hasattr(self.model, "embedding_size")
+        assert hasattr(self.model, "version")
 
     def test_model_sliced(self):
         frames_sliced = self.frames[::2]

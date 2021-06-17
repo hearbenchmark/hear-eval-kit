@@ -5,7 +5,7 @@ This is simply a mel spectrogram followed by random projection.
 """
 
 import math
-from typing import Any, Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import librosa
 import torch
@@ -14,10 +14,16 @@ from torch import Tensor
 
 
 class RandomProjectionMelEmbedding(torch.nn.Module):
+    # sample rate, embedding size, and version number are
+    # required model attributes for the HEAR API
+    # TODO how do we want to handle version?
+    sample_rate = 44100
+    embedding_size = 4096
+    version = "0.0.1"
+
+    # These attributes are specific to this baseline model
     n_fft = 4096
     n_mels = 256
-    embedding_size = 4096
-    sample_rate = 44100
     seed = 0
     epsilon = 1e-4
 
@@ -59,57 +65,33 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         return embedding
 
 
-def load_model(
-    model_file_path: str = "basic", device: str = "cpu"
-) -> Tuple[torch.nn.Module, Dict[str, Any]]:
+def load_model(model_file_path: str = "", device: str = "cpu") -> torch.nn.Module:
     """
     In this baseline, we don't load anything from disk.
 
     Args:
-        model_file_path: Load model checkpoint from this file path. For this baseline
-            there is a basic version that contains no learning. To use the basic model
-            pass in 'basic' as the path. To load a random-init version of the learned
-            baseline pass in 'learned'. Passing in the location of a saved learned
-            baseline model will attempt to load that from disk.
+        model_file_path: Load model checkpoint from this file path. For this baseline,
+            if no path is provided then the default random init weights for the
+            linear projection layer will be used.
         device: For inference on machines with multiple GPUs,
             this instructs the participant which device to use. If
             “cpu”, the CPU should be used (Multi-GPU support is not
             required).
     Returns:
-        - Model: torch.nn.Module loaded on the specified device.
-        - Dict: A dictionary of data including the sample_rate, embedding_size, and
-            model version that may be useful for downstream tasks.
+        Model: torch.nn.Module loaded on the specified device.
     """
 
     # We would expect that model_file_path is the location of a saved model containing
     # model weights that we would reload. For the baseline model we have a non-learned
     # 'basic' version, so that can be specified. If a filename is passed in then the
     # the learned version of the baseline will be loaded.
-    if model_file_path == "basic":
+    if model_file_path == "":
         model = RandomProjectionMelEmbedding().to(device)
-    elif model_file_path == "learned":
-        # TODO: return the random-init learned baseline embedding in this case?
-        raise NotImplementedError(
-            "Learned baseline model not implemented yet. "
-            "Call load_model with 'basic'"
-        )
     else:
-        # TODO: otherwise attempt to load a trained baseline embedding using from disk
-        raise NotImplementedError(
-            "Learned baseline model not implemented yet. "
-            "Call load_model with 'basic'."
-        )
+        # TODO: implement loading weights from disk
+        raise NotImplementedError("Loading model weights not implemented yet")
 
-    # Important data for downstream tasks.
-    # TODO: version should pull from something, perhaps we create an __info__.py file
-    #   for the package that includes the version that we can pull.
-    model_meta = {
-        "sample_rate": model.sample_rate,
-        "embedding_size": model.embedding_size,
-        "version": "0.0.1",
-    }
-
-    return model, model_meta
+    return model
 
 
 def frame_audio(
