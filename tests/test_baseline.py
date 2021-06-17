@@ -157,7 +157,6 @@ class TestModel:
         # Each model should have sample_rate and embedding size information
         assert hasattr(self.model, "sample_rate")
         assert hasattr(self.model, "embedding_size")
-        assert hasattr(self.model, "version")
 
     def test_model_sliced(self):
         frames_sliced = self.frames[::2]

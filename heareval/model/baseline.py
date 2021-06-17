@@ -14,12 +14,9 @@ from torch import Tensor
 
 
 class RandomProjectionMelEmbedding(torch.nn.Module):
-    # sample rate, embedding size, and version number are
-    # required model attributes for the HEAR API
-    # TODO how do we want to handle version?
+    # sample rate and embedding size are required model attributes for the HEAR API
     sample_rate = 44100
     embedding_size = 4096
-    version = "0.0.1"
 
     # These attributes are specific to this baseline model
     n_fft = 4096
