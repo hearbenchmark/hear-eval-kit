@@ -35,8 +35,8 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
 # This could instead be something from the participants
-EMBEDDING_PIP = "heareval.baseline"
-EMBEDDING_MODEL_PATH = "basic"  # Use the basic baseline
+EMBEDDING_PIP = "heareval.model.baseline"
+EMBEDDING_MODEL_PATH = ""  # Baseline doesn't load model
 
 # TODO: Support for multiple GPUs?
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -89,12 +89,12 @@ def get_audio_embedding_numpy(
 
 
 def task_embeddings():
-    model, meta = EMBED.load_model(EMBEDDING_MODEL_PATH, device=device)  # type: ignore
+    model = EMBED.load_model(EMBEDDING_MODEL_PATH, device=device)  # type: ignore
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embeddir = os.path.join("embeddings", EMBED.__name__)  # type: ignore
-    embed_sr = meta["sample_rate"]
+    embed_sr = model.sample_rate
 
     for task in glob.glob("tasks/*"):
         # TODO: We should be reading the metadata that describes
