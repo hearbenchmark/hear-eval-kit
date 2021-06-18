@@ -3,7 +3,6 @@ Train the baseline model on a single multiclass task.
 """
 
 import os.path
-from typing import List
 
 import numpy as np
 import pytorch_lightning as pl
