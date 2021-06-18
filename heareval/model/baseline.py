@@ -43,6 +43,9 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
             torch.rand(self.n_mels, self.embedding_size) / normalization
         )
 
+        # Activation function on final output
+        self.activation = torch.nn.Tanh()
+
     def forward(self, x: Tensor):
         # Compute the real-valued Fourier transform on windowed input signal.
         x = torch.fft.rfft(x * self.window)
@@ -58,6 +61,8 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
 
         # Apply projection to get a 4096 dimension embedding
         embedding = x.matmul(self.projection)
+
+        embedding = self.activation(embedding)
 
         return embedding
 

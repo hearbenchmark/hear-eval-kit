@@ -11,8 +11,8 @@ import torch
 from csvdataset import CSVDataset
 from torch.utils.data import DataLoader, random_split
 
-import heareval.baseline
-from heareval.baseline import RandomProjectionMelEmbedding
+import heareval.model.baseline
+from heareval.model.baseline import RandomProjectionMelEmbedding
 
 # from importlib import import_module
 
@@ -41,7 +41,7 @@ FINE_TUNE = True
 # TODO: Use validation if it exists
 # Not sure why I have to add .. to the path
 full_train_dataset = CSVDataset(
-    os.path.join("../tasks", TASK, "train.csv"), labels_as_ints=True
+    os.path.join("tasks", TASK, "train.csv"), labels_as_ints=True
 )
 n_validation = int(round(len(full_train_dataset) * VALIDATION))
 train_dataset, validation_dataset = random_split(
@@ -49,9 +49,7 @@ train_dataset, validation_dataset = random_split(
     [len(full_train_dataset) - n_validation, n_validation],
     generator=torch.Generator().manual_seed(42),
 )
-test_dataset = CSVDataset(
-    os.path.join("../tasks", TASK, "test.csv"), labels_as_ints=True
-)
+test_dataset = CSVDataset(os.path.join("tasks", TASK, "test.csv"), labels_as_ints=True)
 
 train_dataloader = DataLoader(
     train_dataset, batch_size=AUDIO_BATCH_SIZE, shuffle=True, drop_last=False
@@ -67,11 +65,10 @@ test_dataloader = DataLoader(
 
 
 class MulticlassEmbedding(pl.LightningModule):
-    SR = heareval.baseline.input_sample_rate()
-
     def __init__(self):
         super().__init__()
         self.embedding = RandomProjectionMelEmbedding()
+        self.SR = self.embedding.sample_rate
         # Add one because the start and end are framed
         self.embedding_dim = int(
             (FRAME_RATE * SAMPLE_LENGTH_SECONDS + 1) * EMBEDDING_SIZE
@@ -85,19 +82,19 @@ class MulticlassEmbedding(pl.LightningModule):
         audio = []
         for f in filenames:
             x, sr = sf.read(
-                os.path.join(os.path.join("../tasks", TASK, str(self.SR), split, f)),
+                os.path.join(os.path.join("tasks", TASK, str(self.SR), split, f)),
                 dtype=np.float32,
             )
             assert sr == self.SR
             audio.append(x)
         audio = torch.tensor(np.vstack(audio), device=device)
 
-        embeddings = heareval.baseline.get_audio_embedding(
+        embeddings = heareval.model.baseline.get_audio_embedding(
             audio,
             self.embedding,
             frame_rate=FRAME_RATE,
             disable_gradients=not FINE_TUNE,
-        )[0][EMBEDDING_SIZE]
+        )[0]
         return embeddings.view(len(filenames), -1)
 
     def forward(self, filenames, split):
