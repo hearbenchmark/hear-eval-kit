@@ -29,6 +29,3 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
-    - name: Run simple baseline
-      run: |
-        python heareval/baseline.py
