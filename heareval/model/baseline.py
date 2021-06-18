@@ -5,8 +5,7 @@ This is simply a mel spectrogram followed by random projection.
 """
 
 import math
-from collections import defaultdict
-from typing import Any, DefaultDict, Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 import librosa
 import torch
@@ -15,9 +14,13 @@ from torch import Tensor
 
 
 class RandomProjectionMelEmbedding(torch.nn.Module):
+    # sample rate and embedding size are required model attributes for the HEAR API
+    sample_rate = 44100
+    embedding_size = 4096
+
+    # These attributes are specific to this baseline model
     n_fft = 4096
     n_mels = 256
-    sample_rate = 44100
     seed = 0
     epsilon = 1e-4
 
@@ -36,14 +39,9 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
 
         # Projection matrices.
         normalization = math.sqrt(self.n_mels)
-        self.emb4096 = torch.nn.Parameter(torch.rand(self.n_mels, 4096) / normalization)
-        self.emb2048 = torch.nn.Parameter(torch.rand(self.n_mels, 2048) / normalization)
-        self.emb512 = torch.nn.Parameter(torch.rand(self.n_mels, 512) / normalization)
-        self.emb128 = torch.nn.Parameter(torch.rand(self.n_mels, 128) / normalization)
-        self.emb20 = torch.nn.Parameter(torch.rand(self.n_mels, 20) / normalization)
-
-        # An activation to squash the 20D embedding to a [0, 1] range.
-        self.activation = torch.nn.Sigmoid()
+        self.projection = torch.nn.Parameter(
+            torch.rand(self.n_mels, self.embedding_size) / normalization
+        )
 
     def forward(self, x: Tensor):
         # Compute the real-valued Fourier transform on windowed input signal.
@@ -58,50 +56,34 @@ class RandomProjectionMelEmbedding(torch.nn.Module):
         # Convert to a log mel spectrum.
         x = torch.log(x + self.epsilon)
 
-        # Apply projections to get all required embeddings
-        x4096 = x.matmul(self.emb4096)
-        x2048 = x.matmul(self.emb2048)
-        x512 = x.matmul(self.emb512)
-        x128 = x.matmul(self.emb128)
-        x20 = x.matmul(self.emb20)
+        # Apply projection to get a 4096 dimension embedding
+        embedding = x.matmul(self.projection)
 
-        # The 20-dimensional embedding is specified to be int8. To cast to int8 we'll
-        # apply an activation to ensure the embedding is in a 0 to 1 range first.
-        x20 = self.activation(x20)
-
-        # Scale to int8 value range and cast to int
-        int8_max = torch.iinfo(torch.int8).max
-        int8_min = torch.iinfo(torch.int8).min
-        x20 = x20 * (int8_max - int8_min) + int8_min
-        x20 = x20.type(torch.int8)
-
-        return {4096: x4096, 2048: x2048, 512: x512, 128: x128, 20: x20}
+        return embedding
 
 
-def input_sample_rate() -> int:
-    """
-    Returns:
-        One of the following values: [16000, 22050, 44100, 48000].
-            To avoid resampling on-the-fly, we will query your model
-            to find out what sample rate audio to provide it.
-    """
-    return RandomProjectionMelEmbedding.sample_rate
-
-
-def load_model(model_file_path: str, device: str = "cpu") -> Any:
+def load_model(model_file_path: str = "", device: str = "cpu") -> torch.nn.Module:
     """
     In this baseline, we don't load anything from disk.
 
     Args:
-        model_file_path: Load model checkpoint from this file path.
-            device: For inference on machines with multiple GPUs,
+        model_file_path: Load model checkpoint from this file path. For this baseline,
+            if no path is provided then the default random init weights for the
+            linear projection layer will be used.
+        device: For inference on machines with multiple GPUs,
             this instructs the participant which device to use. If
             “cpu”, the CPU should be used (Multi-GPU support is not
             required).
     Returns:
-        Model
+        Model: torch.nn.Module loaded on the specified device.
     """
-    return RandomProjectionMelEmbedding().to(device)
+    if model_file_path == "":
+        model = RandomProjectionMelEmbedding().to(device)
+    else:
+        # TODO: implement loading weights from disk
+        raise NotImplementedError("Loading model weights not implemented yet")
+
+    return model
 
 
 def frame_audio(
@@ -113,7 +95,7 @@ def frame_audio(
     by frame_rate, we round to the nearest sample.
 
     Args:
-            audio: input audio, expects a 2d Tensor of shape:
+        audio: input audio, expects a 2d Tensor of shape:
             (batch_size, num_samples)
         frame_size: the number of samples each resulting frame should be
         frame_rate: number of frames per second of audio
@@ -150,11 +132,11 @@ def frame_audio(
 
 def get_audio_embedding(
     audio: Tensor,
-    model: RandomProjectionMelEmbedding,
+    model: torch.nn.Module,
     frame_rate: float,
     batch_size: Optional[int] = 512,
     disable_gradients: bool = True,
-) -> Tuple[Dict[int, Tensor], Tensor]:
+) -> Tuple[Tensor, Tensor]:
     """
     Args:
         audio: n_sounds x n_samples of mono audio in the range
@@ -180,11 +162,8 @@ def get_audio_embedding(
                 run the model in .eval() mode. Default: True.
 
     Returns:
-            - {embedding_size: Tensor} where embedding_size can
-                be any of [4096, 2048, 512, 128, 20]. The embedding
-                Tensor is float32 (or signed int for 20-dim),
-                n_sounds x n_frames x dim.
-            - Tensor: Frame-center timestamps, 1d.
+        - Tensor: Embeddings, `(n_sounds, n_frames, embedding_size)`.
+        - Tensor: Frame-center timestamps, 1d.
     """
 
     # Assert audio is of correct shape
@@ -220,29 +199,19 @@ def get_audio_embedding(
         dataset, batch_size=batch_size, shuffle=False, drop_last=False
     )
 
-    def compute_list_embeddings() -> DefaultDict[int, List[Tensor]]:
-        # Iterate over all batches and accumulate the embeddings
-        list_embeddings: DefaultDict[int, List[Tensor]] = defaultdict(list)
-        for batch in loader:
-            result = model(batch[0])
-            for size, embedding in result.items():
-                list_embeddings[size].append(embedding)
-        return list_embeddings
-
     if disable_gradients:
-        # Put the model into eval mode, and don't compute any gradients.
+        # Put the model into eval mode, and not computing gradients while in inference.
+        # Iterate over all batches and accumulate the embeddings for each frame.
         model.eval()
         with torch.no_grad():
-            list_embeddings = compute_list_embeddings()
+            embeddings_list = [model(batch[0]) for batch in loader]
     else:
-        list_embeddings = compute_list_embeddings()
+        embeddings_list = [model(batch[0]) for batch in loader]
 
-    # Concatenate mini-batches back together and unflatten the frames back
-    # to audio batches
-    embeddings: Dict[int, Tensor] = {}
-    for size, embedding in list_embeddings.items():
-        embeddings[size] = torch.cat(embedding, dim=0)
-        embeddings[size] = embeddings[size].unflatten(0, (audio_batches, num_frames))
+    # Concatenate mini-batches back together and unflatten the frames
+    # to reconstruct the audio batches
+    embeddings = torch.cat(embeddings_list, dim=0)
+    embeddings = embeddings.unflatten(0, (audio_batches, num_frames))
 
     return embeddings, timestamps
 
@@ -262,27 +231,12 @@ def pairwise_distance(emb1: Tensor, emb2: Tensor) -> Tensor:
     """
     assert emb1.ndim == 3
     assert emb1.shape == emb2.shape
+
     # Flatten each embedding across frames
     emb1 = emb1.view(emb1.shape[0], -1)
     emb2 = emb2.view(emb2.shape[0], -1)
+
     # Compute the pairwise 1-norm distance
     d = torch.cdist(emb1, emb2, p=1.0)
     assert d.shape == (emb1.shape[0], emb2.shape[0])
     return d
-
-
-if __name__ == "__main__":
-    if torch.cuda.is_available():
-        device = "cuda:0"
-    else:
-        device = "cpu"
-    model = load_model("", device=device)
-    # White noise
-    audio = torch.rand(1024, 20000, device=device) * 2 - 1
-    embs, timestamps = get_audio_embedding(
-        audio=audio,
-        model=model,
-        frame_rate=RandomProjectionMelEmbedding.sample_rate / 1000,
-    )
-
-    pairwise_distance(embs[20].float(), embs[20].float())

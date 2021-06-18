@@ -24,7 +24,6 @@ TODO:
 
 import glob
 import os.path
-import pickle
 from importlib import import_module
 from typing import Any, Dict, Tuple
 
@@ -36,11 +35,11 @@ from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
 # This could instead be something from the participants
-EMBEDDING_PIP = "heareval.baseline"
-EMBEDDING_MODEL_PATH = ""  # Not used by baseline
+EMBEDDING_PIP = "heareval.model.baseline"
+EMBEDDING_MODEL_PATH = ""  # Baseline doesn't load model
 
 # TODO: Support for multiple GPUs?
-device = "gpu" if torch.cuda.is_available() else "cpu"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 EMBED = import_module(EMBEDDING_PIP)
 
@@ -50,15 +49,14 @@ def get_audio_embedding_numpy(
     model: Any,
     frame_rate: float,
 ) -> Tuple[Dict[int, np.ndarray], np.ndarray]:
-    embedding_dict, timestamps = EMBED.get_audio_embedding(  # type: ignore
+    embedding, timestamps = EMBED.get_audio_embedding(  # type: ignore
         torch.tensor(audio_numpy, device=device),
         model=model,
         frame_rate=frame_rate,
     )
-    for key in embedding_dict.keys():
-        embedding_dict[key] = embedding_dict[key].detach().cpu().numpy()
+    embedding = embedding.detach().cpu().numpy()
     timestamps = timestamps.detach().cpu().numpy()
-    return embedding_dict, timestamps
+    return embedding, timestamps
 
 
 def task_embeddings():
@@ -67,7 +65,7 @@ def task_embeddings():
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embeddir = os.path.join("embeddings", EMBED.__name__)  # type: ignore
-    embedsr = EMBED.input_sample_rate()  # type: ignore
+    embed_sr = model.sample_rate
 
     for task in glob.glob("tasks/*"):
         # TODO: We should be reading the metadata that describes
@@ -77,6 +75,8 @@ def task_embeddings():
 
         # TODO: Include "val" ?
         for split in ["train", "test"]:
+            print(f"Getting embeddings for {split} split:")
+
             # TODO: We might consider skipping files that already
             # have embeddings on disk, for speed
             dataloader = DataLoader(
@@ -92,23 +92,18 @@ def task_embeddings():
                 audios = []
                 for f in files:
                     x, sr = sf.read(
-                        os.path.join(task, str(embedsr), split, f), dtype=np.float32
+                        os.path.join(task, str(embed_sr), split, f), dtype=np.float32
                     )
-                    assert sr == embedsr
+                    assert sr == embed_sr
                     audios.append(x)
+
                 audios = np.vstack(audios)
-                embedding_dict, timestamps = get_audio_embedding_numpy(
+                embedding, timestamps = get_audio_embedding_numpy(
                     audios, model=model, frame_rate=frame_rate
                 )
+
                 for i, filename in enumerate(files):
-                    file_embedding_dict = {
-                        emb_size: embedding_dict[emb_size][i]
-                        for emb_size in embedding_dict
-                    }
-                    pickle.dump(
-                        file_embedding_dict,
-                        open(os.path.join(outdir, filename + ".pkl"), "wb"),
-                    )
+                    np.save(os.path.join(outdir, f"{filename}.npy"), embedding[i])
 
 
 if __name__ == "__main__":
