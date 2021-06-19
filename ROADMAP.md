@@ -24,20 +24,23 @@ and `predicted-test.csv` files, Christian is starting this task.)
 See [heareval/tasks/README.md](heareval/tasks/README.md) for more
 details.
 
-Ideally, `predicted-test.csv` would have identical format as
-`test.csv`. In practice, for AUC which depends upon the predicted
-score, we might need to change the format slightly.
+`predicted-test.csv` is the output of the predictor.
 
 ### Learning Based Tasks
 
-Entire audio, multiclass:
+Entire audio, binary, multiclass, or, multiclass:
     * Concat all embeddings for the audio, make a multiclass prediction.
-
-Entire audio, multilabel:
-    * Concat all embeddings for the audio, make a multilabel prediction.
+    * The output format of `predicted-test.csv` is:
+    ```
+    filename,label 0 probability,label 1 probability,...
+    ```
 
 Frame-based multilabel (transcription + sound event detection):
     * For each frame, make a multilabel prediction.
+    * The output format of `predicted-test.csv` is:
+    ```
+    filename,timestamp,label 0 probability,label 1 probability,...
+    ```
 
 ### Unlearned tasks
 
@@ -45,6 +48,10 @@ JND (audio1 vs audio2 has a perceptible difference):
     * np.abs(embedding1 - embedding2), where embedding1 is the
     concatenation of all audio1 frames, same for embedding2.
     * Compute AUC
+    * The output format of `predicted-test.csv` is:
+    ```
+    filename1,filename2,distance
+    ```
 
 Ranking tasks:
     * This requires more thought. There are two options:
@@ -59,6 +66,11 @@ Ranking tasks:
         we can just run Spearman correlation for eval.
     * Regardless of the final output of the predictor, we will
     probably need triplets.
+    * The output format of `predicted-test.csv`, for all pairs
+    (filename1, filename2) that are ranked, is:
+    ```
+    filename1,filename2,distance
+    ```
 
 ## Components
 
