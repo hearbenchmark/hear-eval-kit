@@ -1,7 +1,7 @@
 import os
 import csv
 import numpy as np
-from numpy.lib.function_base import append
+from numpy.lib.shape_base import _take_along_axis_dispatcher
 from sklearn.metrics import roc_auc_score, top_k_accuracy_score
 from typing import Any, DefaultDict, Dict, List, Optional, Tuple
 
@@ -28,8 +28,10 @@ def csv_to_dict(file_path: str, cast=float) -> dict:
                 else:
                     vals.append(cast(val))
 
-            if len(vals) > 1:
+            if len(vals) > 1 and cast in [float, int]:
                 row_values = np.array(vals)
+            elif cast is str:
+                row_values = vals
             else:
                 row_values = vals[0]
 
@@ -49,9 +51,20 @@ def str_label_to_int(d_str: dict, labels: dict) -> dict:
         d_int (dict): Labeled items with interger labels.
     """
 
+    # check if multilabel
+    multi_label = is_multi_label(d_str)
+
     d_int = {}
     for key, val in d_str.items():
-        d_int[key] = labels[val]
+        if multi_label:
+            d_int[key] = []
+            for label, idx in labels.items():
+                if label in val:
+                    d_int[key].append(1)
+                else:
+                    d_int[key].append(0)
+        else:
+            d_int[key] = labels[val[0]]
 
     return d_int
 
@@ -84,6 +97,20 @@ def align_predictions(test, pred) -> Tuple[np.ndarray, np.ndarray]:
     return y_true, y_pred
 
 
+def is_multi_label(test_dict: dict) -> bool:
+    """Check if test dictionary represents mulit-label task.
+
+    Args:
+        test_dict (dict): Test dictionary.
+
+    Returns:
+        multi_label(bool): True if ground truth contains multiple labels.
+    """
+    for key, val in test_dict.items():
+        if len(val) > 1:
+            return True
+
+
 def evaluate(
     test_csv_file_path: str,
     pred_csv_file_path: str,
@@ -101,9 +128,7 @@ def evaluate(
 
     Returns
         metrics (dict): Evaluation metrics.
-
     """
-
     # check if files exist
     if not os.path.isfile(test_csv_file_path):
         raise RuntimeError(f"test_csv_file_path: {test_csv_file_path} does not exist.")
@@ -132,19 +157,13 @@ def evaluate(
     y_true, y_score = align_predictions(test, pred)
 
     # compute metrics based on scores and ground truth
-    auc = roc_auc_score(y_true, y_score, multi_class="ovr")
-    top_k = top_k_accuracy_score(y_true, y_score, k=2)
+    auc = roc_auc_score(y_true, y_score, multi_class="ovr")  # ovo or ovr?
+
+    if y_true.ndim == 1:  # multi-label not suppoered
+        top_k = top_k_accuracy_score(y_true, y_score, k=1)
+    else:
+        top_k = np.nan
 
     metrics = {"auc": auc, "top_k": top_k}
 
     return metrics
-
-
-if __name__ == "__main__":
-    metrics = evaluate(
-        "test.csv",
-        "predicted-test.csv",
-        "_workdir/08-MetadataVocabulary/labelvocabulary.csv",
-    )
-
-    print(metrics)
