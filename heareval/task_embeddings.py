@@ -76,12 +76,12 @@ class CSVDataset(Dataset):
 def get_audio_embedding_numpy(
     audio_numpy: np.ndarray,
     model: Any,
-    frame_rate: float,
+    hop_size: float,
 ) -> Tuple[Dict[int, np.ndarray], np.ndarray]:
     embedding, timestamps = EMBED.get_audio_embedding(  # type: ignore
         torch.tensor(audio_numpy, device=device),
         model=model,
-        frame_rate=frame_rate,
+        hop_size=hop_size,
     )
     embedding = embedding.detach().cpu().numpy()
     timestamps = timestamps.detach().cpu().numpy()
@@ -98,9 +98,9 @@ def task_embeddings():
 
     for task in glob.glob("tasks/*"):
         # TODO: We should be reading the metadata that describes
-        # the frame_rate.
+        # the hop_size.
         # https://github.com/neuralaudio/hear2021-eval-kit/issues/53
-        frame_rate = 10
+        hop_size = 0.1
 
         # TODO: Include "val" ?
         for split in ["train", "test"]:
@@ -128,7 +128,7 @@ def task_embeddings():
 
                 audios = np.vstack(audios)
                 embedding, timestamps = get_audio_embedding_numpy(
-                    audios, model=model, frame_rate=frame_rate
+                    audios, model=model, hop_size=hop_size
                 )
 
                 for i, filename in enumerate(files):
