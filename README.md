@@ -2,11 +2,17 @@
 
 Evaluation kit for HEAR 2021 NeurIPS competition
 
+See [ROADMAP](ROADMAP.md).
+
+## Usage
+
 ```
 pip install heareval
 ```
 
-#### Development
+[later we will include more details here]
+
+## Development
 
 Clone repo:
 ```
