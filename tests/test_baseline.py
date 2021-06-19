@@ -24,7 +24,7 @@ class TestEmbeddingsTimestamps:
         self.embeddings_ct, self.ts_ct = get_audio_embedding(
             audio=self.audio,
             model=self.model,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             batch_size=512,
         )
 
@@ -39,7 +39,7 @@ class TestEmbeddingsTimestamps:
         embeddings_ct, _ = get_audio_embedding(
             audio=self.audio,
             model=self.model,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             batch_size=512,
         )
 
@@ -57,19 +57,19 @@ class TestEmbeddingsTimestamps:
         embeddingsa, _ = get_audio_embedding(
             audio=audioa,
             model=self.model,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             batch_size=512,
         )
         embeddingsb, _ = get_audio_embedding(
             audio=audiob,
             model=self.model,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             batch_size=512,
         )
         embeddingsab, _ = get_audio_embedding(
             audio=audioab,
             model=self.model,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             batch_size=512,
         )
 
@@ -86,13 +86,13 @@ class TestEmbeddingsTimestamps:
         audio_sliced_framed, _ = frame_audio(
             audio_sliced,
             frame_size=4096,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             sample_rate=self.sample_rate,
         )
         audio_framed, _ = frame_audio(
             self.audio,
             frame_size=4096,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             sample_rate=self.sample_rate,
         )
         assert torch.all(audio_sliced_framed == audio_framed[::2])
@@ -101,7 +101,7 @@ class TestEmbeddingsTimestamps:
         embeddings_sliced, _ = get_audio_embedding(
             audio=audio_sliced,
             model=self.model,
-            frame_rate=self.sample_rate / 256,
+            hop_size=256 / self.sample_rate,
             batch_size=512,
         )
 
@@ -180,12 +180,12 @@ class TestFraming:
         sr = 44100
         num_audio = 16
         duration = 1.1
-        frame_rate = 4.0
+        hop_size = 0.25
         frame_size = 4096
 
         audio = torch.rand((num_audio, int(sr * duration)), device=device)
         frames, timestamps = frame_audio(
-            audio, frame_size=frame_size, frame_rate=frame_rate, sample_rate=sr
+            audio, frame_size=frame_size, hop_size=hop_size, sample_rate=sr
         )
 
         expected_frames_shape = (num_audio, 5, frame_size)
@@ -209,8 +209,8 @@ class TestDistance:
     def test_pairwise_distance(self):
 
         # Test distance of zero between same audio
-        emb1, _ = get_audio_embedding(self.audio, self.model, frame_rate=4.0)
-        emb2, _ = get_audio_embedding(self.audio, self.model, frame_rate=4.0)
+        emb1, _ = get_audio_embedding(self.audio, self.model, hop_size=0.25)
+        emb2, _ = get_audio_embedding(self.audio, self.model, hop_size=0.25)
 
         distances = pairwise_distance(emb1, emb2)
         assert distances.shape == (emb1.shape[0], emb2.shape[0])

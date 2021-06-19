@@ -92,18 +92,17 @@ def load_model(model_file_path: str = "", device: str = "cpu") -> torch.nn.Modul
 
 
 def frame_audio(
-    audio: Tensor, frame_size: int, frame_rate: float, sample_rate: int
+    audio: Tensor, frame_size: int, hop_size: float, sample_rate: int
 ) -> Tuple[Tensor, Tensor]:
     """
     Slices input audio into frames that are centered and occur every
-    sample_rate / frame_rate samples. If sample_rate is not divisible
-    by frame_rate, we round to the nearest sample.
+    sample_rate * hop_size samples. We round to the nearest sample.
 
     Args:
         audio: input audio, expects a 2d Tensor of shape:
             (batch_size, num_samples)
         frame_size: the number of samples each resulting frame should be
-        frame_rate: number of frames per second of audio
+        hop_size: hop size between frames, in seconds
         sample_rate: sampling rate of the input audio
 
     Returns:
@@ -121,12 +120,12 @@ def frame_audio(
     frame_end = frame_size
     while True:
         frames.append(audio[:, frame_start:frame_end])
-        timestamps.append(frame_number / frame_rate)
+        timestamps.append(frame_number * hop_size)
 
         # Increment the frame_number and break the loop if the next frame end
         # will extend past the end of the padded audio samples
         frame_number += 1
-        frame_start = int(round(sample_rate * frame_number / frame_rate))
+        frame_start = int(round(sample_rate * frame_number * hop_size))
         frame_end = frame_start + frame_size
 
         if not frame_end <= num_padded_samples:
@@ -138,7 +137,7 @@ def frame_audio(
 def get_audio_embedding(
     audio: Tensor,
     model: torch.nn.Module,
-    frame_rate: float,
+    hop_size: float,
     batch_size: Optional[int] = 512,
     disable_gradients: bool = True,
 ) -> Tuple[Tensor, Tensor]:
@@ -153,11 +152,14 @@ def get_audio_embedding(
             could be a wrapper function added later.
         model: Loaded model, in PyTorch or Tensorflow 2.x. This
             should be moved to the device the audio tensor is on.
-        frame_rate: Number of embeddings that the model should return
-            per second. Embeddings and the corresponding timestamps should
-            start at 0s and increment by 1/frame_rate seconds. For example,
-            if the audio is 1.1s and the frame_rate is 4.0, then we should
-            return embeddings centered at 0.0s, 0.25s, 0.5s, 0.75s and 1.0s.
+            hop_size: Extract embeddings every hop_size seconds (e.g.
+                    hop_size = 0.1 is an embedding frame rate of
+                    10 Hz). Embeddings and the corresponding
+                    timestamps should start at 0s and increment by
+                    hop_size seconds. For example, if the audio is
+                    1.1s and the hop_size is 0.25, then we should
+                    return embeddings centered at 0.0s, 0.25s, 0.5s,
+                    0.75s and 1.0s.
         batch_size: The participants are responsible for estimating
             the batch_size that will achieve high-throughput while
             maintaining appropriate memory constraints. However,
@@ -192,7 +194,7 @@ def get_audio_embedding(
     frames, timestamps = frame_audio(
         audio,
         frame_size=model.n_fft,
-        frame_rate=frame_rate,
+        hop_size=hop_size,
         sample_rate=RandomProjectionMelEmbedding.sample_rate,
     )
     audio_batches, num_frames, frame_size = frames.shape

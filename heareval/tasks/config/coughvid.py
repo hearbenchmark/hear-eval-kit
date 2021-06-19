@@ -17,8 +17,7 @@ NUM_WORKERS = 4
 SAMPLE_RATES = [48000, 44100, 22050, 16000]
 # TODO: Pick the 75th percentile length?
 SAMPLE_LENGTH_SECONDS = 8.0
-# TODO: Do we want to call this FRAME_RATE or HOP_SIZE
-FRAME_RATE = 4
+HOP_SIZE = 0.25
 # Set this to None if you want to use ALL the data.
 # NOTE: This will be, expected, 225 test files only :\
 # NOTE: You can make this smaller during development of this
@@ -30,4 +29,4 @@ FRAME_RATE = 4
 # (This is why we should have one working directory per task)
 MAX_FRAMES_PER_CORPUS = 20 * 3600
 
-MAX_FILES_PER_CORPUS = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
+MAX_FILES_PER_CORPUS = int(MAX_FRAMES_PER_CORPUS * HOP_SIZE / SAMPLE_LENGTH_SECONDS)

@@ -147,3 +147,9 @@ tasks/
 embeddings/
 
 lightning_logs/
+
+# Mac
+.DS_Store
+
+# Audio
+*.wav
