@@ -7,6 +7,7 @@ Configuration for the google speech commands task
 
 TASKNAME = "speech_commands-v0.0.2"
 DOWNLOAD_URL = "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz"
+SEED = 43
 
 # Number of CPU workers for Luigi jobs
 NUM_WORKERS = 4

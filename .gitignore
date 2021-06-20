@@ -140,9 +140,17 @@ heareval/tasks/coughvid-*/
 # vim
 *.sw?
 
-# Pycharm
 .idea/
 
-# Ignore Mac DS_Store files
+# Output directories for task audio and embeddings
+tasks/
+embeddings/
+
+# Mac
 .DS_Store
-**/.DS_Store
+
+# Audio
+*.wav
+
+# vscode
+.vscode

@@ -6,6 +6,29 @@ import os
 import subprocess
 
 
+def mono_wav_and_trim_audio(in_file: str, out_file: str, min_dur: int):
+    devnull = open(os.devnull, "w")
+    ret = subprocess.call(
+        [
+            "ffmpeg",
+            "-y",
+            "-i",
+            in_file,
+            "-filter_complex",
+            f"apad=whole_dur={str(min_dur)}",
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_f32le",
+            out_file,
+        ],
+        stdout=devnull,
+        stderr=devnull,
+    )
+    # Make sure the return code is 0 and the command was successful.
+    assert ret == 0
+
+
 def convert_to_mono_wav(in_file: str, out_file: str):
     devnull = open(os.devnull, "w")
     # If we knew the sample rate, we could also pad/trim the audio file now, e.g.:
@@ -31,8 +54,8 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
             "ffmpeg",
             "-i",
             in_file,
-            "-af",
-            "aresample=resampler=soxr",
+            # "-af",
+            # "aresample=resampler=soxr",
             "-ar",
             str(out_sr),
             out_file,
