@@ -10,7 +10,10 @@ import argparse
 import csv
 import pandas as pd
 
-def generate_random_predictions(num_labels: int, audio_length: flaot=1.0, hop_size: float=33.0) -> np.ndarray:
+
+def generate_random_predictions(
+    num_labels: int, audio_length: flaot = 1.0, hop_size: float = 33.0
+) -> np.ndarray:
     """
     Generate a set of random predictions for testing the evaluation
 
@@ -26,7 +29,9 @@ def generate_random_predictions(num_labels: int, audio_length: flaot=1.0, hop_si
     return np.random.random((num_hops, num_labels))
 
 
-def evaluate_framewise_predictions(pred: Dict[str, np.ndarry], truth: Dict[str, int]) -> float:
+def evaluate_framewise_predictions(
+    pred: Dict[str, np.ndarry], truth: Dict[str, int]
+) -> float:
     """
     Evaluate the framewise predictions using top-1 error
     """
@@ -45,9 +50,9 @@ def evaluate_framewise_predictions(pred: Dict[str, np.ndarry], truth: Dict[str, 
 def main(arguments):
 
     parser = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('truth', help="Ground truth csv", type=str)
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("truth", help="Ground truth csv", type=str)
 
     args = parser.parse_args(arguments)
 
@@ -62,8 +67,10 @@ def main(arguments):
     # Keep labels ordered so we can associate integers with them
     labels = sorted(list(labels))
 
-    print(f"Performing evaluation on {len(truth)} predictions"
-          f" with {len(labels)} ground truth labels")
+    print(
+        f"Performing evaluation on {len(truth)} predictions"
+        f" with {len(labels)} ground truth labels"
+    )
 
     # We will eventually load in the prediction file, but here we will generate
     # random framewise predictions for each audio file
@@ -81,5 +88,6 @@ def main(arguments):
     error = evaluate_framewise_predictions(predictions, ground_truth)
     print("Top-1 Error for predictions:", error)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
