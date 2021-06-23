@@ -21,12 +21,11 @@ from typing import Dict
 import numpy as np
 import sys
 import argparse
-import csv
 import pandas as pd
 
 
 def generate_random_predictions(
-    num_labels: int, audio_length: flaot = 1.0, hop_size: float = 33.0
+    num_labels: int, audio_length: float = 1.0, hop_size: float = 33.0
 ) -> np.ndarray:
     """
     Generate a set of random predictions for testing the evaluation
@@ -44,7 +43,7 @@ def generate_random_predictions(
 
 
 def evaluate_framewise_predictions(
-    pred: Dict[str, np.ndarry], truth: Dict[str, int]
+    pred: Dict[str, np.ndarray], truth: Dict[str, int]
 ) -> float:
     """
     Evaluate the framewise predictions using top-1 error
