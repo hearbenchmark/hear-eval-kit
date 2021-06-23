@@ -2,6 +2,20 @@
 
 """
 Run evaluation on google speech command predictions
+
+This is currently a simple mock evaluation on the test set from
+google speech commands. This test set uses ten command words plus
+unknown commands and silence for potential labels. A ground truth
+csv file is passed in to this sript and random frame-wise predictions
+are generated for each audio file referenced. Top-1 error is calculated
+on the mean-pooled predictions.
+
+# TODO:
+    - Do we want this to be in a luigi pipeline?
+    - The csv ground truth is generated from the test audio files, this
+        may or may not be the correct ending format
+    - Update this to accept a prediction csv (or a folder of prediction csvs)
+        instead of randomly generating class probabilities
 """
 from typing import Dict
 import numpy as np
@@ -53,7 +67,6 @@ def main(arguments):
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("truth", help="Ground truth csv", type=str)
-
     args = parser.parse_args(arguments)
 
     # Load in truth file csv
