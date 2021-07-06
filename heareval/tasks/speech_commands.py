@@ -28,9 +28,67 @@ from heareval.tasks.util.luigi import (
     slugify_file_name,
     which_set,
 )
+import tensorflow as tf
+import tensorflow_datasets as tfds
 
 # Set the task name for all WorkTasks
 WorkTask.task_name = config.TASKNAME
+
+
+class LoadTensorFlowDataset(WorkTask):
+
+    dataset = luigi.Parameter()
+    version = luigi.Parameter()
+
+    def run(self):
+        # This downloads and saves the full dataset as tfrecords. The nice thing about
+        # using this method is that it sets up the train/val/test splits for us
+        # according to the pre-defined method. Also, it generates the _silence_ examples
+        # too which we weren't doing before.
+        builder = tfds.builder(
+            self.dataset, version=self.version, data_dir=self.workdir
+        )
+        builder.download_and_prepare()
+        with self.output().open("w") as _:
+            pass
+
+    @property
+    def stage_number(self) -> int:
+        return 0
+
+
+class ExportTFDS(WorkTask):
+    def requires(self):
+        return {
+            "download": LoadTensorFlowDataset("speech_commands", "0.0.2"),
+        }
+
+    def run(self):
+        download = self.requires()["download"]
+        builder = tfds.builder(download.dataset, data_dir=download.workdir)
+
+        train = builder.as_dataset(split="train", shuffle_files=False)
+        val = builder.as_dataset(split="validation", shuffle_files=False)
+        test = builder.as_dataset(split="test", shuffle_files=False)
+
+        assert isinstance(train, tf.data.Dataset)
+
+        # Sample rate of all the audio files
+        sample_rate = builder._info().features["audio"].sample_rate
+
+        # We can also get the text labels for each class
+        labels = builder._info().features["label"]
+        print(labels.num_classes)
+        print(labels.names)
+
+        for item in train:
+            # We can save all the audio files for the pre-defined splits as wav files.
+            audio = item["audio"]
+            label = item["label"]
+
+        # Do the same for the validation and test sets
+
+        # TODO: not so sure about how subsampling works after this?
 
 
 class ExtractArchive(ExtractArchive):
@@ -173,7 +231,7 @@ def main():
     ensure_dir("_workdir")
 
     luigi.build(
-        [FinalizeCorpus()],
+        [ExportTFDS()],
         workers=config.NUM_WORKERS,
         local_scheduler=True,
         log_level="INFO",

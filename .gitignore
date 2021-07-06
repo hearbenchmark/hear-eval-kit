@@ -143,8 +143,8 @@ heareval/tasks/coughvid-*/
 .idea/
 
 # Output directories for task audio and embeddings
-tasks/
-embeddings/
+# tasks/
+# embeddings/
 
 # Mac
 .DS_Store
