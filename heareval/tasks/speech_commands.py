@@ -33,6 +33,8 @@ from heareval.tasks.util.luigi import (
 # Set the task name for all WorkTasks
 WorkTask.task_name = config.TASKNAME
 
+BACKGROUND_NOISE = "_background_noise_"
+
 
 class ExtractArchiveTrain(ExtractArchive):
     def requires(self):
@@ -66,24 +68,36 @@ class ConfigureProcessMetaData(WorkTask):
     def run(self):
 
         train_path = Path(self.requires()["train"].workdir)
-        train_file = Path(os.path.join(train_path, "testing_list.txt"))
-        with train_file.open() as fp:
-            train_test_paths = fp.read().strip().splitlines()
-            train_test_paths = [
-                Path(os.path.join(train_path, p)) for p in train_test_paths
-            ]
 
-        validation_file = Path(os.path.join(train_path, "validation_list.txt"))
-        with validation_file.open() as fp:
+        # List of all relative paths to the testing and validation files
+        with open(os.path.join(train_path, "testing_list.txt"), "r") as fp:
+            train_test_paths = fp.read().strip().splitlines()
+
+        with open(os.path.join(train_path, "validation_list.txt"), "r") as fp:
             validation_paths = fp.read().strip().splitlines()
 
-        print(train_test_paths)
+        all_audio = [str(p.relative_to(train_path)) for p in train_path.glob("*/*.wav")]
 
-        train_path = Path(self.requires()["train"].workdir)
-        train_files = list(train_path.glob("*/*.wav"))
-        train_files = set(train_files)
+        # Need to manually add a background noise file into the validation set.
+        validation_paths.append(os.path.join(BACKGROUND_NOISE, "running_tap.wav"))
 
-        # print(train_files)
+        # The training set is files that are not in either the train-test or validation.
+        train_paths = set(all_audio) - set(train_test_paths) - set(validation_paths)
+
+        # The testing set is all the files in the separate testing download
+        # test_path = Path(self.requires()["test"].workdir)
+        # test_paths = [p.relative_to(test_path) for p in test_path.glob("*/*.wav")]
+
+        process_metadata = pd.DataFrame(train_paths, columns=["relpath"])
+        process_metadata["slug"] = process_metadata["relpath"].apply(slugify_file_name)
+
+        # Save the process metadata
+        process_metadata.to_csv(
+            os.path.join(self.workdir, "process_metadata.csv"),
+            columns=["relpath", "slug"],
+            header=False,
+            index=False,
+        )
 
         # Get relative path of the audio files
         # This file can also be built with the metadata file for the dataset
