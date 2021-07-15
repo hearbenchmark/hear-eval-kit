@@ -12,6 +12,9 @@ import heareval.tasks.config.speech_commands as config
 import luigi
 import numpy as np
 import pandas as pd
+import soundfile as sf
+from tqdm import tqdm
+
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
     DownloadCorpus,
@@ -33,7 +36,10 @@ from heareval.tasks.util.luigi import (
 # Set the task name for all WorkTasks
 WorkTask.task_name = config.TASKNAME
 
+WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
 BACKGROUND_NOISE = "_background_noise_"
+UNKNOWN = "_unknown_"
+SILENCE = "_silence_"
 
 
 class ExtractArchiveTrain(ExtractArchive):
@@ -54,16 +60,95 @@ class ExtractArchiveTest(ExtractArchive):
         }
 
 
+class GenerateTrainDataset(WorkTask):
+    """
+    Silence / background samples in the train / validation silents need to be
+    created by slicing up longer background samples into 1sec slices
+    """
+
+    def requires(self):
+        return {"train": ExtractArchiveTrain(infile="train-corpus.tar.gz")}
+
+    def run(self):
+
+        train_path = Path(self.requires()["train"].workdir)
+        background_audio = list(train_path.glob(f"{BACKGROUND_NOISE}/*.wav"))
+
+        # Read all the background audio files and split into 1 second segments,
+        # save all the segments into a folder called _silence_
+        silence_dir = os.path.join(self.workdir, SILENCE)
+        os.makedirs(silence_dir, exist_ok=True)
+
+        print("Generating silence files from background sounds ...")
+        for audio_path in tqdm(background_audio):
+            audio, sr = sf.read(audio_path)
+
+            basename = os.path.basename(audio_path)
+            name, ext = os.path.splitext(basename)
+
+            for start in range(0, len(audio) - sr, sr // 2):
+                audio_segment = audio[start : start + sr]
+                filename = f"{name}-{start}{ext}"
+                filename = os.path.join(silence_dir, filename)
+                sf.write(filename, audio_segment, sr)
+
+        # We'll also create symlinks for the dataset here too to make the next
+        # stage of splitting into training and validation files easier.
+        for file_obj in train_path.iterdir():
+            if file_obj.is_dir() and file_obj.name != BACKGROUND_NOISE:
+                linked_folder = Path(os.path.join(self.workdir, file_obj.name))
+                linked_folder.unlink(missing_ok=True)
+                linked_folder.symlink_to(file_obj.absolute(), target_is_directory=True)
+
+            # Also need the testing and validation splits
+            if file_obj.name in ["testing_list.txt", "validation_list.txt"]:
+                linked_file = Path(os.path.join(self.workdir, file_obj.name))
+                linked_file.unlink(missing_ok=True)
+                linked_file.symlink_to(file_obj.absolute())
+
+        # # Create symlinks to the remainder of the dataset
+        # audio_files = list(train_path.glob("[!_]*/*.wav"))
+        #
+        # # Create folders for all the known labels as well as the unknown
+        # os.makedirs(os.path.join(self.workdir, UNKNOWN), exist_ok=True)
+        # for word in WORDS:
+        #     os.makedirs(os.path.join(self.workdir, word), exist_ok=True)
+        #
+        # print("Splitting dataset into labels ... ")
+        # for audio_path in tqdm(audio_files):
+        #     label = str(audio_path.relative_to(train_path).parent).strip()
+        #     if label in WORDS:
+        #         new_path = Path(os.path.join(self.workdir, label, audio_path.name))
+        #         new_path.unlink(missing_ok=True)
+        #         new_path.symlink_to(audio_path)
+        #     else:
+        #         filename = f"{label}_{audio_path.name}"
+        #         new_path = Path(os.path.join(self.workdir, UNKNOWN, filename))
+        #         new_path.unlink(missing_ok=True)
+        #         new_path.symlink_to(audio_path)
+
+        self.mark_complete()
+
+
 class ConfigureProcessMetaData(WorkTask):
     """
     This config is data dependent and has to be set for each data
     """
 
+    outfile = luigi.Parameter()
+
     def requires(self):
         return {
-            "train": ExtractArchiveTrain(infile="train-corpus.tar.gz"),
+            "train": GenerateTrainDataset(),
             "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
         }
+
+    @staticmethod
+    def apply_label(relative_path):
+        label = os.path.basename(os.path.dirname(relative_path))
+        if label not in WORDS and label != SILENCE:
+            label = UNKNOWN
+        return label
 
     def run(self):
 
@@ -76,47 +161,42 @@ class ConfigureProcessMetaData(WorkTask):
         with open(os.path.join(train_path, "validation_list.txt"), "r") as fp:
             validation_paths = fp.read().strip().splitlines()
 
-        all_audio = [str(p.relative_to(train_path)) for p in train_path.glob("*/*.wav")]
-
-        # Need to manually add a background noise file into the validation set.
-        validation_paths.append(os.path.join(BACKGROUND_NOISE, "running_tap.wav"))
+        audio_paths = [
+            str(p.relative_to(train_path)) for p in train_path.glob("[!_]*/*.wav")
+        ]
 
         # The training set is files that are not in either the train-test or validation.
-        train_paths = set(all_audio) - set(train_test_paths) - set(validation_paths)
+        train_paths = set(audio_paths) - set(train_test_paths) - set(validation_paths)
+        train_paths = list(train_paths)
+
+        # Manually add in the silent samples
+        all_silence = [
+            str(p.relative_to(train_path)) for p in train_path.glob(f"{SILENCE}/*.wav")
+        ]
+        val_silence = [
+            str(p.relative_to(train_path))
+            for p in train_path.glob(f"{SILENCE}/running_tap*.wav")
+        ]
+        train_silence = list(set(all_silence) - set(val_silence))
+
+        train_paths.extend(train_silence)
+        validation_paths.extend(val_silence)
 
         # The testing set is all the files in the separate testing download
         # test_path = Path(self.requires()["test"].workdir)
         # test_paths = [p.relative_to(test_path) for p in test_path.glob("*/*.wav")]
 
         process_metadata = pd.DataFrame(train_paths, columns=["relpath"])
+        process_metadata["partition"] = "train"
+
+        # Add all the validation files
+        val_metadata = pd.DataFrame(validation_paths, columns=["relpath"])
+        val_metadata["partition"] = "validation"
+        process_metadata = process_metadata.append(val_metadata)
+
         process_metadata["slug"] = process_metadata["relpath"].apply(slugify_file_name)
-
-        # Save the process metadata
-        process_metadata.to_csv(
-            os.path.join(self.workdir, "process_metadata.csv"),
-            columns=["relpath", "slug"],
-            header=False,
-            index=False,
-        )
-
-        # Get relative path of the audio files
-        # This file can also be built with the metadata file for the dataset
-        # in case the metadata is provided
-        process_metadata = pd.DataFrame(
-            glob(os.path.join(self.requires().workdir, "[!_]*/*.wav")),
-            columns=["relpath"],
-        )
-
-        # Get unique slug for each file
-        # In this case the base name is not excluded since same person have made dataset
-        # for different category
-        # This is something which is data dependent and should be handled here
-        process_metadata["slug"] = (
-            process_metadata["relpath"]
-            # Dont exclude the base name. Apply sluggify on all
-            .apply(partial(os.path.relpath, start=self.requires().workdir)).apply(
-                slugify_file_name
-            )
+        process_metadata["relpath"] = process_metadata["relpath"].apply(
+            partial(os.path.join, train_path)
         )
 
         # Hash the field id rather than the full path.
@@ -132,34 +212,36 @@ class ConfigureProcessMetaData(WorkTask):
             .apply(filename_to_int_hash)
         )
 
-        # Get the data partition either from the input file or by doing the hash
-        process_metadata["partition"] = process_metadata["filename_hash"].apply(
-            partial(which_set, validation_percentage=0.0, testing_percentage=10.0)
-        )
-
         # Get label for the data from anywhere.
         # In this case it is the folder name
-        process_metadata["label"] = process_metadata["relpath"].apply(
-            lambda relative_path: os.path.basename(os.path.dirname(relative_path))
+        process_metadata["label"] = process_metadata["relpath"].apply(self.apply_label)
+
+        # Get unique slug for each file
+        # In this case the base name is not excluded since same person have made dataset
+        # for different category
+        # This is something which is data dependent and should be handled here
+        process_metadata["slug"] = (
+            process_metadata["relpath"]
+            # Dont exclude the base name. Apply sluggify on all
+            .apply(partial(os.path.relpath, start=train_path)).apply(slugify_file_name)
         )
 
         # Save the process metadata
         process_metadata.to_csv(
-            os.path.join(self.workdir, "process_metadata.csv"),
+            os.path.join(self.workdir, self.outfile),
             columns=PROCESSMETADATACOLS,
             header=False,
             index=False,
         )
 
-        with self.output().open("w") as _:
-            pass
+        self.mark_complete()
 
 
 class SubsampleCorpus(SubsampleCorpus):
     def requires(self):
         # The meta files contain the path of the files in the data
         # so we dont need to pass the extract as a dependency here.
-        return {"meta": ConfigureProcessMetaData()}
+        return {"meta": ConfigureProcessMetaData(outfile="train_corpus_metadata.csv")}
 
 
 class MonoWavTrimCorpus(MonoWavTrimCorpus):
@@ -175,7 +257,7 @@ class SplitTrainTestCorpus(SplitTrainTestCorpus):
         # audio file
         return {
             "corpus": MonoWavTrimCorpus(min_sample_length=config.SAMPLE_LENGTH_SECONDS),
-            "meta": ConfigureProcessMetaData(),
+            "meta": ConfigureProcessMetaData(outfile="train_corpus_metadata.csv"),
         }
 
 
@@ -186,7 +268,7 @@ class SplitTrainTestMetadata(SplitTrainTestMetadata):
         # which are in the traintestcorpus
         return {
             "traintestcorpus": SplitTrainTestCorpus(),
-            "meta": ConfigureProcessMetaData(),
+            "meta": ConfigureProcessMetaData(outfile="train_corpus_metadata.csv"),
         }
 
 

@@ -65,6 +65,10 @@ class WorkTask(luigi.Task):
         )
         return luigi.LocalTarget(f)
 
+    def mark_complete(self):
+        # Touches the output file, marking this task as complete
+        self.output().open("w").close()
+
     @property
     def workdir(self):
         d = os.path.join(self.task_subdir, f"{self.stage_number:02d}-{self.name}")
@@ -152,7 +156,9 @@ class SubsampleCorpus(WorkTask):
 
     def run(self):
         process_metadata = pd.read_csv(
-            os.path.join(self.requires()["meta"].workdir, "process_metadata.csv"),
+            os.path.join(
+                self.requires()["meta"].workdir, self.requires()["meta"].outfile
+            ),
             header=None,
             names=PROCESSMETADATACOLS,
         )[["filename_hash", "slug", "relpath"]]

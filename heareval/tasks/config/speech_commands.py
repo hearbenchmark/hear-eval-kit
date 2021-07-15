@@ -21,8 +21,7 @@ NUM_WORKERS = 4
 # want them all.
 SAMPLE_RATES = [48000, 44100, 22050, 16000]
 
-# TODO: Pick the 75th percentile length?
-SAMPLE_LENGTH_SECONDS = 8.0
+SAMPLE_LENGTH_SECONDS = 1.0
 
 # TODO: Do we want to call this FRAME_RATE or HOP_SIZE
 FRAME_RATE = 4
@@ -38,4 +37,4 @@ FRAME_RATE = 4
 # (This is why we should have one working directory per task)
 MAX_FRAMES_PER_CORPUS = 20 * 3600
 
-MAX_FILES_PER_CORPUS = int(MAX_FRAMES_PER_CORPUS / FRAME_RATE / SAMPLE_LENGTH_SECONDS)
+MAX_FILES_PER_CORPUS = 1000
