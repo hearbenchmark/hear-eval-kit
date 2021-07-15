@@ -6,6 +6,7 @@ import os
 import re
 from functools import partial
 from glob import glob
+from pathlib import Path
 
 import heareval.tasks.config.speech_commands as config
 import luigi
@@ -33,10 +34,21 @@ from heareval.tasks.util.luigi import (
 WorkTask.task_name = config.TASKNAME
 
 
-class ExtractArchive(ExtractArchive):
+class ExtractArchiveTrain(ExtractArchive):
     def requires(self):
         return {
-            "download": DownloadCorpus(url=config.DOWNLOAD_URL, outfile="corpus.tar.gz")
+            "download": DownloadCorpus(
+                url=config.DOWNLOAD_URL, outfile="train-corpus.tar.gz"
+            )
+        }
+
+
+class ExtractArchiveTest(ExtractArchive):
+    def requires(self):
+        return {
+            "download": DownloadCorpus(
+                url=config.TEST_DOWNLOAD_URL, outfile="test-corpus.tar.gz"
+            )
         }
 
 
@@ -46,9 +58,33 @@ class ConfigureProcessMetaData(WorkTask):
     """
 
     def requires(self):
-        return ExtractArchive(infile="corpus.tar.gz")
+        return {
+            "train": ExtractArchiveTrain(infile="train-corpus.tar.gz"),
+            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
+        }
 
     def run(self):
+
+        train_path = Path(self.requires()["train"].workdir)
+        train_file = Path(os.path.join(train_path, "testing_list.txt"))
+        with train_file.open() as fp:
+            train_test_paths = fp.read().strip().splitlines()
+            train_test_paths = [
+                Path(os.path.join(train_path, p)) for p in train_test_paths
+            ]
+
+        validation_file = Path(os.path.join(train_path, "validation_list.txt"))
+        with validation_file.open() as fp:
+            validation_paths = fp.read().strip().splitlines()
+
+        print(train_test_paths)
+
+        train_path = Path(self.requires()["train"].workdir)
+        train_files = list(train_path.glob("*/*.wav"))
+        train_files = set(train_files)
+
+        # print(train_files)
+
         # Get relative path of the audio files
         # This file can also be built with the metadata file for the dataset
         # in case the metadata is provided
