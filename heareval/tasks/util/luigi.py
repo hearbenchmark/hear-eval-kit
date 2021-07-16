@@ -242,8 +242,8 @@ class SplitTrainTestCorpus(WorkTask):
         raise NotImplementedError("This method requires a meta and a corpus tasks")
 
     def run(self):
-        # Get the process metadata. This gives the freedom of picking the train test label either
-        # from the provide metadata file or any other method.
+        # Get the process metadata. This gives the freedom of picking the train test
+        # label either from the provide metadata file or any other method.
 
         # Writing slug and partition makes it explicit that these columns are required
         meta = self.requires()["meta"]
@@ -253,8 +253,9 @@ class SplitTrainTestCorpus(WorkTask):
             names=PROCESSMETADATACOLS,
         )[["slug", "partition"]]
 
-        # Go over the subsampled folder and pick the audio files. The audio files are saved with their
-        # slug names and hence the corresponding label can be picked up from the preprocess config
+        # Go over the subsampled folder and pick the audio files. The audio files are
+        # saved with their slug names and hence the corresponding label can be picked
+        # up from the preprocess config
         for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*.wav"))):
             audio_slug = os.path.basename(audiofile)
             partition = process_metadata.loc[
@@ -284,7 +285,8 @@ class SplitTrainTestMetadata(WorkTask):
             names=PROCESSMETADATACOLS,
         )[["slug", "label"]]
 
-        # Automatically get the partitions from the traintestcorpus task and then get the files there
+        # Automatically get the partitions from the traintestcorpus task
+        # and then get the files there.
         for partition in os.listdir(self.requires()["traintestcorpus"].workdir):
             audiofiles = list(
                 glob(
@@ -298,14 +300,16 @@ class SplitTrainTestMetadata(WorkTask):
             # Check if we got any file in the partition
             if len(audiofiles) == 0:
                 raise RuntimeError(
-                    f"No audio files found in {self.requires()['traintestcorpus'].workdir}/{partition}"
+                    "No audio files found in "
+                    f"{self.requires()['traintestcorpus'].workdir}/{partition}"
                 )
-            # Get the filename which is also the slug of the file and the corresponding label
-            # can be picked up from the metadata
+            # Get the filename which is also the slug of the file and the
+            # corresponding label can be picked up from the metadata
             audiodf = pd.DataFrame(
                 [os.path.basename(a) for a in audiofiles], columns=["slug"]
             )
             assert len(audiofiles) == len(audiodf.drop_duplicates())
+
             # Get the label from the metadata with the help of the slug of the filename
             sublabeldf = labeldf.merge(audiodf, on="slug")[["slug", "label"]]
             # Check if all the labels were found from the metadata
@@ -393,7 +397,8 @@ class FinalizeCorpus(WorkTask):
 
     def requires(self):
         raise NotImplementedError(
-            "This method requires a list of resample tasks and a traintestmeta and vocabmeta task"
+            "This method requires a list of resample tasks "
+            "and a traintestmeta and vocabmeta task"
         )
 
     # We overwrite workdir here, because we want the output to be

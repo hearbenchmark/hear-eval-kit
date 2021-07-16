@@ -5,17 +5,14 @@ Pre-processing pipeline for Google Speech Commands
 import os
 import re
 from functools import partial
-from glob import glob
 from pathlib import Path
-import logging
 
-import heareval.tasks.config.speech_commands as config
 import luigi
-import numpy as np
 import pandas as pd
 import soundfile as sf
 from tqdm import tqdm
 
+import heareval.tasks.config.speech_commands as config
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
     DownloadCorpus,
@@ -26,13 +23,11 @@ from heareval.tasks.util.luigi import (
     ResampleSubCorpus,
     SplitTrainTestCorpus,
     SplitTrainTestMetadata,
-    SubsampleCorpus,
     SubsamplePartition,
     WorkTask,
     ensure_dir,
     filename_to_int_hash,
     slugify_file_name,
-    which_set,
 )
 
 # Set the task name for all WorkTasks
