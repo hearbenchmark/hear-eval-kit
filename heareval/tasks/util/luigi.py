@@ -7,6 +7,7 @@ import os
 import shutil
 import zipfile  # Required for shutil to work for tar.gz
 from glob import glob
+from pathlib import Path
 
 import luigi
 import pandas as pd
@@ -181,13 +182,12 @@ class SubsampleCorpus(WorkTask):
 
         # Save file using symlinks
         for _, audio in process_metadata.iterrows():
-            audiofile = audio["relpath"]
-            newaudiofile = os.path.join(self.workdir, audio["slug"])
-            assert not os.path.exists(newaudiofile)
-            os.symlink(os.path.realpath(audiofile), newaudiofile)
+            audiofile = Path(audio["relpath"])
+            newaudiofile = Path(os.path.join(self.workdir, audio["slug"]))
+            newaudiofile.unlink(missing_ok=True)
+            newaudiofile.symlink_to(audiofile.resolve())
 
-        with self.output().open("w") as _:
-            pass
+        self.mark_complete()
 
 
 class MonoWavTrimCorpus(WorkTask):

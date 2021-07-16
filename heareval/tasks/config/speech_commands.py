@@ -23,18 +23,7 @@ SAMPLE_RATES = [48000, 44100, 22050, 16000]
 
 SAMPLE_LENGTH_SECONDS = 1.0
 
-# TODO: Do we want to call this FRAME_RATE or HOP_SIZE
-FRAME_RATE = 4
 
-# Set this to None if you want to use ALL the data.
-# NOTE: This will be, expected, 225 test files only :\
-# NOTE: You can make this smaller during development of this
-# preprocessing script, to keep the pipeline fast.
-# WARNING: If you change this value, you *must* delete _workdir
-# or working dir.
-# Most of the tasks iterate over every audio file present,
-# except for the one that downsamples the corpus.
-# (This is why we should have one working directory per task)
-MAX_FRAMES_PER_CORPUS = 20 * 3600
+MAX_HOURS = 10
 
-MAX_FILES_PER_CORPUS = 1000
+MAX_FILES_PER_CORPUS = int(MAX_HOURS * 60.0 * 60.0 / SAMPLE_LENGTH_SECONDS)

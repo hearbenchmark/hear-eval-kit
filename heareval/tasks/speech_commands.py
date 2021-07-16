@@ -7,6 +7,7 @@ import re
 from functools import partial
 from glob import glob
 from pathlib import Path
+import logging
 
 import heareval.tasks.config.speech_commands as config
 import luigi
@@ -70,7 +71,6 @@ class GenerateTrainDataset(WorkTask):
         return {"train": ExtractArchiveTrain(infile="train-corpus.tar.gz")}
 
     def run(self):
-
         train_path = Path(self.requires()["train"].workdir)
         background_audio = list(train_path.glob(f"{BACKGROUND_NOISE}/*.wav"))
 

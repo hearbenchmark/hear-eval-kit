@@ -3,27 +3,28 @@ Audio utility functions for evaluation task preparation
 """
 
 import os
+import logging
+from pathlib import Path
 import subprocess
 
 
 def mono_wav_and_trim_audio(in_file: str, out_file: str, min_dur: int):
-    devnull = open(os.devnull, "w")
     ret = subprocess.call(
         [
             "ffmpeg",
             "-y",
             "-i",
-            in_file,
+            str(in_file),
             "-filter_complex",
             f"apad=whole_dur={str(min_dur)}",
             "-ac",
             "1",
             "-c:a",
             "pcm_f32le",
-            out_file,
+            str(out_file),
         ],
-        stdout=devnull,
-        stderr=devnull,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     # Make sure the return code is 0 and the command was successful.
     assert ret == 0
