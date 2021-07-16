@@ -155,14 +155,19 @@ class SubsampleCorpus(WorkTask):
     def requires(self):
         raise NotImplementedError("This method requires a meta tasks")
 
-    def run(self):
-        process_metadata = pd.read_csv(
+    def get_metadata(self):
+        metadata = pd.read_csv(
             os.path.join(
                 self.requires()["meta"].workdir, self.requires()["meta"].outfile
             ),
             header=None,
             names=PROCESSMETADATACOLS,
         )[["filename_hash", "slug", "relpath"]]
+        return metadata
+
+    def run(self):
+
+        process_metadata = self.get_metadata()
         # Subsample the files based on max files per corpus.
         # The filename hash is used here
         # This task can also be done in the configprocessmetadata as that will give
@@ -188,6 +193,26 @@ class SubsampleCorpus(WorkTask):
             newaudiofile.symlink_to(audiofile.resolve())
 
         self.mark_complete()
+
+
+class SubsamplePartition(SubsampleCorpus):
+    """
+    Performs subsampling on a specific partition
+    """
+
+    partition = luigi.Parameter()
+
+    def get_metadata(self):
+        metadata = pd.read_csv(
+            os.path.join(
+                self.requires()["meta"].workdir, self.requires()["meta"].outfile
+            ),
+            header=None,
+            names=PROCESSMETADATACOLS,
+        )[["filename_hash", "slug", "relpath", "partition"]]
+
+        metadata = metadata[metadata["partition"] == self.partition]
+        return metadata
 
 
 class MonoWavTrimCorpus(WorkTask):

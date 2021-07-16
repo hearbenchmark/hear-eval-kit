@@ -27,6 +27,7 @@ from heareval.tasks.util.luigi import (
     SplitTrainTestCorpus,
     SplitTrainTestMetadata,
     SubsampleCorpus,
+    SubsamplePartition,
     WorkTask,
     ensure_dir,
     filename_to_int_hash,
@@ -268,19 +269,72 @@ class ConfigureTestMetaData(WorkTask):
         self.mark_complete()
 
 
-class SubsampleCorpus(SubsampleCorpus):
+class CombineMetaData(WorkTask):
+
+    outfile = luigi.Parameter()
+
+    def requires(self):
+        return {
+            "train": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
+            "test": ConfigureTestMetaData(outfile="test_corpus_metadata.csv"),
+        }
+
+    def run(self):
+        train = self.requires()["train"]
+        train_meta = pd.read_csv(
+            os.path.join(train.workdir, train.outfile),
+            header=None,
+            names=PROCESSMETADATACOLS,
+        )
+
+        test = self.requires()["test"]
+        test_meta = pd.read_csv(
+            os.path.join(test.workdir, test.outfile),
+            header=None,
+            names=PROCESSMETADATACOLS,
+        )
+
+        process_metadata = train_meta.append(test_meta)
+        # Save the process metadata
+        process_metadata.to_csv(
+            os.path.join(self.workdir, self.outfile),
+            columns=PROCESSMETADATACOLS,
+            header=False,
+            index=False,
+        )
+
+        self.mark_complete()
+
+
+class SubsamplePartition(SubsamplePartition):
     def requires(self):
         # The meta files contain the path of the files in the data
         # so we dont need to pass the extract as a dependency here.
         return {
-            "meta": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
-            "test": ConfigureTestMetaData(outfile="test_corpus_metadata.csv"),
+            "meta": CombineMetaData(outfile="process_metadata.csv"),
         }
+
+
+class SubsamplePartitions(WorkTask):
+    def requires(self):
+        # The meta files contain the path of the files in the data
+        # so we dont need to pass the extract as a dependency here.
+        return {
+            "train": SubsamplePartition(partition="train", max_files=100),
+            "test": SubsamplePartition(partition="test", max_files=100),
+            "validation": SubsamplePartition(partition="validation", max_files=100),
+        }
+
+    def run(self):
+        workdir = Path(self.workdir)
+        workdir.rmdir()
+        workdir.symlink_to(Path(self.requires()["train"].workdir).absolute())
+        self.mark_complete()
 
 
 class MonoWavTrimCorpus(MonoWavTrimCorpus):
     def requires(self):
-        return {"corpus": SubsampleCorpus(max_files=config.MAX_FILES_PER_CORPUS)}
+        return {"corpus": SubsamplePartitions()}
 
 
 class SplitTrainTestCorpus(SplitTrainTestCorpus):
@@ -289,7 +343,7 @@ class SplitTrainTestCorpus(SplitTrainTestCorpus):
         # audio file
         return {
             "corpus": MonoWavTrimCorpus(duration=config.SAMPLE_LENGTH_SECONDS),
-            "meta": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
+            "meta": CombineMetaData(outfile="process_metadata.csv"),
         }
 
 
@@ -300,7 +354,7 @@ class SplitTrainTestMetadata(SplitTrainTestMetadata):
         # which are in the traintestcorpus
         return {
             "traintestcorpus": SplitTrainTestCorpus(),
-            "meta": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
+            "meta": CombineMetaData(outfile="process_metadata.csv"),
         }
 
 
