@@ -15,7 +15,7 @@ import requests
 from slugify import slugify
 from tqdm import tqdm
 
-from heareval.tasks.util.audio import mono_wav_and_trim_audio, resample_wav
+import heareval.tasks.util.audio as audio_util
 
 PROCESSMETADATACOLS = [
     "relpath",
@@ -150,7 +150,7 @@ class ExtractArchive(WorkTask):
 
 
 class SubsampleCorpus(WorkTask):
-    max_file_per_corpus = luigi.IntParameter()
+    max_files = luigi.IntParameter()
 
     def requires(self):
         raise NotImplementedError("This method requires a meta tasks")
@@ -167,17 +167,17 @@ class SubsampleCorpus(WorkTask):
         # The filename hash is used here
         # This task can also be done in the configprocessmetadata as that will give
         # freedom to stratify the selection on some criterion?
-        if len(process_metadata) > self.max_file_per_corpus:
+        if len(process_metadata) > self.max_files:
             print(
                 f"{len(process_metadata)} audio files in corpus, \
-                    keeping only {self.max_file_per_corpus}"
+                    keeping only {self.max_files}"
             )
 
         # Sort by the filename hash and select the max file per corpus
         # The filename hash is done as part of the processmetadata because
         # the string to be hashed for each file is dependent on the data
         process_metadata = process_metadata.sort_values(by="filename_hash").iloc[
-            : self.max_file_per_corpus
+            : self.max_files
         ]
 
         # Save file using symlinks
@@ -193,7 +193,7 @@ class SubsampleCorpus(WorkTask):
 class MonoWavTrimCorpus(WorkTask):
     # This can simultaneously convert to wav type and trim the files as
     # well. Is this fine?
-    min_sample_length = luigi.IntParameter()
+    duration = luigi.FloatParameter()
 
     def requires(self):
         raise NotImplementedError("This method requires a corpus tasks")
@@ -205,11 +205,11 @@ class MonoWavTrimCorpus(WorkTask):
             newaudiofile = new_basedir(
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
-            mono_wav_and_trim_audio(
-                audiofile, newaudiofile, min_dur=self.min_sample_length
+            audio_util.mono_wav_and_fix_duration(
+                audiofile, newaudiofile, duration=self.duration
             )
-        with self.output().open("w") as _:
-            pass
+
+        self.mark_complete()
 
 
 class SplitTrainTestCorpus(WorkTask):
@@ -221,8 +221,9 @@ class SplitTrainTestCorpus(WorkTask):
         # from the provide metadata file or any other method.
 
         # Writing slug and partition makes it explicit that these columns are required
+        meta = self.requires()["meta"]
         process_metadata = pd.read_csv(
-            os.path.join(self.requires()["meta"].workdir, "process_metadata.csv"),
+            os.path.join(meta.workdir, meta.outfile),
             header=None,
             names=PROCESSMETADATACOLS,
         )[["slug", "partition"]]
@@ -251,8 +252,9 @@ class SplitTrainTestMetadata(WorkTask):
 
     def run(self):
         # Get the process metadata and select the required columns slug and label
+        meta = self.requires()["meta"]
         labeldf = pd.read_csv(
-            os.path.join(self.requires()["meta"].workdir, "process_metadata.csv"),
+            os.path.join(meta.workdir, meta.outfile),
             header=None,
             names=PROCESSMETADATACOLS,
         )[["slug", "label"]]
@@ -353,14 +355,9 @@ class ResampleSubCorpus(WorkTask):
             os.makedirs(resample_dir, exist_ok=True)
             for audiofile in tqdm(list(glob(f"{original_dir}/*.wav"))):
                 resampled_audiofile = new_basedir(audiofile, resample_dir)
+                audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
 
-                # Check if a resampled version is not already present
-                assert not os.path.isfile(resampled_audiofile)
-                # audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
-                resample_wav(audiofile, resampled_audiofile, self.sr)
-
-        with self.output().open("w") as _:
-            pass
+        self.mark_complete()
 
 
 class FinalizeCorpus(WorkTask):
@@ -421,6 +418,7 @@ def download_file(url, local_filename):
                 f.write(chunk)
                 pbar.update(chunk_size)
             pbar.close()
+
     return local_filename
 
 

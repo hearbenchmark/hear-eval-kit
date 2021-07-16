@@ -106,27 +106,6 @@ class GenerateTrainDataset(WorkTask):
                 linked_file.unlink(missing_ok=True)
                 linked_file.symlink_to(file_obj.absolute())
 
-        # # Create symlinks to the remainder of the dataset
-        # audio_files = list(train_path.glob("[!_]*/*.wav"))
-        #
-        # # Create folders for all the known labels as well as the unknown
-        # os.makedirs(os.path.join(self.workdir, UNKNOWN), exist_ok=True)
-        # for word in WORDS:
-        #     os.makedirs(os.path.join(self.workdir, word), exist_ok=True)
-        #
-        # print("Splitting dataset into labels ... ")
-        # for audio_path in tqdm(audio_files):
-        #     label = str(audio_path.relative_to(train_path).parent).strip()
-        #     if label in WORDS:
-        #         new_path = Path(os.path.join(self.workdir, label, audio_path.name))
-        #         new_path.unlink(missing_ok=True)
-        #         new_path.symlink_to(audio_path)
-        #     else:
-        #         filename = f"{label}_{audio_path.name}"
-        #         new_path = Path(os.path.join(self.workdir, UNKNOWN, filename))
-        #         new_path.unlink(missing_ok=True)
-        #         new_path.symlink_to(audio_path)
-
         self.mark_complete()
 
 
@@ -246,9 +225,7 @@ class SubsampleCorpus(SubsampleCorpus):
 
 class MonoWavTrimCorpus(MonoWavTrimCorpus):
     def requires(self):
-        return {
-            "corpus": SubsampleCorpus(max_file_per_corpus=config.MAX_FILES_PER_CORPUS)
-        }
+        return {"corpus": SubsampleCorpus(max_files=config.MAX_FILES_PER_CORPUS)}
 
 
 class SplitTrainTestCorpus(SplitTrainTestCorpus):
@@ -256,7 +233,7 @@ class SplitTrainTestCorpus(SplitTrainTestCorpus):
         # The metadata helps in provide the partition type for each
         # audio file
         return {
-            "corpus": MonoWavTrimCorpus(min_sample_length=config.SAMPLE_LENGTH_SECONDS),
+            "corpus": MonoWavTrimCorpus(duration=config.SAMPLE_LENGTH_SECONDS),
             "meta": ConfigureProcessMetaData(outfile="train_corpus_metadata.csv"),
         }
 
@@ -293,7 +270,7 @@ class FinalizeCorpus(FinalizeCorpus):
             "resample": [
                 ResampleSubCorpus(sr, partition)
                 for sr in config.SAMPLE_RATES
-                for partition in ["train", "test", "val"]
+                for partition in ["train", "test", "validation"]
             ],
             "traintestmeta": SplitTrainTestMetadata(),
             "vocabmeta": MetadataVocabulary(),

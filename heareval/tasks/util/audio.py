@@ -8,7 +8,10 @@ from pathlib import Path
 import subprocess
 
 
-def mono_wav_and_trim_audio(in_file: str, out_file: str, min_dur: int):
+def mono_wav_and_fix_duration(in_file: str, out_file: str, duration: float):
+    """
+    Convert to WAV file and trim to be equal to or less than a specific length
+    """
     ret = subprocess.call(
         [
             "ffmpeg",
@@ -16,7 +19,7 @@ def mono_wav_and_trim_audio(in_file: str, out_file: str, min_dur: int):
             "-i",
             str(in_file),
             "-filter_complex",
-            f"apad=whole_dur={str(min_dur)}",
+            f"apad=whole_dur={duration},atrim=end={duration}",
             "-ac",
             "1",
             "-c:a",
@@ -48,21 +51,23 @@ def convert_to_mono_wav(in_file: str, out_file: str):
 
 
 def resample_wav(in_file: str, out_file: str, out_sr: int):
-    # TODO: Don't do anything if we are already the right sample rate.
-    devnull = open(os.devnull, "w")
+    """
+    Resample a wave file using SoX high quality mode
+    """
     ret = subprocess.call(
         [
             "ffmpeg",
+            "-y",
             "-i",
             in_file,
-            # "-af",
-            # "aresample=resampler=soxr",
+            "-af",
+            "aresample=resampler=soxr",
             "-ar",
             str(out_sr),
             out_file,
         ],
-        stdout=devnull,
-        stderr=devnull,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     # Make sure the return code is 0 and the command was successful.
     assert ret == 0
