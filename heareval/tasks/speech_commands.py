@@ -226,7 +226,6 @@ class ConfigureTestMetaData(WorkTask):
         return path
 
     def run(self):
-
         # The testing set is all the files in the separate testing download
         test_path = Path(self.requires()["test"].workdir)
         test_paths = [str(p.relative_to(test_path)) for p in test_path.glob("*/*.wav")]
@@ -270,6 +269,10 @@ class ConfigureTestMetaData(WorkTask):
 
 
 class CombineMetaData(WorkTask):
+    """
+    Because we dealt with the metadata for the train/val and testing datasets
+    separately this combines them together into a single csv file.
+    """
 
     outfile = luigi.Parameter()
 
@@ -307,6 +310,11 @@ class CombineMetaData(WorkTask):
 
 
 class SubsamplePartition(SubsamplePartition):
+    """
+    A subsampler that performs subsamping on a specicic paritition.
+    All instances of this will depend on the combined process metadata csv.
+    """
+
     def requires(self):
         # The meta files contain the path of the files in the data
         # so we dont need to pass the extract as a dependency here.
@@ -316,13 +324,28 @@ class SubsamplePartition(SubsamplePartition):
 
 
 class SubsamplePartitions(WorkTask):
+    """
+    Aggregates subsampling of all the partitions into a single task as dependencies.
+    All the subsampled files are stored in the requires workdir, so we just link to
+    symbolic link the workdir of this task to that since there aren't any real outputs
+    associated with this task. This is a bit of a hack -- but it allows us to avoid
+    completely rewriting the Subsample task as well as take advantage of Luigi
+    concurrency.
+    """
+
     def requires(self):
         # The meta files contain the path of the files in the data
         # so we dont need to pass the extract as a dependency here.
         return {
-            "train": SubsamplePartition(partition="train", max_files=100),
-            "test": SubsamplePartition(partition="test", max_files=100),
-            "validation": SubsamplePartition(partition="validation", max_files=100),
+            "train": SubsamplePartition(
+                partition="train", max_files=config.MAX_TRAIN_FILES
+            ),
+            "test": SubsamplePartition(
+                partition="test", max_files=config.MAX_TEST_FILES
+            ),
+            "validation": SubsamplePartition(
+                partition="validation", max_files=config.MAX_VAL_FILES
+            ),
         }
 
     def run(self):
