@@ -109,7 +109,7 @@ class GenerateTrainDataset(WorkTask):
         self.mark_complete()
 
 
-class ConfigureProcessMetaData(WorkTask):
+class ConfigureTrainValMetaData(WorkTask):
     """
     This config is data dependent and has to be set for each data
     """
@@ -119,7 +119,6 @@ class ConfigureProcessMetaData(WorkTask):
     def requires(self):
         return {
             "train": GenerateTrainDataset(),
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
         }
 
     @staticmethod
@@ -130,7 +129,6 @@ class ConfigureProcessMetaData(WorkTask):
         return label
 
     def run(self):
-
         train_path = Path(self.requires()["train"].workdir)
 
         # List of all relative paths to the testing and validation files
@@ -161,10 +159,7 @@ class ConfigureProcessMetaData(WorkTask):
         train_paths.extend(train_silence)
         validation_paths.extend(val_silence)
 
-        # The testing set is all the files in the separate testing download
-        # test_path = Path(self.requires()["test"].workdir)
-        # test_paths = [p.relative_to(test_path) for p in test_path.glob("*/*.wav")]
-
+        # Start creating a csv to store all the metadata for this data
         process_metadata = pd.DataFrame(train_paths, columns=["relpath"])
         process_metadata["partition"] = "train"
 
@@ -173,6 +168,8 @@ class ConfigureProcessMetaData(WorkTask):
         val_metadata["partition"] = "validation"
         process_metadata = process_metadata.append(val_metadata)
 
+        # Create a unique slug for each file. We include the folder with the class
+        # name b/c the base filenames may not be unique.
         process_metadata["slug"] = process_metadata["relpath"].apply(slugify_file_name)
         process_metadata["relpath"] = process_metadata["relpath"].apply(
             partial(os.path.join, train_path)
@@ -195,14 +192,69 @@ class ConfigureProcessMetaData(WorkTask):
         # In this case it is the folder name
         process_metadata["label"] = process_metadata["relpath"].apply(self.apply_label)
 
-        # Get unique slug for each file
-        # In this case the base name is not excluded since same person have made dataset
-        # for different category
-        # This is something which is data dependent and should be handled here
+        # Save the process metadata
+        process_metadata.to_csv(
+            os.path.join(self.workdir, self.outfile),
+            columns=PROCESSMETADATACOLS,
+            header=False,
+            index=False,
+        )
+
+        self.mark_complete()
+
+
+class ConfigureTestMetaData(WorkTask):
+    """
+    This config is data dependent and has to be set for each data
+    """
+
+    outfile = luigi.Parameter()
+
+    def requires(self):
+        return {
+            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
+        }
+
+    @staticmethod
+    def name_for_slug(path):
+        # In the test set all the unknown sounds already have the class label
+        # prepended to the name, so we don't want to add 'unknown' to them as well.
+        label = os.path.basename(os.path.dirname(path))
+        if label == UNKNOWN:
+            path = os.path.basename(path)
+        return path
+
+    def run(self):
+
+        # The testing set is all the files in the separate testing download
+        test_path = Path(self.requires()["test"].workdir)
+        test_paths = [str(p.relative_to(test_path)) for p in test_path.glob("*/*.wav")]
+
+        process_metadata = pd.DataFrame(test_paths, columns=["relpath"])
+        process_metadata["partition"] = "test"
+
+        # Create a unique slug for each file. We include the folder with the class
+        # name b/c the base filenames may not be unique.
         process_metadata["slug"] = (
             process_metadata["relpath"]
-            # Dont exclude the base name. Apply sluggify on all
-            .apply(partial(os.path.relpath, start=train_path)).apply(slugify_file_name)
+            .apply(self.name_for_slug)
+            .apply(slugify_file_name)
+        )
+        process_metadata["relpath"] = process_metadata["relpath"].apply(
+            partial(os.path.join, test_path)
+        )
+
+        # Hash the field id rather than the full path.
+        process_metadata["filename_hash"] = (
+            process_metadata["slug"]
+            .apply(lambda relpath: re.sub(r"-nohash-.*$", "", relpath))
+            .apply(filename_to_int_hash)
+        )
+
+        # Get label for the data from anywhere.
+        # In this case it is the folder name
+        process_metadata["label"] = process_metadata["relpath"].apply(
+            ConfigureTrainValMetaData.apply_label
         )
 
         # Save the process metadata
@@ -220,7 +272,10 @@ class SubsampleCorpus(SubsampleCorpus):
     def requires(self):
         # The meta files contain the path of the files in the data
         # so we dont need to pass the extract as a dependency here.
-        return {"meta": ConfigureProcessMetaData(outfile="train_corpus_metadata.csv")}
+        return {
+            "meta": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
+            "test": ConfigureTestMetaData(outfile="test_corpus_metadata.csv"),
+        }
 
 
 class MonoWavTrimCorpus(MonoWavTrimCorpus):
@@ -234,7 +289,7 @@ class SplitTrainTestCorpus(SplitTrainTestCorpus):
         # audio file
         return {
             "corpus": MonoWavTrimCorpus(duration=config.SAMPLE_LENGTH_SECONDS),
-            "meta": ConfigureProcessMetaData(outfile="train_corpus_metadata.csv"),
+            "meta": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
         }
 
 
@@ -245,7 +300,7 @@ class SplitTrainTestMetadata(SplitTrainTestMetadata):
         # which are in the traintestcorpus
         return {
             "traintestcorpus": SplitTrainTestCorpus(),
-            "meta": ConfigureProcessMetaData(outfile="train_corpus_metadata.csv"),
+            "meta": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
         }
 
 
