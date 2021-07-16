@@ -59,7 +59,7 @@ class ExtractArchiveTest(ExtractArchive):
 
 class GenerateTrainDataset(WorkTask):
     """
-    Silence / background samples in the train / validation silents need to be
+    Silence / background samples in the train / validation sets need to be
     created by slicing up longer background samples into 1sec slices
     """
 
@@ -306,7 +306,7 @@ class CombineMetaData(WorkTask):
 
 class SubsamplePartition(SubsamplePartition):
     """
-    A subsampler that performs subsamping on a specicic paritition.
+    A subsampler that acts on a specific partition.
     All instances of this will depend on the combined process metadata csv.
     """
 
@@ -322,15 +322,13 @@ class SubsamplePartitions(WorkTask):
     """
     Aggregates subsampling of all the partitions into a single task as dependencies.
     All the subsampled files are stored in the requires workdir, so we just link to
-    symbolic link the workdir of this task to that since there aren't any real outputs
-    associated with this task. This is a bit of a hack -- but it allows us to avoid
-    completely rewriting the Subsample task as well as take advantage of Luigi
-    concurrency.
+    that since there aren't any real outputs associated with this task.
+    This is a bit of a hack -- but it allows us to avoid rewriting
+    the Subsample task as well as take advantage of Luigi concurrency.
     """
 
     def requires(self):
-        # The meta files contain the path of the files in the data
-        # so we dont need to pass the extract as a dependency here.
+        # Perform subsampling on each partition independently
         return {
             "train": SubsamplePartition(
                 partition="train", max_files=config.MAX_TRAIN_FILES
