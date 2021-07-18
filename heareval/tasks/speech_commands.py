@@ -229,7 +229,7 @@ class SubsamplePartition(SubsamplePartition):
         # The meta files contain the path of the files in the data
         # so we dont need to pass the extract as a dependency here.
         return {
-            "meta": CombineMetaData(outfile="process_metadata.csv"),
+            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
         }
 
 
@@ -274,7 +274,7 @@ class SplitTrainTestCorpus(SplitTrainTestCorpus):
         # audio file
         return {
             "corpus": MonoWavTrimCorpus(duration=config.SAMPLE_LENGTH_SECONDS),
-            "meta": CombineMetaData(outfile="process_metadata.csv"),
+            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
         }
 
 
@@ -285,7 +285,7 @@ class SplitTrainTestMetadata(SplitTrainTestMetadata):
         # which are in the traintestcorpus
         return {
             "traintestcorpus": SplitTrainTestCorpus(),
-            "meta": CombineMetaData(outfile="process_metadata.csv"),
+            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
         }
 
 
