@@ -162,7 +162,7 @@ class SubsampleCorpus(WorkTask):
             ),
             header=None,
             names=PROCESSMETADATACOLS,
-        )[["filename_hash", "slug", "relpath"]]
+        )[["filename_hash", "slug", "relpath", "partition"]]
         return metadata
 
     def run(self):
@@ -203,14 +203,7 @@ class SubsamplePartition(SubsampleCorpus):
     partition = luigi.Parameter()
 
     def get_metadata(self):
-        metadata = pd.read_csv(
-            os.path.join(
-                self.requires()["meta"].workdir, self.requires()["meta"].outfile
-            ),
-            header=None,
-            names=PROCESSMETADATACOLS,
-        )[["filename_hash", "slug", "relpath", "partition"]]
-
+        metadata = super().get_metadata()
         metadata = metadata[metadata["partition"] == self.partition]
         return metadata
 
