@@ -5,14 +5,12 @@ Common Luigi classes and functions for evaluation tasks
 import hashlib
 import os
 import shutil
-import zipfile  # Required for shutil to work for tar.gz
 from glob import glob
 from pathlib import Path
 
 import luigi
 import pandas as pd
 import requests
-from slugify import slugify
 from tqdm import tqdm
 
 import heareval.tasks.util.audio as audio_util
@@ -269,14 +267,19 @@ class SplitTrainTestMetadata(WorkTask):
             "This method requires a meta and a traintestcorpus task"
         )
 
-    def run(self):
-        # Get the process metadata and select the required columns slug and label
-        meta = self.requires()["meta"]
-        labeldf = pd.read_csv(
-            os.path.join(meta.workdir, meta.outfile),
+    def get_metadata(self):
+        metadata = pd.read_csv(
+            os.path.join(
+                self.requires()["meta"].workdir, self.requires()["meta"].outfile
+            ),
             header=None,
             names=PROCESSMETADATACOLS,
         )[["slug", "label"]]
+        return metadata
+
+    def run(self):
+        # Get the process metadata and select the required columns slug and label
+        labeldf = self.get_metadata()
 
         # Automatically get the partitions from the traintestcorpus task
         # and then get the files there.
@@ -448,12 +451,6 @@ def download_file(url, local_filename):
 def ensure_dir(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
-
-
-def slugify_file_name(file_name):
-    # Leaves out the extension while sluggifying the file name
-    extension = file_name.split(".")[1]
-    return slugify(file_name.split(".")[0]) + "." + extension
 
 
 def filename_to_int_hash(filename):
