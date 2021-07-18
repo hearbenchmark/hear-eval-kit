@@ -11,6 +11,7 @@ import luigi
 import pandas as pd
 import soundfile as sf
 from tqdm import tqdm
+from slugify import slugify
 
 import heareval.tasks.config.speech_commands as config
 from heareval.tasks.util.luigi import (
@@ -27,7 +28,6 @@ from heareval.tasks.util.luigi import (
     WorkTask,
     ensure_dir,
     filename_to_int_hash,
-    slugify_file_name,
 )
 
 # Set the task name for all WorkTasks
@@ -105,7 +105,7 @@ class GenerateTrainDataset(WorkTask):
         self.mark_complete()
 
 
-class ConfigureTrainValMetaData(WorkTask):
+class ConfigureProcessMetaData(WorkTask):
     """
     This config is data dependent and has to be set for each data
     """
@@ -115,6 +115,7 @@ class ConfigureTrainValMetaData(WorkTask):
     def requires(self):
         return {
             "train": GenerateTrainDataset(),
+            "test": ExtractArchiveTest(infile="test-corpus.tar.gz")
         }
 
     @staticmethod
@@ -124,53 +125,63 @@ class ConfigureTrainValMetaData(WorkTask):
             label = UNKNOWN
         return label
 
-    def run(self):
-        train_path = Path(self.requires()["train"].workdir)
+    @staticmethod
+    def slugify_file_name(relative_path):
+        folder = os.path.basename(os.path.dirname(relative_path))
+        basename = os.path.basename(relative_path)
+        name, ext = os.path.splitext(basename)
+        return f"{slugify(os.path.join(folder, name))}{ext}"
 
-        # List of all relative paths to the testing and validation files
-        with open(os.path.join(train_path, "testing_list.txt"), "r") as fp:
-            train_test_paths = fp.read().strip().splitlines()
+    def get_split_paths(self):
 
+        #Test files
+        test_path = Path(self.requires()["test"].workdir)
+        test_df = (
+            pd.DataFrame(test_path.glob("*/*.wav"), columns = ['relpath'])
+            .assign(partition = lambda df: 'test')
+        )
+        
+        #All silence paths to add to the train and validation
+        train_path = Path(self.requires()["train"].workdir)  
+        all_silence = list(train_path.glob(f"{SILENCE}/*.wav"))
+        
+        #Validation files      
         with open(os.path.join(train_path, "validation_list.txt"), "r") as fp:
             validation_paths = fp.read().strip().splitlines()
+        validation_rel_paths = [os.path.join(train_path, p) for p in validation_paths]
+        val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
+        validation_rel_paths.extend(val_silence)
+        validation_df = (
+            pd.DataFrame(validation_rel_paths, columns = ['relpath'])
+            .assign(partition = lambda df: 'validation')
+        )
 
+        #Train files        
+        with open(os.path.join(train_path, "testing_list.txt"), "r") as fp:
+            train_test_paths = fp.read().strip().splitlines()
         audio_paths = [
             str(p.relative_to(train_path)) for p in train_path.glob("[!_]*/*.wav")
         ]
 
-        # The training set is files that are not in either the train-test or validation.
-        train_paths = set(audio_paths) - set(train_test_paths) - set(validation_paths)
-        train_paths = list(train_paths)
+        train_paths = list(set(audio_paths) - set(train_test_paths) - set(validation_paths))
+        train_rel_paths = [os.path.join(train_path, p) for p in train_paths]
 
-        # Manually add in the silent samples
-        all_silence = [
-            str(p.relative_to(train_path)) for p in train_path.glob(f"{SILENCE}/*.wav")
-        ]
-        val_silence = [
-            str(p.relative_to(train_path))
-            for p in train_path.glob(f"{SILENCE}/running_tap*.wav")
-        ]
         train_silence = list(set(all_silence) - set(val_silence))
+        train_rel_paths.extend(train_silence)
+        train_df = (
+            pd.DataFrame(train_rel_paths, columns = ['relpath'])
+            .assign(partition = lambda df: 'train')
+        )
+        assert (len(train_df.merge(validation_df, on = 'relpath')) == 0)
 
-        train_paths.extend(train_silence)
-        validation_paths.extend(val_silence)
+        return pd.concat([test_df, validation_df, train_df])
 
-        # Start creating a csv to store all the metadata for this data
-        process_metadata = pd.DataFrame(train_paths, columns=["relpath"])
-        process_metadata["partition"] = "train"
-
-        # Add all the validation files
-        val_metadata = pd.DataFrame(validation_paths, columns=["relpath"])
-        val_metadata["partition"] = "validation"
-        process_metadata = process_metadata.append(val_metadata)
-
+    def get_metadata_attrs(self, process_metadata):
+        process_metadata = (
+            process_metadata
         # Create a unique slug for each file. We include the folder with the class
         # name b/c the base filenames may not be unique.
-        process_metadata["slug"] = process_metadata["relpath"].apply(slugify_file_name)
-        process_metadata["relpath"] = process_metadata["relpath"].apply(
-            partial(os.path.join, train_path)
-        )
-
+            .assign(slug = lambda df: df["relpath"].apply(self.slugify_file_name))
         # Hash the field id rather than the full path.
         # This hashing is specific to the dataset and should be done here
         # In this case we take the slug and remove the -nohash- as described
@@ -178,123 +189,27 @@ class ConfigureTrainValMetaData(WorkTask):
         # same dataset. Such type of data specific requirements might be there.
         # in the readme of google speech commands. we want to keep similar people
         # in the same group - test or train or val
-        process_metadata["filename_hash"] = (
-            process_metadata["slug"]
+            .assign(
+                filename_hash = lambda df: (
+                    df["slug"]
             .apply(lambda relpath: re.sub(r"-nohash-.*$", "", relpath))
             .apply(filename_to_int_hash)
         )
-
+        )
         # Get label for the data from anywhere.
         # In this case it is the folder name
-        process_metadata["label"] = process_metadata["relpath"].apply(self.apply_label)
-
-        # Save the process metadata
-        process_metadata.to_csv(
-            os.path.join(self.workdir, self.outfile),
-            columns=PROCESSMETADATACOLS,
-            header=False,
-            index=False,
+            .assign(label = lambda df: df["relpath"].apply(self.apply_label))
         )
 
-        self.mark_complete()
+        return process_metadata
 
-
-class ConfigureTestMetaData(WorkTask):
-    """
-    This config is data dependent and has to be set for each data
-    """
-
-    outfile = luigi.Parameter()
-
-    def requires(self):
-        return {
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
-        }
-
-    @staticmethod
-    def name_for_slug(path):
-        # In the test set all the unknown sounds already have the class label
-        # prepended to the name, so we don't want to add 'unknown' to them as well.
-        label = os.path.basename(os.path.dirname(path))
-        if label == UNKNOWN:
-            path = os.path.basename(path)
-        return path
 
     def run(self):
-        # The testing set is all the files in the separate testing download
-        test_path = Path(self.requires()["test"].workdir)
-        test_paths = [str(p.relative_to(test_path)) for p in test_path.glob("*/*.wav")]
-
-        process_metadata = pd.DataFrame(test_paths, columns=["relpath"])
-        process_metadata["partition"] = "test"
-
-        # Create a unique slug for each file. We include the folder with the class
-        # name b/c the base filenames may not be unique.
-        process_metadata["slug"] = (
-            process_metadata["relpath"]
-            .apply(self.name_for_slug)
-            .apply(slugify_file_name)
-        )
-        process_metadata["relpath"] = process_metadata["relpath"].apply(
-            partial(os.path.join, test_path)
-        )
-
-        # Hash the field id rather than the full path.
-        process_metadata["filename_hash"] = (
-            process_metadata["slug"]
-            .apply(lambda relpath: re.sub(r"-nohash-.*$", "", relpath))
-            .apply(filename_to_int_hash)
-        )
-
-        # Get label for the data from anywhere.
-        # In this case it is the folder name
-        process_metadata["label"] = process_metadata["relpath"].apply(
-            ConfigureTrainValMetaData.apply_label
-        )
+        process_metadata = self.get_split_paths()
+        process_metadata = self.get_metadata_attrs(process_metadata)
 
         # Save the process metadata
-        process_metadata.to_csv(
-            os.path.join(self.workdir, self.outfile),
-            columns=PROCESSMETADATACOLS,
-            header=False,
-            index=False,
-        )
-
-        self.mark_complete()
-
-
-class CombineMetaData(WorkTask):
-    """
-    Because we dealt with the metadata for the train/val and testing datasets
-    separately this combines them together into a single csv file.
-    """
-
-    outfile = luigi.Parameter()
-
-    def requires(self):
-        return {
-            "train": ConfigureTrainValMetaData(outfile="train_corpus_metadata.csv"),
-            "test": ConfigureTestMetaData(outfile="test_corpus_metadata.csv"),
-        }
-
-    def run(self):
-        train = self.requires()["train"]
-        train_meta = pd.read_csv(
-            os.path.join(train.workdir, train.outfile),
-            header=None,
-            names=PROCESSMETADATACOLS,
-        )
-
-        test = self.requires()["test"]
-        test_meta = pd.read_csv(
-            os.path.join(test.workdir, test.outfile),
-            header=None,
-            names=PROCESSMETADATACOLS,
-        )
-
-        process_metadata = train_meta.append(test_meta)
-        # Save the process metadata
-        process_metadata.to_csv(
+        process_metadata[PROCESSMETADATACOLS].to_csv(
             os.path.join(self.workdir, self.outfile),
             columns=PROCESSMETADATACOLS,
             header=False,
