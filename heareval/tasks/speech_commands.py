@@ -4,7 +4,6 @@ Pre-processing pipeline for Google Speech Commands
 """
 import os
 import re
-from functools import partial
 from pathlib import Path
 
 import luigi
@@ -115,7 +114,7 @@ class ConfigureProcessMetaData(WorkTask):
     def requires(self):
         return {
             "train": GenerateTrainDataset(),
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz")
+            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
         }
 
     @staticmethod
@@ -134,75 +133,73 @@ class ConfigureProcessMetaData(WorkTask):
 
     def get_split_paths(self):
 
-        #Test files
+        # Test files
         test_path = Path(self.requires()["test"].workdir)
-        test_df = (
-            pd.DataFrame(test_path.glob("*/*.wav"), columns = ['relpath'])
-            .assign(partition = lambda df: 'test')
+        test_df = pd.DataFrame(test_path.glob("*/*.wav"), columns=["relpath"]).assign(
+            partition=lambda df: "test"
         )
-        
-        #All silence paths to add to the train and validation
-        train_path = Path(self.requires()["train"].workdir)  
+
+        # All silence paths to add to the train and validation
+        train_path = Path(self.requires()["train"].workdir)
         all_silence = list(train_path.glob(f"{SILENCE}/*.wav"))
-        
-        #Validation files      
+
+        # Validation files
         with open(os.path.join(train_path, "validation_list.txt"), "r") as fp:
             validation_paths = fp.read().strip().splitlines()
         validation_rel_paths = [os.path.join(train_path, p) for p in validation_paths]
         val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
         validation_rel_paths.extend(val_silence)
-        validation_df = (
-            pd.DataFrame(validation_rel_paths, columns = ['relpath'])
-            .assign(partition = lambda df: 'validation')
+        validation_df = pd.DataFrame(validation_rel_paths, columns=["relpath"]).assign(
+            partition=lambda df: "validation"
         )
 
-        #Train files        
+        # Train files
         with open(os.path.join(train_path, "testing_list.txt"), "r") as fp:
             train_test_paths = fp.read().strip().splitlines()
         audio_paths = [
             str(p.relative_to(train_path)) for p in train_path.glob("[!_]*/*.wav")
         ]
 
-        train_paths = list(set(audio_paths) - set(train_test_paths) - set(validation_paths))
+        train_paths = list(
+            set(audio_paths) - set(train_test_paths) - set(validation_paths)
+        )
         train_rel_paths = [os.path.join(train_path, p) for p in train_paths]
 
         train_silence = list(set(all_silence) - set(val_silence))
         train_rel_paths.extend(train_silence)
-        train_df = (
-            pd.DataFrame(train_rel_paths, columns = ['relpath'])
-            .assign(partition = lambda df: 'train')
+        train_df = pd.DataFrame(train_rel_paths, columns=["relpath"]).assign(
+            partition=lambda df: "train"
         )
-        assert (len(train_df.merge(validation_df, on = 'relpath')) == 0)
+        assert len(train_df.merge(validation_df, on="relpath")) == 0
 
         return pd.concat([test_df, validation_df, train_df])
 
     def get_metadata_attrs(self, process_metadata):
         process_metadata = (
             process_metadata
-        # Create a unique slug for each file. We include the folder with the class
-        # name b/c the base filenames may not be unique.
-            .assign(slug = lambda df: df["relpath"].apply(self.slugify_file_name))
-        # Hash the field id rather than the full path.
-        # This hashing is specific to the dataset and should be done here
-        # In this case we take the slug and remove the -nohash- as described
-        # This nohash removal allows for the speech of similar person to be in the
-        # same dataset. Such type of data specific requirements might be there.
-        # in the readme of google speech commands. we want to keep similar people
-        # in the same group - test or train or val
+            # Create a unique slug for each file. We include the folder with the class
+            # name b/c the base filenames may not be unique.
+            .assign(slug=lambda df: df["relpath"].apply(self.slugify_file_name))
+            # Hash the field id rather than the full path.
+            # This hashing is specific to the dataset and should be done here
+            # In this case we take the slug and remove the -nohash- as described
+            # This nohash removal allows for the speech of similar person to be in the
+            # same dataset. Such type of data specific requirements might be there.
+            # in the readme of google speech commands. we want to keep similar people
+            # in the same group - test or train or val
             .assign(
-                filename_hash = lambda df: (
+                filename_hash=lambda df: (
                     df["slug"]
-            .apply(lambda relpath: re.sub(r"-nohash-.*$", "", relpath))
-            .apply(filename_to_int_hash)
-        )
-        )
-        # Get label for the data from anywhere.
-        # In this case it is the folder name
-            .assign(label = lambda df: df["relpath"].apply(self.apply_label))
+                    .apply(lambda relpath: re.sub(r"-nohash-.*$", "", relpath))
+                    .apply(filename_to_int_hash)
+                )
+            )
+            # Get label for the data from anywhere.
+            # In this case it is the folder name
+            .assign(label=lambda df: df["relpath"].apply(self.apply_label))
         )
 
         return process_metadata
-
 
     def run(self):
         process_metadata = self.get_split_paths()
