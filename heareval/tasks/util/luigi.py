@@ -5,16 +5,15 @@ Common Luigi classes and functions for evaluation tasks
 import hashlib
 import os
 import shutil
-import zipfile  # Required for shutil to work for tar.gz
 from glob import glob
+from pathlib import Path
 
 import luigi
 import pandas as pd
 import requests
-from slugify import slugify
 from tqdm import tqdm
 
-from heareval.tasks.util.audio import mono_wav_and_trim_audio, resample_wav
+import heareval.tasks.util.audio as audio_util
 
 PROCESSMETADATACOLS = [
     "relpath",
@@ -64,6 +63,10 @@ class WorkTask(luigi.Task):
             self.task_subdir, f"{self.stage_number:02d}-{self.task_id}.done"
         )
         return luigi.LocalTarget(f)
+
+    def mark_complete(self):
+        # Touches the output file, marking this task as complete
+        self.output().open("w").close()
 
     @property
     def workdir(self):
@@ -145,49 +148,68 @@ class ExtractArchive(WorkTask):
 
 
 class SubsampleCorpus(WorkTask):
-    max_file_per_corpus = luigi.IntParameter()
+    max_files = luigi.IntParameter()
 
     def requires(self):
         raise NotImplementedError("This method requires a meta tasks")
 
-    def run(self):
-        process_metadata = pd.read_csv(
-            os.path.join(self.requires()["meta"].workdir, "process_metadata.csv"),
+    def get_metadata(self):
+        metadata = pd.read_csv(
+            os.path.join(
+                self.requires()["meta"].workdir, self.requires()["meta"].outfile
+            ),
             header=None,
             names=PROCESSMETADATACOLS,
-        )[["filename_hash", "slug", "relpath"]]
+        )[["filename_hash", "slug", "relpath", "partition"]]
+        return metadata
+
+    def run(self):
+
+        process_metadata = self.get_metadata()
         # Subsample the files based on max files per corpus.
         # The filename hash is used here
         # This task can also be done in the configprocessmetadata as that will give
         # freedom to stratify the selection on some criterion?
-        if len(process_metadata) > self.max_file_per_corpus:
+        if len(process_metadata) > self.max_files:
             print(
                 f"{len(process_metadata)} audio files in corpus, \
-                    keeping only {self.max_file_per_corpus}"
+                    keeping only {self.max_files}"
             )
 
         # Sort by the filename hash and select the max file per corpus
         # The filename hash is done as part of the processmetadata because
         # the string to be hashed for each file is dependent on the data
         process_metadata = process_metadata.sort_values(by="filename_hash").iloc[
-            : self.max_file_per_corpus
+            : self.max_files
         ]
 
         # Save file using symlinks
         for _, audio in process_metadata.iterrows():
-            audiofile = audio["relpath"]
-            newaudiofile = os.path.join(self.workdir, audio["slug"])
-            assert not os.path.exists(newaudiofile)
-            os.symlink(os.path.realpath(audiofile), newaudiofile)
+            audiofile = Path(audio["relpath"])
+            newaudiofile = Path(os.path.join(self.workdir, audio["slug"]))
+            newaudiofile.unlink(missing_ok=True)
+            newaudiofile.symlink_to(audiofile.resolve())
 
-        with self.output().open("w") as _:
-            pass
+        self.mark_complete()
+
+
+class SubsamplePartition(SubsampleCorpus):
+    """
+    Performs subsampling on a specific partition
+    """
+
+    partition = luigi.Parameter()
+
+    def get_metadata(self):
+        metadata = super().get_metadata()
+        metadata = metadata[metadata["partition"] == self.partition]
+        return metadata
 
 
 class MonoWavTrimCorpus(WorkTask):
     # This can simultaneously convert to wav type and trim the files as
     # well. Is this fine?
-    min_sample_length = luigi.IntParameter()
+    duration = luigi.FloatParameter()
 
     def requires(self):
         raise NotImplementedError("This method requires a corpus tasks")
@@ -199,11 +221,11 @@ class MonoWavTrimCorpus(WorkTask):
             newaudiofile = new_basedir(
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
-            mono_wav_and_trim_audio(
-                audiofile, newaudiofile, min_dur=self.min_sample_length
+            audio_util.mono_wav_and_fix_duration(
+                audiofile, newaudiofile, duration=self.duration
             )
-        with self.output().open("w") as _:
-            pass
+
+        self.mark_complete()
 
 
 class SplitTrainTestCorpus(WorkTask):
@@ -211,18 +233,20 @@ class SplitTrainTestCorpus(WorkTask):
         raise NotImplementedError("This method requires a meta and a corpus tasks")
 
     def run(self):
-        # Get the process metadata. This gives the freedom of picking the train test label either
-        # from the provide metadata file or any other method.
+        # Get the process metadata. This gives the freedom of picking the train test
+        # label either from the provide metadata file or any other method.
 
         # Writing slug and partition makes it explicit that these columns are required
+        meta = self.requires()["meta"]
         process_metadata = pd.read_csv(
-            os.path.join(self.requires()["meta"].workdir, "process_metadata.csv"),
+            os.path.join(meta.workdir, meta.outfile),
             header=None,
             names=PROCESSMETADATACOLS,
         )[["slug", "partition"]]
 
-        # Go over the subsampled folder and pick the audio files. The audio files are saved with their
-        # slug names and hence the corresponding label can be picked up from the preprocess config
+        # Go over the subsampled folder and pick the audio files. The audio files are
+        # saved with their slug names and hence the corresponding label can be picked
+        # up from the preprocess config
         for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*.wav"))):
             audio_slug = os.path.basename(audiofile)
             partition = process_metadata.loc[
@@ -243,15 +267,22 @@ class SplitTrainTestMetadata(WorkTask):
             "This method requires a meta and a traintestcorpus task"
         )
 
-    def run(self):
-        # Get the process metadata and select the required columns slug and label
-        labeldf = pd.read_csv(
-            os.path.join(self.requires()["meta"].workdir, "process_metadata.csv"),
+    def get_metadata(self):
+        metadata = pd.read_csv(
+            os.path.join(
+                self.requires()["meta"].workdir, self.requires()["meta"].outfile
+            ),
             header=None,
             names=PROCESSMETADATACOLS,
         )[["slug", "label"]]
+        return metadata
 
-        # Automatically get the partitions from the traintestcorpus task and then get the files there
+    def run(self):
+        # Get the process metadata and select the required columns slug and label
+        labeldf = self.get_metadata()
+
+        # Automatically get the partitions from the traintestcorpus task
+        # and then get the files there.
         for partition in os.listdir(self.requires()["traintestcorpus"].workdir):
             audiofiles = list(
                 glob(
@@ -265,14 +296,16 @@ class SplitTrainTestMetadata(WorkTask):
             # Check if we got any file in the partition
             if len(audiofiles) == 0:
                 raise RuntimeError(
-                    f"No audio files found in {self.requires()['traintestcorpus'].workdir}/{partition}"
+                    "No audio files found in "
+                    f"{self.requires()['traintestcorpus'].workdir}/{partition}"
                 )
-            # Get the filename which is also the slug of the file and the corresponding label
-            # can be picked up from the metadata
+            # Get the filename which is also the slug of the file and the
+            # corresponding label can be picked up from the metadata
             audiodf = pd.DataFrame(
                 [os.path.basename(a) for a in audiofiles], columns=["slug"]
             )
             assert len(audiofiles) == len(audiodf.drop_duplicates())
+
             # Get the label from the metadata with the help of the slug of the filename
             sublabeldf = labeldf.merge(audiodf, on="slug")[["slug", "label"]]
             # Check if all the labels were found from the metadata
@@ -347,14 +380,9 @@ class ResampleSubCorpus(WorkTask):
             os.makedirs(resample_dir, exist_ok=True)
             for audiofile in tqdm(list(glob(f"{original_dir}/*.wav"))):
                 resampled_audiofile = new_basedir(audiofile, resample_dir)
+                audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
 
-                # Check if a resampled version is not already present
-                assert not os.path.isfile(resampled_audiofile)
-                # audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
-                resample_wav(audiofile, resampled_audiofile, self.sr)
-
-        with self.output().open("w") as _:
-            pass
+        self.mark_complete()
 
 
 class FinalizeCorpus(WorkTask):
@@ -365,7 +393,8 @@ class FinalizeCorpus(WorkTask):
 
     def requires(self):
         raise NotImplementedError(
-            "This method requires a list of resample tasks and a traintestmeta and vocabmeta task"
+            "This method requires a list of resample tasks "
+            "and a traintestmeta and vocabmeta task"
         )
 
     # We overwrite workdir here, because we want the output to be
@@ -415,18 +444,13 @@ def download_file(url, local_filename):
                 f.write(chunk)
                 pbar.update(chunk_size)
             pbar.close()
+
     return local_filename
 
 
 def ensure_dir(dirname):
     if not os.path.exists(dirname):
         os.makedirs(dirname)
-
-
-def slugify_file_name(file_name):
-    # Leaves out the extension while sluggifying the file name
-    extension = file_name.split(".")[1]
-    return slugify(file_name.split(".")[0]) + "." + extension
 
 
 def filename_to_int_hash(filename):
