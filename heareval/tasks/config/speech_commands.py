@@ -2,7 +2,7 @@
 Configuration for the google speech commands task
 """
 
-from .dataset_config import *
+from .dataset_config import *  # noqa: F403, F401
 
 TASKNAME = "speech_commands-v0.0.2"
 DOWNLOAD_URL = "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz"
