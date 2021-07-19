@@ -315,9 +315,7 @@ class FinalizeCorpus(FinalizeCorpus):
 
 
 def main():
-    print("max_files_per_corpus = %d" % config.MAX_FILES_PER_CORPUS)
     ensure_dir("_workdir")
-
     luigi.build(
         [FinalizeCorpus()],
         workers=config.NUM_WORKERS,

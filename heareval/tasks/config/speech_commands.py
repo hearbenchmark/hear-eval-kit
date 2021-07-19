@@ -23,14 +23,7 @@ SAMPLE_RATES = [48000, 44100, 22050, 16000]
 
 SAMPLE_LENGTH_SECONDS = 1.0
 
-
-MAX_HOURS = 10.0
-
-MAX_FILES_PER_CORPUS = int(MAX_HOURS * 60.0 * 60.0 / SAMPLE_LENGTH_SECONDS)
-
-# Number of test files to include - 4890 is the full test set
+# Number files to include -- this is the full dataset
+MAX_TRAIN_FILES = 85511
+MAX_VAL_FILES = 10102
 MAX_TEST_FILES = 4890
-
-remaining_files = MAX_FILES_PER_CORPUS - MAX_TEST_FILES
-MAX_TRAIN_FILES = int(remaining_files * 0.90)
-MAX_VAL_FILES = remaining_files - MAX_TRAIN_FILES
