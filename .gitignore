@@ -134,17 +134,10 @@ dmypy.json
 # Working directory for luigi pipelines
 *_workdir/
 
-# Completed evaluation taks
-heareval/tasks/coughvid-*/
-
 # vim
 *.sw?
 
 .idea/
-
-# Output directories for task audio and embeddings
-tasks/
-embeddings/
 
 # Mac
 .DS_Store
