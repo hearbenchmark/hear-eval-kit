@@ -5,7 +5,10 @@ Pre-processing pipeline for NSynth pitch detection
 
 import os
 import re
+import json
 from pathlib import Path
+from functools import partial
+import logging
 
 import luigi
 import pandas as pd
@@ -29,6 +32,8 @@ from heareval.tasks.util.luigi import (
     ensure_dir,
     filename_to_int_hash,
 )
+
+logger = logging.getLogger("luigi-interface")
 
 # Set the task name for all WorkTasks
 WorkTask.task_name = config.TASKNAME
@@ -76,52 +81,57 @@ class ConfigureProcessMetaData(WorkTask):
         }
 
     @staticmethod
-    def apply_label(relative_path):
-        label = os.path.basename(os.path.dirname(relative_path))
-        # if label not in WORDS and label != SILENCE:
-        #     label = UNKNOWN
-        return label
+    def get_rel_path(root: Path, item: pd.DataFrame) -> str:
+        # Creates the audio relative path for a dataframe item
+        audio_path = root.joinpath("audio")
+        filename = f"{item}.wav"
+        return audio_path.joinpath(filename)
 
     @staticmethod
-    def slugify_file_name(relative_path):
-        folder = os.path.basename(os.path.dirname(relative_path))
-        basename = os.path.basename(relative_path)
-        name, ext = os.path.splitext(basename)
-        return f"{slugify(os.path.join(folder, name))}{ext}"
+    def slugify_file_name(filename: str) -> str:
+        return f"{slugify(filename)}.wav"
 
-    def get_split_paths(self):
-        return None
+    def get_split_metadata(self, split: str) -> pd.DataFrame:
+        logger.info(f"Preparing metadata for {split}")
 
-    def get_metadata_attrs(self, process_metadata):
-        process_metadata = (
-            process_metadata
-            # Create a unique slug for each file. We include the folder with the class
-            # name b/c the base filenames may not be unique.
-            .assign(slug=lambda df: df["relpath"].apply(self.slugify_file_name))
-            # Hash the field id rather than the full path.
-            # This hashing is specific to the dataset and should be done here
-            # In this case we take the slug and remove the -nohash- as described
-            # This nohash removal allows for the speech of similar person to be in the
-            # same dataset. Such type of data specific requirements might be there.
-            # in the readme of google speech commands. we want to keep similar people
-            # in the same group - test or train or val
-            .assign(
-                filename_hash=lambda df: (
-                    df["slug"]
-                    .apply(lambda relpath: re.sub(r"-nohash-.*$", "", relpath))
-                    .apply(filename_to_int_hash)
-                )
+        # Loads and prepares the metadata for a specific split
+        split_path = Path(self.requires()[split].workdir).joinpath(f"nsynth-{split}")
+
+        metadata = pd.read_json(split_path.joinpath("examples.json"), orient="index")
+
+        # Filter out pitches that are not within the range of a standard piano
+        metadata = metadata[metadata["pitch"] >= 21]
+        metadata = metadata[metadata["pitch"] <= 108]
+
+        metadata = metadata.assign(label=lambda df: df["pitch"])
+        metadata = metadata.assign(
+            relpath=lambda df: df["note_str"].apply(
+                partial(self.get_rel_path, split_path)
             )
-            # Get label for the data from anywhere.
-            # In this case it is the folder name
-            .assign(label=lambda df: df["relpath"].apply(self.apply_label))
+        )
+        metadata = metadata.assign(
+            slug=lambda df: df["note_str"].apply(self.slugify_file_name)
+        )
+        metadata = metadata.assign(partition=lambda df: split)
+        metadata = metadata.assign(
+            filename_hash=lambda df: df["slug"].apply(filename_to_int_hash)
         )
 
-        return process_metadata
+        return metadata[PROCESSMETADATACOLS]
 
     def run(self):
 
-        assert False
+        # Get metadata for each of the data splits
+        process_metadata = pd.concat(
+            [self.get_split_metadata(split) for split in self.requires()]
+        )
+
+        process_metadata.to_csv(
+            os.path.join(self.workdir, self.outfile),
+            columns=PROCESSMETADATACOLS,
+            header=False,
+            index=False,
+        )
 
         self.mark_complete()
 
