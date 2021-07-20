@@ -176,11 +176,6 @@ class SubsamplePartitions(WorkTask):
         self.mark_complete()
 
 
-class MonoWavTrimCorpus(MonoWavTrimCorpus):
-    def requires(self):
-        return {"corpus": SubsamplePartitions()}
-
-
 class SplitTrainTestCorpus(SplitTrainTestCorpus):
     def requires(self):
         # The metadata helps in provide the partition type for each
