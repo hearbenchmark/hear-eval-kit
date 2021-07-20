@@ -2,7 +2,7 @@
 Configuration for the google speech commands task
 """
 
-from .dataset_config import DatasetConfig
+from .dataset_config import DatasetConfig, PartitionConfig
 
 
 class SpeechCommands(DatasetConfig):
@@ -21,9 +21,11 @@ class SpeechCommands(DatasetConfig):
         # All samples will be trimmed / padded to this length
         self.sample_duration = 1.0
 
-        # This could also be a list of PartitionConfig classes or something.
-        self.partitions = {
-            "train": {"max_files": None},
-            "valid": {"max_files": None},
-            "test": {"max_files": None},
-        }
+        # Pre-defined partitions in the dataset. Number of files in each split is
+        # train: 85,111; valid: 10,102; test: 4890.
+        # To subsample a partition, set the max_files to an integer.
+        self.partitions = [
+            PartitionConfig(name="train", max_files=None),
+            PartitionConfig(name="valid", max_files=None),
+            PartitionConfig(name="test", max_files=None),
+        ]

@@ -26,3 +26,18 @@ class DatasetConfig:
         # only use one sample rate this can be a list with
         # only a single rate in it.
         self.sample_rates = [48000, 44100, 22050, 16000]
+
+
+class PartitionConfig:
+    """
+    A configuration class for creating named partitions in a dataset
+
+    Args:
+        name: name of the partition
+        max_files: an integer number of samples to cap this partition at,
+            defaults to None for no maximum.
+    """
+
+    def __init__(self, name: str, max_files: int = None):
+        self.name = name
+        self.max_files = max_files
