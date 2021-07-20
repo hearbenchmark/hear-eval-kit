@@ -51,7 +51,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
     def requires(self):
         return {
             "train": ExtractArchiveTrain(infile="train-corpus.tar.gz"),
-            "valid": ExtractArchiveValidation(infile="valid-corpus.tar.gz"),
+            #            "valid": ExtractArchiveValidation(infile="valid-corpus.tar.gz"),
             "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
         }
 
