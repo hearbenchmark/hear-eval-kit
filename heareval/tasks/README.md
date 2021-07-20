@@ -7,6 +7,12 @@ into directory .checkpoints so preprocessing can be resumed if
 interrupted. After preprocessing, tar'ed outputs are saved to your
 S3 bucket. This avoids hitting dataset providers repeatedly.
 
+These should be run from the toplevel of the repo root [how do we
+run these if you pip install??], e.g.:
+```
+python3 heareval/tasks/dcase2016_task2.py
+```
+
 For each evaluation task, the directory structure is:
     taskname/
         task.json
