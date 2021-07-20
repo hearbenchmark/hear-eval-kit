@@ -41,6 +41,9 @@ import heareval.tasks.util.audio as audio_util
 import heareval.tasks.util.luigi as luigi_util
 from heareval.tasks.util.luigi import WorkTask
 
+# Set the task name for all WorkTasks
+WorkTask.task_name = config.TASKNAME
+
 
 class DownloadCorpus(WorkTask):
     @property
