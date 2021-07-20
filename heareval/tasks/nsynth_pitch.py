@@ -4,19 +4,15 @@ Pre-processing pipeline for NSynth pitch detection
 """
 
 import os
-import re
-import json
 from pathlib import Path
 from functools import partial
 import logging
 
 import luigi
 import pandas as pd
-import soundfile as sf
-from tqdm import tqdm
 from slugify import slugify
 
-import heareval.tasks.config.nsynth as config
+import heareval.tasks.config.nsynth_pitch as config
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
     DownloadCorpus,
@@ -169,7 +165,7 @@ class SubsamplePartitions(WorkTask):
                 partition="test", max_files=config.MAX_TEST_FILES
             ),
             "validation": SubsamplePartition(
-                partition="validation", max_files=config.MAX_VAL_FILES
+                partition="valid", max_files=config.MAX_VAL_FILES
             ),
         }
 
@@ -190,7 +186,7 @@ class SplitTrainTestCorpus(SplitTrainTestCorpus):
         # The metadata helps in provide the partition type for each
         # audio file
         return {
-            "corpus": MonoWavTrimCorpus(duration=config.SAMPLE_LENGTH_SECONDS),
+            "corpus": SubsamplePartitions(),
             "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
         }
 
@@ -227,7 +223,7 @@ class FinalizeCorpus(FinalizeCorpus):
             "resample": [
                 ResampleSubCorpus(sr, partition)
                 for sr in config.SAMPLE_RATES
-                for partition in ["train", "test", "validation"]
+                for partition in ["train", "test", "valid"]
             ],
             "traintestmeta": SplitTrainTestMetadata(),
             "vocabmeta": MetadataVocabulary(),
