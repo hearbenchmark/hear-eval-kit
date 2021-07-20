@@ -12,7 +12,8 @@ import soundfile as sf
 from tqdm import tqdm
 from slugify import slugify
 
-import heareval.tasks.config.speech_commands as config
+from heareval.tasks.util.dataset_builder import DatasetBuilder
+from heareval.tasks.config import get_config
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
     DownloadCorpus,
@@ -29,8 +30,11 @@ from heareval.tasks.util.luigi import (
     filename_to_int_hash,
 )
 
+# Get the config object for this task
+config = get_config("speech_commands")
+
 # Set the task name for all WorkTasks
-WorkTask.task_name = config.TASKNAME
+WorkTask.task_name = config.task_name
 
 WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
 BACKGROUND_NOISE = "_background_noise_"
@@ -317,13 +321,29 @@ class FinalizeCorpus(FinalizeCorpus):
 
 
 def main():
+
+    builder = DatasetBuilder("speech_commands")
+
+    download_tasks = builder.download_and_extract_tasks()
+
+    print(download_tasks[0].requires())
+    print(download_tasks[1].requires())
+
     ensure_dir("_workdir")
     luigi.build(
-        [FinalizeCorpus()],
-        workers=config.NUM_WORKERS,
+        download_tasks,
+        workers=builder.config.num_workers,
         local_scheduler=True,
         log_level="INFO",
     )
+
+    # ensure_dir("_workdir")
+    # luigi.build(
+    #     [FinalizeCorpus()],
+    #     workers=config.NUM_WORKERS,
+    #     local_scheduler=True,
+    #     log_level="INFO",
+    # )
 
 
 if __name__ == "__main__":
