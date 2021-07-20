@@ -26,7 +26,7 @@ class ExtractArchiveTrain(luigi_util.ExtractArchive):
     def requires(self):
         return {
             "download": luigi_util.DownloadCorpus(
-                url=config.TRAIN_DEV_DOWNLOAD_URL, outfile="train-corpus.tar.gz"
+                url=config.TRAIN_DEV_DOWNLOAD_URL, outfile="train-corpus.zip"
             )
         }
 
@@ -35,7 +35,7 @@ class ExtractArchiveTest(luigi_util.ExtractArchive):
     def requires(self):
         return {
             "download": luigi_util.DownloadCorpus(
-                url=config.TEST_DOWNLOAD_URL, outfile="test-corpus.tar.gz"
+                url=config.TEST_DOWNLOAD_URL, outfile="test-corpus.zip"
             )
         }
 
@@ -50,9 +50,8 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
     def requires(self):
         return {
-            "train": ExtractArchiveTrain(infile="train-corpus.tar.gz"),
-            #            "valid": ExtractArchiveValidation(infile="valid-corpus.tar.gz"),
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
+            "train": ExtractArchiveTrain(infile="train-corpus.zip"),
+            "test": ExtractArchiveTest(infile="test-corpus.zip"),
         }
 
     @staticmethod
@@ -147,9 +146,6 @@ class SubsamplePartitions(luigi_util.WorkTask):
             "test": SubsamplePartition(
                 partition="test", max_files=config.MAX_TEST_FILES
             ),
-            "validation": SubsamplePartition(
-                partition="valid", max_files=config.MAX_VAL_FILES
-            ),
         }
 
     def run(self):
@@ -197,8 +193,8 @@ class ResampleSubCorpus(luigi_util.ResampleSubCorpus):
 class FinalizeCorpus(luigi_util.FinalizeCorpus):
     def requires(self):
         return {
-            "train": ExtractArchiveTrain(infile="train-corpus.tar.gz"),
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
+            "train": ExtractArchiveTrain(infile="train-corpus.zip"),
+            "test": ExtractArchiveTest(infile="test-corpus.zip"),
         }
 
     """
@@ -208,7 +204,7 @@ class FinalizeCorpus(luigi_util.FinalizeCorpus):
             "resample": [
                 ResampleSubCorpus(sr, partition)
                 for sr in config.SAMPLE_RATES
-                for partition in ["train", "test", "valid"]
+                for partition in ["train", "test"]
             ],
             "traintestmeta": SplitTrainTestMetadata(),
             "vocabmeta": MetadataVocabulary(),
