@@ -170,17 +170,19 @@ class SubsampleCorpus(WorkTask):
         # The filename hash is used here
         # This task can also be done in the configprocessmetadata as that will give
         # freedom to stratify the selection on some criterion?
-        if len(process_metadata) > self.max_files:
+        num_files = len(process_metadata)
+        max_files = num_files if self.max_files is None else self.max_files
+        if num_files > max_files:
             print(
                 f"{len(process_metadata)} audio files in corpus, \
-                    keeping only {self.max_files}"
+                    keeping only {max_files}"
             )
 
         # Sort by the filename hash and select the max file per corpus
         # The filename hash is done as part of the processmetadata because
         # the string to be hashed for each file is dependent on the data
         process_metadata = process_metadata.sort_values(by="filename_hash").iloc[
-            : self.max_files
+            :max_files
         ]
 
         # Save file using symlinks

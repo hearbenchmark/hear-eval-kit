@@ -12,7 +12,8 @@ TEST_DOWNLOAD_URL = (
 
 SAMPLE_LENGTH_SECONDS = 1.0
 
-# Number files to include -- this is the full dataset
-MAX_TRAIN_FILES = 85511
-MAX_VAL_FILES = 10102
-MAX_TEST_FILES = 4890
+# Include the entire dataset, 85511 train files, 10102 validation files, and
+# 4890 testing samples
+MAX_TRAIN_FILES = None
+MAX_VAL_FILES = None
+MAX_TEST_FILES = None
