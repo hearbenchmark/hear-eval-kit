@@ -2,18 +2,28 @@
 Configuration for the google speech commands task
 """
 
-from .dataset_config import *  # noqa: F403, F401
+from .dataset_config import DatasetConfig
 
-TASKNAME = "speech_commands-v0.0.2"
-DOWNLOAD_URL = "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz"
-TEST_DOWNLOAD_URL = (
-    "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz"
-)
 
-SAMPLE_LENGTH_SECONDS = 1.0
+class SpeechCommands(DatasetConfig):
+    def __init__(self):
+        super().__init__(task_name="speech_commands", version="v0.0.2")
 
-# Include the entire dataset, 85511 train files, 10102 validation files, and
-# 4890 testing samples
-MAX_TRAIN_FILES = None
-MAX_VAL_FILES = None
-MAX_TEST_FILES = None
+        # We can potentially add all of these to the base config class to ensure that
+        # they get set -- we could also have another base class type PartitionedDataset
+        # or something for datasets where there is a predefined partition like in nsynth
+        # and google speech commands.
+        self.download_urls = {
+            "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",
+            "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",
+        }
+
+        # All samples will be trimmed / padded to this length
+        self.sample_duration = 1.0
+
+        # This could also be a list of PartitionConfig classes or something.
+        self.partitions = {
+            "train": {"max_files": None},
+            "valid": {"max_files": None},
+            "test": {"max_files": None},
+        }
