@@ -24,17 +24,6 @@ class DatasetConfig:
         self.download_urls = download_urls
         self.sample_duration = sample_duration
 
-        # For deterministic dataset generation
-        self.seed = 43
-
-        # Number of CPU works for Luigi jobs
-        self.num_workers = 4
-
-        # Default sample rates for HEAR evaluation. If you
-        # only use one sample rate this can be a list with
-        # only a single rate in it.
-        self.sample_rates = [48000, 44100, 22050, 16000]
-
     @property
     def versioned_task_name(self):
         return f"{self.task_name}-{self.version}"

@@ -3,14 +3,18 @@ A builder class that helps to construct luigi dataset pre-processing pipelines
 """
 import os
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Optional, Union
 from types import new_class
+import logging
 from functools import partial
+import multiprocessing
 
 import luigi
 
 from heareval.tasks.config import DatasetConfig, PartitionedDatasetConfig
 import heareval.tasks.util.luigi as luigi_util
+
+logger = logging.getLogger("luigi-interface")
 
 
 class DatasetBuilder:
@@ -118,7 +122,7 @@ class DatasetBuilder:
         return tasks
 
     def prepare_audio_from_metadata_task(
-        self, metadata_task: luigi.Task
+        self, metadata_task: luigi.Task, sample_rates: List[int]
     ) -> luigi_util.FinalizeCorpus:
         """
         This chains together several audio processing tasks that commonly occur
@@ -127,6 +131,7 @@ class DatasetBuilder:
 
         Args:
             metadata_task: A task that returns a process metadata csv file
+            sample_rates: A list of sample rates to resample audio to
 
         Returns:
             The final task in the processing pipeline
@@ -187,7 +192,7 @@ class DatasetBuilder:
         # Build up all the resampling tasks for each partition
         resample_tasks = []
         for partition in self.config.partitions:
-            for sr in self.config.sample_rates:
+            for sr in sample_rates:
                 task = self.build_task(
                     luigi_util.ResampleSubCorpus,
                     requirements={"traintestcorpus": split_audio},
@@ -206,12 +211,13 @@ class DatasetBuilder:
 
         return finalize_corpus
 
-    def run(self, task: Union[List[luigi.Task], luigi.Task]):
+    def run(self, task: Union[List[luigi.Task], luigi.Task], num_workers: int):
         """
         Run a task / set of tasks
 
         Args:
             task: a single or list of luigi tasks
+            num_workers: Number of CPU workers to use for this task
         """
 
         # If this is just a single task then add it to a list
@@ -221,7 +227,7 @@ class DatasetBuilder:
         luigi_util.ensure_dir("_workdir")
         luigi.build(
             task,
-            workers=self.config.num_workers,
+            workers=num_workers,
             local_scheduler=True,
             log_level="INFO",
         )

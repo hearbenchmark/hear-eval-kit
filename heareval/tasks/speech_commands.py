@@ -5,6 +5,7 @@ Pre-processing pipeline for Google Speech Commands
 import os
 import re
 from pathlib import Path
+from typing import List
 
 import luigi
 import pandas as pd
@@ -189,7 +190,7 @@ class ConfigureProcessMetaData(WorkTask):
         self.mark_complete()
 
 
-def main():
+def main(num_workers: int, sample_rates: List[int]):
 
     config = SpeechCommandsConfig()
     builder = DatasetBuilder(config)
@@ -216,10 +217,12 @@ def main():
 
     # The remainder of the pipeline is a generic audio pipeline
     # built off of the metadata csv.
-    audio_task = builder.prepare_audio_from_metadata_task(configure_metadata)
+    audio_task = builder.prepare_audio_from_metadata_task(
+        configure_metadata, sample_rates
+    )
 
     # Run the pipeline
-    builder.run(audio_task)
+    builder.run(audio_task, num_workers=num_workers)
 
 
 if __name__ == "__main__":

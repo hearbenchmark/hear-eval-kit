@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from functools import partial
 import logging
+from typing import List
 
 import luigi
 import pandas as pd
@@ -86,7 +87,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         self.mark_complete()
 
 
-def main():
+def main(num_workers: int, sample_rates: List[int]):
 
     builder = DatasetBuilder(config)
 
@@ -97,9 +98,11 @@ def main():
         requirements=download_tasks,
         kwargs={"outfile": "process_metadata.csv"},
     )
-    audio_tasks = builder.prepare_audio_from_metadata_task(configure_metadata)
+    audio_tasks = builder.prepare_audio_from_metadata_task(
+        configure_metadata, sample_rates
+    )
 
-    builder.run(audio_tasks)
+    builder.run(audio_tasks, num_workers=num_workers)
 
 
 if __name__ == "__main__":
