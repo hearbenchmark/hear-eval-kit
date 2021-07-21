@@ -13,7 +13,7 @@ import luigi
 import pandas as pd
 from slugify import slugify
 
-from heareval.tasks.config.dataset_config import (
+from heareval.tasks.dataset_config import (
     PartitionedDatasetConfig,
     PartitionConfig,
 )

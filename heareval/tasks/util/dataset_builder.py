@@ -10,7 +10,7 @@ from functools import partial
 
 import luigi
 
-from heareval.tasks.config import DatasetConfig, PartitionedDatasetConfig
+from heareval.tasks.dataset_config import DatasetConfig, PartitionedDatasetConfig
 import heareval.tasks.util.luigi as luigi_util
 
 logger = logging.getLogger("luigi-interface")
