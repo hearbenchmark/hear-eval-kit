@@ -35,6 +35,10 @@ class DatasetConfig:
         # only a single rate in it.
         self.sample_rates = [48000, 44100, 22050, 16000]
 
+    @property
+    def versioned_task_name(self):
+        return f"{self.task_name}-{self.version}"
+
 
 class PartitionConfig:
     """

@@ -36,7 +36,7 @@ class DatasetBuilder:
             )
 
         # Set the task name for all luigi WorkTasks
-        luigi_util.WorkTask.task_name = self.config.task_name
+        luigi_util.WorkTask.task_name = self.config.versioned_task_name
 
     @staticmethod
     def add_requirements(requirements: Union[luigi.Task, List, Dict], namespace: Dict):
@@ -90,7 +90,7 @@ class DatasetBuilder:
         )
 
         # Make sure the task name is correct for the config
-        task_class.task_name = self.config.task_name
+        task_class.task_name = self.config.versioned_task_name
 
         # Instantiate the new class with the keyword args
         kwargs = dict() if kwargs is None else kwargs
