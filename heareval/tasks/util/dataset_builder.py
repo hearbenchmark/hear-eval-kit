@@ -14,6 +14,16 @@ import heareval.tasks.util.luigi as luigi_util
 
 
 class DatasetBuilder:
+    """
+    A class that helps to construct a data preprocessing pipeline for a
+    dataset.
+
+    Args:
+        task_config: the name of the task being built (will try to load the dataset
+            config file for this automatically, or a DatasetConfig file describing the
+            dataset that is being constructed.
+    """
+
     def __init__(self, task_config: Union[str, DatasetConfig]):
         if isinstance(task_config, str):
             self.config = get_config(task_config)
@@ -101,7 +111,20 @@ class DatasetBuilder:
 
         return tasks
 
-    def prepare_audio_from_metadata_task(self, metadata_task: luigi.Task) -> luigi.Task:
+    def prepare_audio_from_metadata_task(
+        self, metadata_task: luigi.Task
+    ) -> luigi_util.FinalizeCorpus:
+        """
+        This chains together several audio processing tasks that commonly occur
+        together. Accepts a metadata task that outputs a csv file with the dataset
+        metadata and then finalizes the dataset based on that.
+
+        Args:
+            metadata_task: A task that returns a process metadata csv file
+
+        Returns:
+            The final task in the processing pipeline
+        """
 
         # Subsample each partition
         subsample_tasks = {}
