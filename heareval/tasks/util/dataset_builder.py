@@ -9,7 +9,7 @@ from functools import partial
 
 import luigi
 
-from heareval.tasks.config import DatasetConfig, get_config
+from heareval.tasks.config import DatasetConfig, PartitionedDatasetConfig, get_config
 import heareval.tasks.util.luigi as luigi_util
 
 
@@ -58,7 +58,15 @@ class DatasetBuilder:
         kwargs: Dict[str, Any] = None,
     ) -> Any:
         """
-        Dynamically creates a luigi work task with the passed in requirements
+        Dynamically creates a luigi work task with the passed in requirements. This
+        creates a new class that derives from the passed in base class and defines
+        the requires method to return the requirements.
+
+        The reason we do this is because we need the requires to be defined ahead of
+        time so the entire dependency graph can be constructed and the output workdirs
+        can be labelled correctly based on their order in the pipeline. This allows us
+        to know the dependency graph at runtime AND dynamically build pipelines with
+        varying requirements.
 
         Args:
             base: Base class for this task
@@ -125,6 +133,10 @@ class DatasetBuilder:
         Returns:
             The final task in the processing pipeline
         """
+
+        # TODO: A different method gets called based on the config type?
+        if not isinstance(self.config, PartitionedDatasetConfig):
+            raise ValueError("This method can only be used for PartitionedDatasets")
 
         # Subsample each partition
         subsample_tasks = {}

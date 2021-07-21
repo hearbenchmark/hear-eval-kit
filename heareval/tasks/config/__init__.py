@@ -1,4 +1,4 @@
-from .dataset_config import DatasetConfig
+from .dataset_config import DatasetConfig, PartitionedDatasetConfig
 from .speech_commands import SpeechCommands
 
 available_configs = {

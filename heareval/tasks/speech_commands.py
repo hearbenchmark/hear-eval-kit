@@ -193,10 +193,14 @@ def main():
 
     builder = DatasetBuilder("speech_commands")
 
+    # This is a dictionary of the required extraction (untaring) tasks with their
+    # required download tasks. This are required be the custom GenerateTrainDataset
+    # and ConfigureProcessMetaData tasks.
     download_tasks = builder.download_and_extract_tasks()
 
     # Run the custom tasks for this dataset to generate samples and configure
-    # the metadata files
+    # the metadata files. We instantiate these with the builder to pass in the
+    # dynamic download and extract requirements.
     generate_dataset = builder.build_task(
         GenerateTrainDataset, requirements={"train": download_tasks["train"]}
     )
@@ -209,6 +213,8 @@ def main():
         kwargs={"outfile": "process_metadata.csv"},
     )
 
+    # The remainder of the pipeline is a generic audio pipeline
+    # built off of the metadata csv.
     audio_task = builder.prepare_audio_from_metadata_task(configure_metadata)
 
     ensure_dir("_workdir")
