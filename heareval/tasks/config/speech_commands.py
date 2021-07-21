@@ -11,7 +11,7 @@ from .dataset_config import PartitionedDatasetConfig, PartitionConfig
 #   automatically -- and then if the user wants to adjust these values they could
 #   pass in an additional json config as a command line arg that would overwrite any
 #   default values that are specified.
-class SpeechCommands(PartitionedDatasetConfig):
+class SpeechCommandsConfig(PartitionedDatasetConfig):
     def __init__(self):
         super().__init__(
             task_name="speech_commands",

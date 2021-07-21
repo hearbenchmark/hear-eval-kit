@@ -9,7 +9,7 @@ from functools import partial
 
 import luigi
 
-from heareval.tasks.config import DatasetConfig, PartitionedDatasetConfig, get_config
+from heareval.tasks.config import DatasetConfig, PartitionedDatasetConfig
 import heareval.tasks.util.luigi as luigi_util
 
 
@@ -24,10 +24,8 @@ class DatasetBuilder:
             dataset that is being constructed.
     """
 
-    def __init__(self, task_config: Union[str, DatasetConfig]):
-        if isinstance(task_config, str):
-            self.config = get_config(task_config)
-        elif isinstance(task_config, DatasetConfig):
+    def __init__(self, task_config: DatasetConfig):
+        if isinstance(task_config, DatasetConfig):
             self.config = task_config
         else:
             raise TypeError(

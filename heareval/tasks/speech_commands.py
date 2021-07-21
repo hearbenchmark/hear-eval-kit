@@ -12,6 +12,7 @@ import soundfile as sf
 from tqdm import tqdm
 from slugify import slugify
 
+from heareval.tasks.config import SpeechCommandsConfig
 from heareval.tasks.util.dataset_builder import DatasetBuilder
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
@@ -191,7 +192,8 @@ class ConfigureProcessMetaData(WorkTask):
 
 def main():
 
-    builder = DatasetBuilder("speech_commands")
+    config = SpeechCommandsConfig()
+    builder = DatasetBuilder(config)
 
     # This is a dictionary of the required extraction (untaring) tasks with their
     # required download tasks. This are required be the custom GenerateTrainDataset

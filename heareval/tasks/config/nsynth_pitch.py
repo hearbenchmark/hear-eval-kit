@@ -5,7 +5,7 @@ Configuration for the nsynth pitch detection task
 from .dataset_config import PartitionedDatasetConfig, PartitionConfig
 
 
-class NSynthPitch(PartitionedDatasetConfig):
+class NSynthPitchConfig(PartitionedDatasetConfig):
     def __init__(self):
         super().__init__(
             task_name="nsynth-pitch",
