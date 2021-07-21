@@ -17,7 +17,6 @@ from heareval.tasks.util.dataset_builder import DatasetBuilder
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
     WorkTask,
-    ensure_dir,
     filename_to_int_hash,
 )
 
@@ -219,13 +218,8 @@ def main():
     # built off of the metadata csv.
     audio_task = builder.prepare_audio_from_metadata_task(configure_metadata)
 
-    ensure_dir("_workdir")
-    luigi.build(
-        [audio_task],
-        workers=builder.config.num_workers,
-        local_scheduler=True,
-        log_level="INFO",
-    )
+    # Run the pipeline
+    builder.run(audio_task)
 
 
 if __name__ == "__main__":

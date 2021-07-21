@@ -217,7 +217,8 @@ class MonoWavTrimCorpus(WorkTask):
         raise NotImplementedError("This method requires a corpus tasks")
 
     def run(self):
-
+        # TODO: this should check to see if the audio is already a mono wav at the
+        #   correct length and just create a symlink if that is this case.
         for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*"))):
 
             newaudiofile = new_basedir(

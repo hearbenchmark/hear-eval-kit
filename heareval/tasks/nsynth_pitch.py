@@ -12,40 +12,12 @@ import luigi
 import pandas as pd
 from slugify import slugify
 
+from heareval.tasks.config import NSynthPitchConfig
 from heareval.tasks.util.dataset_builder import DatasetBuilder
 import heareval.tasks.util.luigi as luigi_util
 
 logger = logging.getLogger("luigi-interface")
-
-# Set the task name for all WorkTasks
-luigi_util.WorkTask.task_name = config.TASKNAME
-
-
-class ExtractArchiveTrain(luigi_util.ExtractArchive):
-    def requires(self):
-        return {
-            "download": luigi_util.DownloadCorpus(
-                url=config.TRAIN_DOWNLOAD_URL, outfile="train-corpus.tar.gz"
-            )
-        }
-
-
-class ExtractArchiveValidation(luigi_util.ExtractArchive):
-    def requires(self):
-        return {
-            "download": luigi_util.DownloadCorpus(
-                url=config.VALIDATION_DOWNLOAD_URL, outfile="valid-corpus.tar.gz"
-            )
-        }
-
-
-class ExtractArchiveTest(luigi_util.ExtractArchive):
-    def requires(self):
-        return {
-            "download": luigi_util.DownloadCorpus(
-                url=config.TEST_DOWNLOAD_URL, outfile="test-corpus.tar.gz"
-            )
-        }
+config = NSynthPitchConfig()
 
 
 class ConfigureProcessMetaData(luigi_util.WorkTask):
@@ -56,11 +28,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
     outfile = luigi.Parameter()
 
     def requires(self):
-        return {
-            "train": ExtractArchiveTrain(infile="train-corpus.tar.gz"),
-            "valid": ExtractArchiveValidation(infile="valid-corpus.tar.gz"),
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
-        }
+        raise NotImplementedError
 
     @staticmethod
     def get_rel_path(root: Path, item: pd.DataFrame) -> str:
@@ -118,107 +86,20 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         self.mark_complete()
 
 
-class SubsamplePartition(luigi_util.SubsamplePartition):
-    """
-    A subsampler that acts on a specific partition.
-    All instances of this will depend on the combined process metadata csv.
-    """
-
-    def requires(self):
-        # The meta files contain the path of the files in the data
-        # so we dont need to pass the extract as a dependency here.
-        return {
-            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
-        }
-
-
-class SubsamplePartitions(luigi_util.WorkTask):
-    """
-    Aggregates subsampling of all the partitions into a single task as dependencies.
-    All the subsampled files are stored in the requires workdir, so we just link to
-    that since there aren't any real outputs associated with this task.
-    This is a bit of a hack -- but it allows us to avoid rewriting
-    the Subsample task as well as take advantage of Luigi concurrency.
-    """
-
-    def requires(self):
-        # Perform subsampling on each partition independently
-        return {
-            "train": SubsamplePartition(
-                partition="train", max_files=config.MAX_TRAIN_FILES
-            ),
-            "test": SubsamplePartition(
-                partition="test", max_files=config.MAX_TEST_FILES
-            ),
-            "validation": SubsamplePartition(
-                partition="valid", max_files=config.MAX_VAL_FILES
-            ),
-        }
-
-    def run(self):
-        workdir = Path(self.workdir)
-        workdir.rmdir()
-        workdir.symlink_to(Path(self.requires()["train"].workdir).absolute())
-        self.mark_complete()
-
-
-class SplitTrainTestCorpus(luigi_util.SplitTrainTestCorpus):
-    def requires(self):
-        # The metadata helps in provide the partition type for each
-        # audio file
-        return {
-            "corpus": SubsamplePartitions(),
-            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
-        }
-
-
-class SplitTrainTestMetadata(luigi_util.SplitTrainTestMetadata):
-    def requires(self):
-        # Requires the traintestcorpus and the metadata.
-        # The metadata is split into train and test files
-        # which are in the traintestcorpus
-        return {
-            "traintestcorpus": SplitTrainTestCorpus(),
-            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
-        }
-
-
-class MetadataVocabulary(luigi_util.MetadataVocabulary):
-    def requires(self):
-        # Depends only on the train test metadata
-        return {"traintestmeta": SplitTrainTestMetadata()}
-
-
-class ResampleSubCorpus(luigi_util.ResampleSubCorpus):
-    def requires(self):
-        # Requires the train test corpus and will take in
-        # parameter for which partition and sr the resampling
-        # has to be done
-        return {"traintestcorpus": SplitTrainTestCorpus()}
-
-
-class FinalizeCorpus(luigi_util.FinalizeCorpus):
-    def requires(self):
-        # Will copy the resampled data and the traintestmeta and the vocabmeta
-        return {
-            "resample": [
-                ResampleSubCorpus(sr, partition)
-                for sr in config.SAMPLE_RATES
-                for partition in ["train", "test", "valid"]
-            ],
-            "traintestmeta": SplitTrainTestMetadata(),
-            "vocabmeta": MetadataVocabulary(),
-        }
-
-
 def main():
-    luigi_util.ensure_dir("_workdir")
-    luigi.build(
-        [FinalizeCorpus()],
-        workers=config.NUM_WORKERS,
-        local_scheduler=True,
-        log_level="INFO",
+
+    builder = DatasetBuilder(config)
+
+    # Build the dataset pipeline with the custom metadata configuration task
+    download_tasks = builder.download_and_extract_tasks()
+    configure_metadata = builder.build_task(
+        ConfigureProcessMetaData,
+        requirements=download_tasks,
+        kwargs={"outfile": "process_metadata.csv"},
     )
+    audio_tasks = builder.prepare_audio_from_metadata_task(configure_metadata)
+
+    builder.run(audio_tasks)
 
 
 if __name__ == "__main__":

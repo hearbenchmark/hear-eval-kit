@@ -205,3 +205,23 @@ class DatasetBuilder:
         )
 
         return finalize_corpus
+
+    def run(self, task: Union[List[luigi.Task], luigi.Task]):
+        """
+        Run a task / set of tasks
+
+        Args:
+            task: a single or list of luigi tasks
+        """
+
+        # If this is just a single task then add it to a list
+        if isinstance(task, luigi.Task):
+            task = [task]
+
+        luigi_util.ensure_dir("_workdir")
+        luigi.build(
+            task,
+            workers=self.config.num_workers,
+            local_scheduler=True,
+            log_level="INFO",
+        )
