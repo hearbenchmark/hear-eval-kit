@@ -4,7 +4,7 @@ A builder class that helps to construct luigi dataset pre-processing pipelines
 import os
 from urllib.parse import urlparse
 from typing import Any, Dict, List, Union
-from types import MethodType, new_class
+from types import new_class
 from functools import partial
 
 import luigi
@@ -71,6 +71,9 @@ class DatasetBuilder:
             exec_body=partial(self.add_requirements, requirements),
         )
 
+        # Make sure the task name is correct for the config
+        task_class.task_name = self.config.task_name
+
         # Instantiate the new class with the keyword args
         kwargs = dict() if kwargs is None else kwargs
         return task_class(**kwargs)
@@ -125,4 +128,47 @@ class DatasetBuilder:
             kwargs={"duration": self.config.sample_duration},
         )
 
-        return mono_trim_wav
+        split_audio = self.build_task(
+            # TODO: Rename SplitTrainTestCorpus
+            luigi_util.SplitTrainTestCorpus,
+            requirements={
+                "corpus": mono_trim_wav,
+                "meta": metadata_task,
+            },
+        )
+
+        split_metadata = self.build_task(
+            # Todo: Rename SplitTrainTestMetadata
+            luigi_util.SplitTrainTestMetadata,
+            requirements={
+                "traintestcorpus": split_audio,
+                "meta": metadata_task,
+            },
+        )
+
+        metadata_vocab = self.build_task(
+            luigi_util.MetadataVocabulary,
+            requirements={"traintestmeta": split_metadata},
+        )
+
+        # Build up all the resampling tasks for each partition
+        resample_tasks = []
+        for partition in self.config.partitions:
+            for sr in self.config.sample_rates:
+                task = self.build_task(
+                    luigi_util.ResampleSubCorpus,
+                    requirements={"traintestcorpus": split_audio},
+                    kwargs={"sr": sr, "partition": partition.name},
+                )
+                resample_tasks.append(task)
+
+        finalize_corpus = self.build_task(
+            luigi_util.FinalizeCorpus,
+            requirements={
+                "resample": resample_tasks,
+                "traintestmeta": split_metadata,
+                "vocabmeta": metadata_vocab,
+            },
+        )
+
+        return finalize_corpus
