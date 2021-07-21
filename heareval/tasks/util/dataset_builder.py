@@ -45,6 +45,7 @@ class DatasetBuilder:
         base: Any,
         name: str = None,
         requirements: Union[luigi.Task, List, Dict] = None,
+        kwargs: Dict[str, Any] = None,
     ) -> Any:
         """
         Dynamically creates a luigi work task with the passed in requirements
@@ -57,23 +58,28 @@ class DatasetBuilder:
                 then make sure to set this.
             requirements: Optional requirements that will be returned by the requires()
                 method of the newly created class.
+            kwargs: keyword args to used to construct the newly created task class
 
         Returns:
             A new class that derives from the base class
 
         """
+        name = base.__name__ if name is None else name
         task_class = new_class(
             name=name,
             bases=(base,),
             exec_body=partial(self.add_requirements, requirements),
         )
-        return task_class
 
-    def download_and_extract_tasks(self) -> List[luigi_util.WorkTask]:
+        # Instantiate the new class with the keyword args
+        kwargs = dict() if kwargs is None else kwargs
+        return task_class(**kwargs)
+
+    def download_and_extract_tasks(self) -> Dict[str, luigi_util.WorkTask]:
         """
         Builds the download and extract tasks from a dictionary of download urls
         """
-        tasks = []
+        tasks = {}
 
         # For each required download in the config, creates a new ExtractArchive
         # class with the correct Download requirement. The new ExtractArchive tasks
@@ -86,7 +92,8 @@ class DatasetBuilder:
                 requirements={
                     "download": luigi_util.DownloadCorpus(url=url, outfile=filename)
                 },
+                kwargs={"infile": filename},
             )
-            tasks.append(task(infile=filename))
+            tasks[name] = task
 
         return tasks

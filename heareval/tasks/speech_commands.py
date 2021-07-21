@@ -68,9 +68,6 @@ class GenerateTrainDataset(WorkTask):
     https://github.com/tensorflow/datasets/blob/79d56e662a15cd11e1fb3b679e0f978c8041566f/tensorflow_datasets/audio/speech_commands.py#L142
     """
 
-    def requires(self):
-        return {"train": ExtractArchiveTrain(infile="train-corpus.tar.gz")}
-
     def run(self):
         train_path = Path(self.requires()["train"].workdir)
         background_audio = list(train_path.glob(f"{BACKGROUND_NOISE}/*.wav"))
@@ -326,12 +323,21 @@ def main():
 
     download_tasks = builder.download_and_extract_tasks()
 
-    print(download_tasks[0].requires())
-    print(download_tasks[1].requires())
+    generate_dataset = builder.build_task(
+        GenerateTrainDataset, requirements={"train": download_tasks["train"]}
+    )
+    configure_metadata = builder.build_task(
+        ConfigureProcessMetaData,
+        requirements={
+            "train": generate_dataset,
+            "test": download_tasks["test"],
+        },
+        kwargs={"outfile": "process_metadata.csv"},
+    )
 
     ensure_dir("_workdir")
     luigi.build(
-        download_tasks,
+        [configure_metadata],
         workers=builder.config.num_workers,
         local_scheduler=True,
         log_level="INFO",
