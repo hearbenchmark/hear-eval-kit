@@ -13,7 +13,10 @@ import soundfile as sf
 from tqdm import tqdm
 from slugify import slugify
 
-from heareval.tasks.config import SpeechCommandsConfig
+from heareval.tasks.config.dataset_config import (
+    PartitionedDatasetConfig,
+    PartitionConfig,
+)
 from heareval.tasks.util.dataset_builder import DatasetBuilder
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
@@ -26,6 +29,28 @@ WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
 BACKGROUND_NOISE = "_background_noise_"
 UNKNOWN = "_unknown_"
 SILENCE = "_silence_"
+
+
+class SpeechCommandsConfig(PartitionedDatasetConfig):
+    def __init__(self):
+        super().__init__(
+            task_name="speech_commands",
+            version="v0.0.2",
+            download_urls={
+                "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
+                "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
+            },
+            # All samples will be trimmed / padded to this length
+            sample_duration=1.0,
+            # Pre-defined partitions in the dataset. Number of files in each split is
+            # train: 85,111; valid: 10,102; test: 4890.
+            # To subsample a partition, set the max_files to an integer.
+            partitions=[
+                PartitionConfig(name="train", max_files=1000),
+                PartitionConfig(name="valid", max_files=100),
+                PartitionConfig(name="test", max_files=100),
+            ],
+        )
 
 
 class GenerateTrainDataset(WorkTask):
