@@ -2,23 +2,27 @@
 Configuration for the nsynth pitch detection task
 """
 
-from .dataset_config import *  # noqa: F403, F401
+from .dataset_config import PartitionedDatasetConfig, PartitionConfig
 
-TASKNAME = "nsynth-pitch-v2.3.3"
 
-TRAIN_DOWNLOAD_URL = (
-    "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz"
-)
-VALIDATION_DOWNLOAD_URL = (
-    "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz"
-)
-TEST_DOWNLOAD_URL = (
-    "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz"
-)
-
-SAMPLE_LENGTH_SECONDS = 4.0
-
-# Number files to include
-MAX_TRAIN_FILES = 8000
-MAX_VAL_FILES = 1000
-MAX_TEST_FILES = 1000
+class NSynthPitch(PartitionedDatasetConfig):
+    def __init__(self):
+        super().__init__(
+            task_name="nsynth-pitch",
+            version="v2.2.3",
+            download_urls={
+                "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",
+                "valid": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",
+                "test": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",
+            },
+            # All samples will be trimmed / padded to this length
+            sample_duration=4.0,
+            # Pre-defined partitions in the dataset. Number of files in each split is
+            # train: 85,111; valid: 10,102; test: 4890.
+            # To subsample a partition, set the max_files to an integer.
+            partitions=[
+                PartitionConfig(name="train", max_files=1000),
+                PartitionConfig(name="valid", max_files=100),
+                PartitionConfig(name="test", max_files=100),
+            ],
+        )

@@ -12,7 +12,7 @@ import luigi
 import pandas as pd
 from slugify import slugify
 
-import heareval.tasks.config.nsynth_pitch as config
+from heareval.tasks.util.dataset_builder import DatasetBuilder
 import heareval.tasks.util.luigi as luigi_util
 
 logger = logging.getLogger("luigi-interface")
