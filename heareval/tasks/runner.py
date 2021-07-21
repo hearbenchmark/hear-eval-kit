@@ -14,7 +14,6 @@ import heareval.tasks.nsynth_pitch as nsynth_pitch
 
 logger = logging.getLogger("luigi-interface")
 
-
 tasks = {"speech_commands": speech_commands, "nsynth_pitch": nsynth_pitch}
 
 

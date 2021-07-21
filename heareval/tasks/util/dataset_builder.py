@@ -3,11 +3,10 @@ A builder class that helps to construct luigi dataset pre-processing pipelines
 """
 import os
 from urllib.parse import urlparse
-from typing import Any, Dict, List, Optional, Optional, Union
+from typing import Any, Dict, List, Union
 from types import new_class
 import logging
 from functools import partial
-import multiprocessing
 
 import luigi
 
