@@ -97,3 +97,32 @@ class DatasetBuilder:
             tasks[name] = task
 
         return tasks
+
+    def prepare_audio_from_metadata_task(self, metadata_task: luigi.Task) -> luigi.Task:
+
+        # Subsample each partition
+        subsample_tasks = {}
+        for partition in self.config.partitions:
+            task = self.build_task(
+                luigi_util.SubsamplePartition,
+                requirements={"meta": metadata_task},
+                kwargs={"partition": partition.name, "max_files": partition.max_files},
+            )
+            subsample_tasks[partition.name] = task
+
+        # Convert each audio file to a mono wav file of the correct length.
+        # MonoWavTrimCorpus only needs one requirement called "corpus" in order
+        # to locate the workdir. But we also need it to wait for the remainder of
+        # the partition subsample tasks.
+        partitions = list(subsample_tasks.keys())
+        requirements = {"corpus": subsample_tasks[partitions[0]]}
+        for name in partitions[1:]:
+            requirements[name] = subsample_tasks[name]
+
+        mono_trim_wav = self.build_task(
+            luigi_util.MonoWavTrimCorpus,
+            requirements=requirements,
+            kwargs={"duration": self.config.sample_duration},
+        )
+
+        return mono_trim_wav

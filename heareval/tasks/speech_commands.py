@@ -153,7 +153,7 @@ class ConfigureProcessMetaData(WorkTask):
         val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
         validation_rel_paths.extend(val_silence)
         validation_df = pd.DataFrame(validation_rel_paths, columns=["relpath"]).assign(
-            partition=lambda df: "validation"
+            partition=lambda df: "valid"
         )
 
         # Train files
@@ -323,6 +323,8 @@ def main():
 
     download_tasks = builder.download_and_extract_tasks()
 
+    # Run the custom tasks for this dataset to generate samples and configure
+    # the metadata files
     generate_dataset = builder.build_task(
         GenerateTrainDataset, requirements={"train": download_tasks["train"]}
     )
@@ -335,9 +337,11 @@ def main():
         kwargs={"outfile": "process_metadata.csv"},
     )
 
+    audio_task = builder.prepare_audio_from_metadata_task(configure_metadata)
+
     ensure_dir("_workdir")
     luigi.build(
-        [configure_metadata],
+        [audio_task],
         workers=builder.config.num_workers,
         local_scheduler=True,
         log_level="INFO",
