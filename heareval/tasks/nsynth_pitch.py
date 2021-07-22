@@ -13,12 +13,11 @@ import luigi
 import pandas as pd
 from slugify import slugify
 
+import heareval.tasks.util.luigi as luigi_util
 from heareval.tasks.dataset_config import (
     PartitionedDatasetConfig,
     PartitionConfig,
 )
-from heareval.tasks.util.dataset_builder import DatasetBuilder
-import heareval.tasks.util.luigi as luigi_util
 
 logger = logging.getLogger("luigi-interface")
 
@@ -51,10 +50,8 @@ class NSynthPitchConfig(PartitionedDatasetConfig):
         self.pitch_range = (21, 108)
 
 
-config = NSynthPitchConfig()
-
-
 # Set the task name for all WorkTasks
+config = NSynthPitchConfig()
 luigi_util.WorkTask.task_name = config.versioned_task_name
 
 
