@@ -164,7 +164,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
         validation_rel_paths.extend(val_silence)
         validation_df = pd.DataFrame(validation_rel_paths, columns=["relpath"]).assign(
-            partition=lambda df: "validation"
+            partition=lambda df: "valid"
         )
 
         # Train files
