@@ -76,7 +76,8 @@ class DatasetBuilder:
                 then make sure to set this.
             requirements: Optional requirements that will be returned by the requires()
                 method of the newly created class.
-            params: keyword args to used to construct the newly created task class
+            params: Optional keyword args to used to construct the newly
+                created task class.
 
         Returns:
             A new class that derives from the base class
@@ -104,7 +105,7 @@ class DatasetBuilder:
 
         # For each required download in the config, creates a new ExtractArchive
         # class with the correct Download requirement. The new ExtractArchive tasks
-        # are returned as a list of tasks.
+        # are returned as a dictionary of tasks.
         for name, url in self.config.download_urls.items():
             filename = os.path.basename(urlparse(url).path)
             task = self.build_task(
