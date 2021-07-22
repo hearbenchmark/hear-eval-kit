@@ -5,6 +5,7 @@ Pre-processing pipeline for Google Speech Commands
 import os
 import re
 from pathlib import Path
+from typing import List
 
 import luigi
 import pandas as pd
@@ -12,25 +13,17 @@ import soundfile as sf
 from tqdm import tqdm
 from slugify import slugify
 
-import heareval.tasks.config.speech_commands as config
+from heareval.tasks.dataset_config import (
+    PartitionedDatasetConfig,
+    PartitionConfig,
+)
+from heareval.tasks.util.dataset_builder import DatasetBuilder
 from heareval.tasks.util.luigi import (
     PROCESSMETADATACOLS,
-    DownloadCorpus,
-    ExtractArchive,
-    FinalizeCorpus,
-    MetadataVocabulary,
-    MonoWavTrimCorpus,
-    ResampleSubCorpus,
-    SplitTrainTestCorpus,
-    SplitTrainTestMetadata,
-    SubsamplePartition,
     WorkTask,
-    ensure_dir,
     filename_to_int_hash,
 )
 
-# Set the task name for all WorkTasks
-WorkTask.task_name = config.TASKNAME
 
 WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
 BACKGROUND_NOISE = "_background_noise_"
@@ -38,22 +31,26 @@ UNKNOWN = "_unknown_"
 SILENCE = "_silence_"
 
 
-class ExtractArchiveTrain(ExtractArchive):
-    def requires(self):
-        return {
-            "download": DownloadCorpus(
-                url=config.DOWNLOAD_URL, outfile="train-corpus.tar.gz"
-            )
-        }
-
-
-class ExtractArchiveTest(ExtractArchive):
-    def requires(self):
-        return {
-            "download": DownloadCorpus(
-                url=config.TEST_DOWNLOAD_URL, outfile="test-corpus.tar.gz"
-            )
-        }
+class SpeechCommandsConfig(PartitionedDatasetConfig):
+    def __init__(self):
+        super().__init__(
+            task_name="speech_commands",
+            version="v0.0.2",
+            download_urls={
+                "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
+                "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
+            },
+            # All samples will be trimmed / padded to this length
+            sample_duration=1.0,
+            # Pre-defined partitions in the dataset. Number of files in each split is
+            # train: 85,111; valid: 10,102; test: 4890.
+            # To subsample a partition, set the max_files to an integer.
+            partitions=[
+                PartitionConfig(name="train", max_files=None),
+                PartitionConfig(name="valid", max_files=None),
+                PartitionConfig(name="test", max_files=None),
+            ],
+        )
 
 
 class GenerateTrainDataset(WorkTask):
@@ -65,7 +62,8 @@ class GenerateTrainDataset(WorkTask):
     """
 
     def requires(self):
-        return {"train": ExtractArchiveTrain(infile="train-corpus.tar.gz")}
+        # This requires a task called "train" which is an ExtractArchive task.
+        raise NotImplementedError
 
     def run(self):
         train_path = Path(self.requires()["train"].workdir)
@@ -114,10 +112,9 @@ class ConfigureProcessMetaData(WorkTask):
     outfile = luigi.Parameter()
 
     def requires(self):
-        return {
-            "train": GenerateTrainDataset(),
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
-        }
+        # This has two requirements: "train" which is a GenerateTrainDataset task
+        # and "test" which is an ExtractArchive task.
+        raise NotImplementedError()
 
     @staticmethod
     def apply_label(relative_path):
@@ -152,7 +149,7 @@ class ConfigureProcessMetaData(WorkTask):
         val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
         validation_rel_paths.extend(val_silence)
         validation_df = pd.DataFrame(validation_rel_paths, columns=["relpath"]).assign(
-            partition=lambda df: "validation"
+            partition=lambda df: "valid"
         )
 
         # Train files
@@ -218,113 +215,36 @@ class ConfigureProcessMetaData(WorkTask):
         self.mark_complete()
 
 
-class SubsamplePartition(SubsamplePartition):
-    """
-    A subsampler that acts on a specific partition.
-    All instances of this will depend on the combined process metadata csv.
-    """
+def main(num_workers: int, sample_rates: List[int]):
 
-    def requires(self):
-        # The meta files contain the path of the files in the data
-        # so we dont need to pass the extract as a dependency here.
-        return {
-            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
-        }
+    config = SpeechCommandsConfig()
+    builder = DatasetBuilder(config)
 
+    # This is a dictionary of the required extraction (untaring) tasks with their
+    # required download tasks. This are required be the custom GenerateTrainDataset
+    # and ConfigureProcessMetaData tasks.
+    download_tasks = builder.download_and_extract_tasks()
 
-class SubsamplePartitions(WorkTask):
-    """
-    Aggregates subsampling of all the partitions into a single task as dependencies.
-    All the subsampled files are stored in the requires workdir, so we just link to
-    that since there aren't any real outputs associated with this task.
-    This is a bit of a hack -- but it allows us to avoid rewriting
-    the Subsample task as well as take advantage of Luigi concurrency.
-    """
-
-    def requires(self):
-        # Perform subsampling on each partition independently
-        return {
-            "train": SubsamplePartition(
-                partition="train", max_files=config.MAX_TRAIN_FILES
-            ),
-            "test": SubsamplePartition(
-                partition="test", max_files=config.MAX_TEST_FILES
-            ),
-            "validation": SubsamplePartition(
-                partition="validation", max_files=config.MAX_VAL_FILES
-            ),
-        }
-
-    def run(self):
-        workdir = Path(self.workdir)
-        workdir.rmdir()
-        workdir.symlink_to(Path(self.requires()["train"].workdir).absolute())
-        self.mark_complete()
-
-
-class MonoWavTrimCorpus(MonoWavTrimCorpus):
-    def requires(self):
-        return {"corpus": SubsamplePartitions()}
-
-
-class SplitTrainTestCorpus(SplitTrainTestCorpus):
-    def requires(self):
-        # The metadata helps in provide the partition type for each
-        # audio file
-        return {
-            "corpus": MonoWavTrimCorpus(duration=config.SAMPLE_LENGTH_SECONDS),
-            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
-        }
-
-
-class SplitTrainTestMetadata(SplitTrainTestMetadata):
-    def requires(self):
-        # Requires the traintestcorpus and the metadata.
-        # The metadata is split into train and test files
-        # which are in the traintestcorpus
-        return {
-            "traintestcorpus": SplitTrainTestCorpus(),
-            "meta": ConfigureProcessMetaData(outfile="process_metadata.csv"),
-        }
-
-
-class MetadataVocabulary(MetadataVocabulary):
-    def requires(self):
-        # Depends only on the train test metadata
-        return {"traintestmeta": SplitTrainTestMetadata()}
-
-
-class ResampleSubCorpus(ResampleSubCorpus):
-    def requires(self):
-        # Requires the train test corpus and will take in
-        # parameter for which partition and sr the resampling
-        # has to be done
-        return {"traintestcorpus": SplitTrainTestCorpus()}
-
-
-class FinalizeCorpus(FinalizeCorpus):
-    def requires(self):
-        # Will copy the resampled data and the traintestmeta and the vocabmeta
-        return {
-            "resample": [
-                ResampleSubCorpus(sr, partition)
-                for sr in config.SAMPLE_RATES
-                for partition in ["train", "test", "validation"]
-            ],
-            "traintestmeta": SplitTrainTestMetadata(),
-            "vocabmeta": MetadataVocabulary(),
-        }
-
-
-def main():
-    ensure_dir("_workdir")
-    luigi.build(
-        [FinalizeCorpus()],
-        workers=config.NUM_WORKERS,
-        local_scheduler=True,
-        log_level="INFO",
+    # Run the custom tasks for this dataset to generate samples and configure
+    # the metadata files. We instantiate these with the builder to pass in the
+    # dynamic download and extract requirements.
+    generate_dataset = builder.build_task(
+        GenerateTrainDataset, requirements={"train": download_tasks["train"]}
+    )
+    configure_metadata = builder.build_task(
+        ConfigureProcessMetaData,
+        requirements={
+            "train": generate_dataset,
+            "test": download_tasks["test"],
+        },
+        params={"outfile": "process_metadata.csv"},
     )
 
+    # The remainder of the pipeline is a generic audio pipeline
+    # built off of the metadata csv.
+    audio_task = builder.prepare_audio_from_metadata_task(
+        configure_metadata, sample_rates
+    )
 
-if __name__ == "__main__":
-    main()
+    # Run the pipeline
+    builder.run(audio_task, num_workers=num_workers)

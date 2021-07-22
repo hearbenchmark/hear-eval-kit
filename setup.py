@@ -31,6 +31,7 @@ setup(
     },
     install_requires=[
         "boto3",
+        "click",
         "librosa",
         "luigi",
         "numpy",

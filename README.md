@@ -10,6 +10,33 @@ See [ROADMAP](ROADMAP.md).
 pip install heareval
 ```
 
+### Evaluation Tasks
+To run the preprocessing pipeline for Google Speech Commands:
+```
+python3 -m heareval.tasks.runner speech_commands
+```
+
+For NSynth pitch:
+```
+python3 -m heareval.tasks.runner nsynth_pitch
+```
+
+These commands will download and preprocess the entire dataset. An intermediary dir
+call `_workdir` will be created, and then a final directory called `tasks` will contain
+the completed dataset.
+
+Options:
+```
+Options:
+  --num-workers INTEGER  Number of CPU workers to use when running. If not
+                         provided all CPUs are used.
+
+  --sample-rate INTEGER  Perform resampling only to this sample rate. By
+                         default we resample to 16000, 22050, 44100, 48000.
+```
+
+
+
 [later we will include more details here]
 
 ## Development
