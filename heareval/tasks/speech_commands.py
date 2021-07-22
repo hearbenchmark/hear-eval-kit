@@ -73,7 +73,9 @@ class ExtractArchiveTest(luigi_util.ExtractArchive):
 class GenerateTrainDataset(luigi_util.WorkTask):
     """
     Silence / background samples in the train / validation sets need to be
-    created by slicing up longer background samples into 1sec slices
+    created by slicing up longer background samples into 1sec slices.
+    This is the same method used in the TensorFlow dataset generator.
+    https://github.com/tensorflow/datasets/blob/79d56e662a15cd11e1fb3b679e0f978c8041566f/tensorflow_datasets/audio/speech_commands.py#L142
     """
 
     def requires(self):
