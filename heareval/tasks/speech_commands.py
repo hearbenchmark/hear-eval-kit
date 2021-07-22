@@ -46,9 +46,9 @@ class SpeechCommandsConfig(PartitionedDatasetConfig):
             # train: 85,111; valid: 10,102; test: 4890.
             # To subsample a partition, set the max_files to an integer.
             partitions=[
-                PartitionConfig(name="train", max_files=1000),
-                PartitionConfig(name="valid", max_files=100),
-                PartitionConfig(name="test", max_files=100),
+                PartitionConfig(name="train", max_files=None),
+                PartitionConfig(name="valid", max_files=None),
+                PartitionConfig(name="test", max_files=None),
             ],
         )
 

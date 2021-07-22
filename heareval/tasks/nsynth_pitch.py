@@ -37,11 +37,13 @@ class NSynthPitchConfig(PartitionedDatasetConfig):
             # All samples will be trimmed / padded to this length
             sample_duration=4.0,
             # Pre-defined partitions in the dataset. Number of files in each split is
-            # train: 85,111; valid: 10,102; test: 4890.
+            # train: 85,111; valid: 10,102; test: 4890. These values will be a bit less
+            # after filter the pitches to be only within the piano range.
             # To subsample a partition, set the max_files to an integer.
+            # TODO: Should we subsample NSynth?
             partitions=[
-                PartitionConfig(name="train", max_files=None),
-                PartitionConfig(name="valid", max_files=None),
+                PartitionConfig(name="train", max_files=10000),
+                PartitionConfig(name="valid", max_files=1000),
                 PartitionConfig(name="test", max_files=None),
             ],
         )
