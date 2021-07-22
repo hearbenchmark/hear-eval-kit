@@ -40,11 +40,13 @@ class NSynthPitchConfig(PartitionedDatasetConfig):
             # train: 85,111; valid: 10,102; test: 4890.
             # To subsample a partition, set the max_files to an integer.
             partitions=[
-                PartitionConfig(name="train", max_files=1000),
-                PartitionConfig(name="valid", max_files=100),
-                PartitionConfig(name="test", max_files=100),
+                PartitionConfig(name="train", max_files=None),
+                PartitionConfig(name="valid", max_files=None),
+                PartitionConfig(name="test", max_files=None),
             ],
         )
+        # We only include pitches that are on a standard 88-key MIDI piano
+        self.pitch_range = (21, 108)
 
 
 config = NSynthPitchConfig()
@@ -52,7 +54,8 @@ config = NSynthPitchConfig()
 
 class ConfigureProcessMetaData(luigi_util.WorkTask):
     """
-    This config is data dependent and has to be set for each data
+    Custom metadata pre-processing for the NSynth task. Creates a metadata csv
+    file that will be used by downstream luigi tasks to curate the final dataset.
     """
 
     outfile = luigi.Parameter()
@@ -62,7 +65,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
     @staticmethod
     def get_rel_path(root: Path, item: pd.DataFrame) -> str:
-        # Creates the audio relative path for a dataframe item
+        # Creates the relative path to an audio file given the note_str
         audio_path = root.joinpath("audio")
         filename = f"{item}.wav"
         return audio_path.joinpath(filename)
@@ -79,9 +82,9 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
         metadata = pd.read_json(split_path.joinpath("examples.json"), orient="index")
 
-        # Filter out pitches that are not within the range of a standard piano
-        metadata = metadata[metadata["pitch"] >= 21]
-        metadata = metadata[metadata["pitch"] <= 108]
+        # Filter out pitches that are not within the range
+        metadata = metadata[metadata["pitch"] >= config.pitch_range[0]]
+        metadata = metadata[metadata["pitch"] <= config.pitch_range[1]]
 
         metadata = metadata.assign(label=lambda df: df["pitch"])
         metadata = metadata.assign(
@@ -125,7 +128,7 @@ def main(num_workers: int, sample_rates: List[int]):
     configure_metadata = builder.build_task(
         ConfigureProcessMetaData,
         requirements=download_tasks,
-        kwargs={"outfile": "process_metadata.csv"},
+        params={"outfile": "process_metadata.csv"},
     )
     audio_tasks = builder.prepare_audio_from_metadata_task(
         configure_metadata, sample_rates

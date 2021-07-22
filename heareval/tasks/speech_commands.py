@@ -237,7 +237,7 @@ def main(num_workers: int, sample_rates: List[int]):
             "train": generate_dataset,
             "test": download_tasks["test"],
         },
-        kwargs={"outfile": "process_metadata.csv"},
+        params={"outfile": "process_metadata.csv"},
     )
 
     # The remainder of the pipeline is a generic audio pipeline

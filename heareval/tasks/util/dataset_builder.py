@@ -22,9 +22,8 @@ class DatasetBuilder:
     dataset.
 
     Args:
-        task_config: the name of the task being built (will try to load the dataset
-            config file for this automatically, or a DatasetConfig file describing the
-            dataset that is being constructed.
+        task_config: DatasetConfig file describing the dataset
+            that is being constructed.
     """
 
     def __init__(self, task_config: DatasetConfig):
@@ -56,7 +55,7 @@ class DatasetBuilder:
         base: Any,
         name: str = None,
         requirements: Union[luigi.Task, List, Dict] = None,
-        kwargs: Dict[str, Any] = None,
+        params: Dict[str, Any] = None,
     ) -> Any:
         """
         Dynamically creates a luigi work task with the passed in requirements. This
@@ -77,7 +76,7 @@ class DatasetBuilder:
                 then make sure to set this.
             requirements: Optional requirements that will be returned by the requires()
                 method of the newly created class.
-            kwargs: keyword args to used to construct the newly created task class
+            params: keyword args to used to construct the newly created task class
 
         Returns:
             A new class that derives from the base class
@@ -93,9 +92,9 @@ class DatasetBuilder:
         # Make sure the task name is correct for the config
         task_class.task_name = self.config.versioned_task_name
 
-        # Instantiate the new class with the keyword args
-        kwargs = dict() if kwargs is None else kwargs
-        return task_class(**kwargs)
+        # Instantiate the new class with the parameters
+        params = dict() if params is None else params
+        return task_class(**params)
 
     def download_and_extract_tasks(self) -> Dict[str, luigi_util.WorkTask]:
         """
@@ -114,7 +113,7 @@ class DatasetBuilder:
                 requirements={
                     "download": luigi_util.DownloadCorpus(url=url, outfile=filename)
                 },
-                kwargs={"infile": filename},
+                params={"infile": filename},
             )
             tasks[name] = task
 
@@ -146,7 +145,7 @@ class DatasetBuilder:
             task = self.build_task(
                 luigi_util.SubsamplePartition,
                 requirements={"meta": metadata_task},
-                kwargs={"partition": partition.name, "max_files": partition.max_files},
+                params={"partition": partition.name, "max_files": partition.max_files},
             )
             subsample_tasks[partition.name] = task
 
@@ -162,7 +161,7 @@ class DatasetBuilder:
         mono_trim_wav = self.build_task(
             luigi_util.MonoWavTrimCorpus,
             requirements=requirements,
-            kwargs={"duration": self.config.sample_duration},
+            params={"duration": self.config.sample_duration},
         )
 
         split_audio = self.build_task(
@@ -195,7 +194,7 @@ class DatasetBuilder:
                 task = self.build_task(
                     luigi_util.ResampleSubCorpus,
                     requirements={"traintestcorpus": split_audio},
-                    kwargs={"sr": sr, "partition": partition.name},
+                    params={"sr": sr, "partition": partition.name},
                 )
                 resample_tasks.append(task)
 
