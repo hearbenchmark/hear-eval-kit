@@ -248,7 +248,3 @@ def main(num_workers: int, sample_rates: List[int]):
 
     # Run the pipeline
     builder.run(audio_task, num_workers=num_workers)
-
-
-if __name__ == "__main__":
-    main()
