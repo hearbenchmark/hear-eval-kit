@@ -76,7 +76,7 @@ class ExtractMetadata(luigi_util.WorkTask):
         process_metadata = pd.concat(
             [
                 self.get_split_metadata(split["name"])
-                for split in self.data_config["partitions"]
+                for split in self.data_config["splits"]
             ]
         )
         return process_metadata
@@ -96,9 +96,9 @@ class ExtractMetadata(luigi_util.WorkTask):
         self.mark_complete()
 
 
-class SubsamplePartition(luigi_util.SubsamplePartition):
+class SubsampleSplit(luigi_util.SubsampleSplit):
     """
-    A subsampler that acts on a specific partition.
+    A subsampler that acts on a specific split.
     All instances of this will depend on the combined process metadata csv.
     """
 
@@ -112,9 +112,9 @@ class SubsamplePartition(luigi_util.SubsamplePartition):
         }
 
 
-class SubsamplePartitions(luigi_util.WorkTask):
+class SubsampleSplits(luigi_util.WorkTask):
     """
-    Aggregates subsampling of all the partitions into a single task as dependencies.
+    Aggregates subsampling of all the splits into a single task as dependencies.
     All the subsampled files are stored in the requires workdir, so we just link to
     that since there aren't any real outputs associated with this task.
     This is a bit of a hack -- but it allows us to avoid rewriting
@@ -124,17 +124,17 @@ class SubsamplePartitions(luigi_util.WorkTask):
     metadata = luigi.TaskParameter()
 
     def requires(self):
-        # Perform subsampling on each partition independently
-        subsample_partitions = {
-            partition["name"]: SubsamplePartition(
+        # Perform subsampling on each split independently
+        subsample_splits = {
+            split["name"]: SubsampleSplit(
                 metadata=self.metadata,
-                partition=partition["name"],
-                max_files=partition["max_files"],
+                split=split["name"],
+                max_files=split["max_files"],
                 data_config=self.data_config,
             )
-            for partition in self.data_config["partitions"]
+            for split in self.data_config["splits"]
         }
-        return subsample_partitions
+        return subsample_splits
 
     def run(self):
         workdir = Path(self.workdir)
@@ -152,7 +152,7 @@ class MonoWavTrimCorpus(luigi_util.MonoWavTrimCorpus):
 
     def requires(self):
         return {
-            "corpus": SubsamplePartitions(
+            "corpus": SubsampleSplits(
                 metadata=self.metadata, data_config=self.data_config
             )
         }
@@ -163,7 +163,7 @@ class SplitTrainTestCorpus(luigi_util.SplitTrainTestCorpus):
     metadata = luigi.TaskParameter()
 
     def requires(self):
-        # The metadata helps in provide the partition type for each
+        # The metadata helps in provide the split type for each
         # audio file
         return {
             "corpus": MonoWavTrimCorpus(
@@ -208,7 +208,7 @@ class ResampleSubCorpus(luigi_util.ResampleSubCorpus):
 
     def requires(self):
         # Requires the train test corpus and will take in
-        # parameter for which partition and sr the resampling
+        # parameter for which split and sr the resampling
         # has to be done
         return {
             "traintestcorpus": SplitTrainTestCorpus(
@@ -224,17 +224,17 @@ class FinalizeCorpus(luigi_util.FinalizeCorpus):
 
     def requires(self):
         # Will copy the resampled data and the traintestmeta and the vocabmeta
-        partitions = [p["name"] for p in self.data_config["partitions"]]
+        splits = [p["name"] for p in self.data_config["splits"]]
         return {
             "resample": [
                 ResampleSubCorpus(
                     sr=sr,
-                    partition=partition,
+                    split=split,
                     metadata=self.metadata,
                     data_config=self.data_config,
                 )
                 for sr in self.sample_rates
-                for partition in partitions
+                for split in splits
             ],
             "traintestmeta": SplitTrainTestMetadata(
                 metadata=self.metadata, data_config=self.data_config

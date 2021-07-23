@@ -31,7 +31,7 @@ config = {
         "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
     },
     "sample_duration": 1.0,
-    "partitions": [
+    "splits": [
         {"name": "train", "max_files": 100},
         {"name": "test", "max_files": 100},
         {"name": "valid", "max_files": 100},
@@ -117,7 +117,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         # Test files
         test_path = Path(self.requires()["test"].workdir).joinpath("test")
         test_df = pd.DataFrame(test_path.glob("*/*.wav"), columns=["relpath"]).assign(
-            partition=lambda df: "test"
+            split=lambda df: "test"
         )
 
         # All silence paths to add to the train and validation
@@ -131,7 +131,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
         validation_rel_paths.extend(val_silence)
         validation_df = pd.DataFrame(validation_rel_paths, columns=["relpath"]).assign(
-            partition=lambda df: "valid"
+            split=lambda df: "valid"
         )
 
         # Train files
@@ -150,7 +150,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         train_silence = list(set(all_silence) - set(val_silence))
         train_rel_paths.extend(train_silence)
         train_df = pd.DataFrame(train_rel_paths, columns=["relpath"]).assign(
-            partition=lambda df: "train"
+            split=lambda df: "train"
         )
         assert len(train_df.merge(validation_df, on="relpath")) == 0
 

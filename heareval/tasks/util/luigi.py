@@ -26,7 +26,7 @@ PROCESSMETADATACOLS = [
     # This is used for deterministically randomly ordering the filenames.
     # TODO: This should be slug_hash.
     "filename_hash",
-    "partition",
+    "split",
     "label",
     "start",
     "end",
@@ -184,7 +184,7 @@ class SubsampleCorpus(WorkTask):
             ),
             header=None,
             names=PROCESSMETADATACOLS,
-        )[["filename_hash", "slug", "relpath", "partition"]]
+        )[["filename_hash", "slug", "relpath", "split"]]
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
         metadata = metadata.sort_values(by="filename_hash").drop_duplicates(
@@ -226,16 +226,16 @@ class SubsampleCorpus(WorkTask):
         self.mark_complete()
 
 
-class SubsamplePartition(SubsampleCorpus):
+class SubsampleSplit(SubsampleCorpus):
     """
-    Performs subsampling on a specific partition
+    Performs subsampling on a specific split
     """
 
-    partition = luigi.Parameter()
+    split = luigi.Parameter()
 
     def get_metadata(self):
         metadata = super().get_metadata()
-        metadata = metadata[metadata["partition"] == self.partition]
+        metadata = metadata[metadata["split"] == self.split]
         return metadata
 
 
@@ -266,26 +266,26 @@ class SplitTrainTestCorpus(WorkTask):
         # Get the process metadata. This gives the freedom of picking the train test
         # label either from the provide metadata file or any other method.
 
-        # Writing slug and partition makes it explicit that these columns are required
+        # Writing slug and split makes it explicit that these columns are required
         meta = self.requires()["meta"]
         process_metadata = pd.read_csv(
             os.path.join(meta.workdir, meta.outfile),
             header=None,
             names=PROCESSMETADATACOLS,
-        )[["slug", "partition"]]
+        )[["slug", "split"]]
 
         # Go over the subsampled folder and pick the audio files. The audio files are
         # saved with their slug names and hence the corresponding label can be picked
         # up from the preprocess config
         for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*.wav"))):
             audio_slug = os.path.basename(audiofile)
-            partition = process_metadata.loc[
-                process_metadata["slug"] == audio_slug, "partition"
+            split = process_metadata.loc[
+                process_metadata["slug"] == audio_slug, "split"
             ].values[0]
-            partition_dir = f"{self.workdir}/{partition}"
-            ensure_dir(partition_dir)
+            split_dir = f"{self.workdir}/{split}"
+            ensure_dir(split_dir)
 
-            newaudiofile = new_basedir(audiofile, partition_dir)
+            newaudiofile = new_basedir(audiofile, split_dir)
             os.symlink(os.path.realpath(audiofile), newaudiofile)
         with self.output().open("w") as _:
             pass
@@ -311,23 +311,23 @@ class SplitTrainTestMetadata(WorkTask):
         # Get the process metadata and select the required columns slug and label
         labeldf = self.get_metadata()
 
-        # Automatically get the partitions from the traintestcorpus task
+        # Automatically get the splits from the traintestcorpus task
         # and then get the files there.
-        for partition in os.listdir(self.requires()["traintestcorpus"].workdir):
+        for split in os.listdir(self.requires()["traintestcorpus"].workdir):
             audiofiles = list(
                 glob(
                     os.path.join(
                         self.requires()["traintestcorpus"].workdir,
-                        partition,
+                        split,
                         "*.wav",
                     )
                 )
             )
-            # Check if we got any file in the partition
+            # Check if we got any file in the split
             if len(audiofiles) == 0:
                 raise RuntimeError(
                     "No audio files found in "
-                    f"{self.requires()['traintestcorpus'].workdir}/{partition}"
+                    f"{self.requires()['traintestcorpus'].workdir}/{split}"
                 )
             # Get the filename which is also the slug of the file and the
             # corresponding label can be picked up from the metadata
@@ -345,9 +345,9 @@ class SplitTrainTestMetadata(WorkTask):
             # TODO: Do this for scene labeling tho
             # Check if all the labels were found from the metadata
             # assert len(sublabeldf) == len(audiofiles)
-            # Save the slug and the label in as the partition metadata
+            # Save the slug and the label in as the split metadata
             sublabeldf.to_csv(
-                os.path.join(self.workdir, f"{partition}.csv"),
+                os.path.join(self.workdir, f"{split}.csv"),
                 columns=["slug", "label", "start", "end"],
                 index=False,
                 header=False,
@@ -363,12 +363,12 @@ class MetadataVocabulary(WorkTask):
 
     def run(self):
         labelset = set()
-        # Iterate over all the files in the traintestmeta and get the partition_metadata
-        for partition_metadata in os.listdir(self.requires()["traintestmeta"].workdir):
+        # Iterate over all the files in the traintestmeta and get the split_metadata
+        for split_metadata in os.listdir(self.requires()["traintestmeta"].workdir):
             labeldf = pd.read_csv(
                 os.path.join(
                     self.requires()["traintestmeta"].workdir,
-                    partition_metadata,
+                    split_metadata,
                 ),
                 header=None,
                 names=["filename", "label"],
@@ -394,7 +394,7 @@ class MetadataVocabulary(WorkTask):
 
 class ResampleSubCorpus(WorkTask):
     sr = luigi.IntParameter()
-    partition = luigi.Parameter()
+    split = luigi.Parameter()
 
     def requires(self):
         raise NotImplementedError("This method requires a traintestcorpus task")
@@ -403,8 +403,8 @@ class ResampleSubCorpus(WorkTask):
         # Check if the original directory exists and then move ahead to make the
         # directory in the resample folder. This ensures val is not made if val is
         # not there
-        original_dir = f"{self.requires()['traintestcorpus'].workdir}/{self.partition}"
-        resample_dir = f"{self.workdir}/{self.sr}/{self.partition}/"
+        original_dir = f"{self.requires()['traintestcorpus'].workdir}/{self.split}"
+        resample_dir = f"{self.workdir}/{self.sr}/{self.split}/"
         if os.path.isdir(original_dir):
             # The below command can run in parallel and might fail.
             # This is because maybe the other resampling task has the directory
@@ -498,7 +498,7 @@ def which_set(filename_hash, validation_percentage, testing_percentage):
     """
     Code adapted from Google Speech Commands dataset.
 
-    Determines which data partition the file should belong to, based
+    Determines which data split the file should belong to, based
     upon the filename.
 
     We want to keep files in the same training, validation, or testing

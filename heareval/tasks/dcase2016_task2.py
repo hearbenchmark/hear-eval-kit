@@ -34,7 +34,7 @@ config = {
     # TODO: FIXME
     # Want different for train and test?
     "sample_duration": 120.0,
-    "partitions": [
+    "splits": [
         {"name": "train", "max_files": 10},
         {"name": "test", "max_files": 10},
     ],
@@ -84,7 +84,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             metadata = metadata.assign(
                 slug=lambda df: df.relpath.apply(self.slugify_file_name)
             )
-            metadata = metadata.assign(partition=lambda df: split)
+            metadata = metadata.assign(split=lambda df: split)
             metadata = metadata.assign(
                 filename_hash=lambda df: df["slug"].apply(
                     luigi_util.filename_to_int_hash

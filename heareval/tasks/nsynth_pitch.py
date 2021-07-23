@@ -28,7 +28,7 @@ config = {
         "test": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",  # noqa: E501
     },
     "sample_duration": 4.0,
-    "partitions": [
+    "splits": [
         {"name": "train", "max_files": 100},
         {"name": "test", "max_files": 100},
         {"name": "valid", "max_files": 100},
@@ -81,7 +81,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         metadata = metadata.assign(
             slug=lambda df: df["note_str"].apply(self.slugify_file_name)
         )
-        metadata = metadata.assign(partition=lambda df: split)
+        metadata = metadata.assign(split=lambda df: split)
         metadata = metadata.assign(
             filename_hash=lambda df: df["slug"].apply(luigi_util.filename_to_int_hash)
         )
