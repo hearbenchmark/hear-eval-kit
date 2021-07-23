@@ -48,6 +48,9 @@ class WorkTask(luigi.Config):
 
     # Class attribute sets the task name for all inheriting luigi tasks
     task_name = None
+    data_config = luigi.DictParameter(
+        visibility=luigi.parameter.ParameterVisibility.PRIVATE
+    )
 
     @property
     def name(self):
@@ -85,8 +88,8 @@ class WorkTask(luigi.Config):
         Task specific subdirectory
         """
         # You must specify a task name for WorkTask
-        assert self.task_name is not None
-        d = ["_workdir", str(self.task_name)]
+        task_name = f"{self.data_config['task_name']}-{self.data_config['version']}"
+        d = ["_workdir", str(task_name)]
         return os.path.join(*d)
 
     @property
@@ -134,17 +137,26 @@ class DownloadCorpus(WorkTask):
 class ExtractArchive(WorkTask):
 
     infile = luigi.Parameter()
+    download = luigi.TaskParameter(
+        visibility=luigi.parameter.ParameterVisibility.PRIVATE
+    )
+    outdir = luigi.Parameter(default=None)
 
     def requires(self):
-        raise NotImplementedError("This method requires a download task")
+        return {"download": self.download}
 
     def run(self):
         corpus_zip = os.path.realpath(
             os.path.join(self.requires()["download"].workdir, self.infile)
         )
-        shutil.unpack_archive(corpus_zip, self.workdir)
-        with self.output().open("w") as _:
-            pass
+        # If there are multiple ExtractArchive tasks then we optionally may want the
+        # extracted results to be placed into separate dirs within the main workdir.
+        output = self.workdir
+        if self.outdir is not None:
+            output = os.path.join(output, self.outdir)
+        shutil.unpack_archive(corpus_zip, output)
+
+        self.mark_complete()
 
 
 class SubsampleCorpus(WorkTask):

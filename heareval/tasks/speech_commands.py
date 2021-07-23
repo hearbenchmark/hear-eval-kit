@@ -18,6 +18,7 @@ from heareval.tasks.dataset_config import (
     PartitionConfig,
 )
 import heareval.tasks.util.luigi as luigi_util
+import heareval.tasks.pipelines as pipelines
 
 
 WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
@@ -48,8 +49,17 @@ class SpeechCommandsConfig(PartitionedDatasetConfig):
         )
 
 
-config = SpeechCommandsConfig()
-luigi_util.WorkTask.task_name = config.versioned_task_name
+config = {
+    "task_name": "speech_commands",
+    "version": "v0.0.2",
+    "download_urls": {
+        "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
+        "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
+    },
+    "sample_duation": 1.0,
+}
+
+# config = SpeechCommandsConfig()
 
 
 class ExtractArchiveTrain(luigi_util.ExtractArchive):
@@ -339,13 +349,12 @@ class FinalizeCorpus(luigi_util.WorkTask):
 def main(num_workers: int, sample_rates: List[int]):
     luigi_util.ensure_dir("_workdir")
 
-    download = luigi_util.DownloadCorpus(
-        url=config.download_urls["train"], outfile="train-corpus.tar.gz"
-    )
-    extract = ExtractArchiveTrain(infile="train-corpus.tar.gz", download=download)
+    download_tasks = pipelines.get_download_and_extract_tasks(config)
+
+    print(download_tasks)
 
     luigi.build(
-        [extract],
+        [download_tasks["test"]],
         # [FinalizeCorpus(sample_rates=sample_rates, task_string=config.versioned_task_name, next_task=GenerateTrainDataset)],
         workers=num_workers,
         local_scheduler=True,
