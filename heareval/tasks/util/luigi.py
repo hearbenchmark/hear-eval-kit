@@ -24,7 +24,7 @@ PROCESSMETADATACOLS = [
 ]
 
 
-class WorkTask(luigi.Config):
+class WorkTask(luigi.Task):
     """
     We assume following conventions:
         * Each luigi Task will have a name property:
