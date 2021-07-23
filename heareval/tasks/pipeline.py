@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 from typing import Dict, List, Union
 from urllib.parse import urlparse
+from slugify import slugify
 
 import luigi
+import pandas as pd
 
 import heareval.tasks.util.luigi as luigi_util
 
@@ -28,6 +30,70 @@ def get_download_and_extract_tasks(config: Dict):
         tasks[name] = task
 
     return tasks
+
+
+class ExtractMetadata(luigi_util.WorkTask):
+    """
+    This is an abstract class that ... over the full dataset
+
+    Custom metadata pre-processing. Creates a metadata csv
+    file that will be used by downstream luigi tasks to curate the final dataset.
+    TODO: It would be nice to have a better description of what this pattern is
+    """
+
+    outfile = luigi.Parameter()
+
+    # This should have something like the following:
+    # train = luigi.TaskParameter()
+    # test = luigi.TaskParameter()
+
+    def requires(self):
+        ...
+        # This should have something like the following:
+        # return { "train": self.train, "test": self.test }
+
+    @staticmethod
+    def slugify_file_name(relative_path: str) -> str:
+        """
+        This is the filename in our dataset.
+        It should be unique, it should be obvious what the original filename was,
+        and perhaps it should contain the label for audio scene tasks.
+        You can override this and simplify if the slugified filename for this dataset is too long.
+        TODO: Remove the workdir, if it's present.
+        """
+        return f"{slugify(relative_path)}.wav"
+
+    def get_process_metadata(self) -> pd.DataFrame:
+        """
+        Return a dataframe containing the task metadata for this
+        entire task.
+
+        By default, we do one split at a time and then concat them.
+        You might consider overriding this for some datasets (like
+        Google Speech Commands) where you cannot process metadata
+        on a per-split basis.
+        """
+        process_metadata = pd.concat(
+            [
+                self.get_split_metadata(split["name"])
+                for split in self.data_config["partitions"]
+            ]
+        )
+        return process_metadata
+
+    def run(self):
+        process_metadata = self.get_process_metadata()
+
+        # TODO: Check we have the metadata columns we expect??
+
+        process_metadata.to_csv(
+            os.path.join(self.workdir, self.outfile),
+            columns=luigi_util.PROCESSMETADATACOLS,
+            header=False,
+            index=False,
+        )
+
+        self.mark_complete()
 
 
 class SubsamplePartition(luigi_util.SubsamplePartition):

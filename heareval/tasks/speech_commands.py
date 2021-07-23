@@ -10,7 +10,6 @@ from typing import List
 import luigi
 import pandas as pd
 import soundfile as sf
-from slugify import slugify
 from tqdm import tqdm
 
 import heareval.tasks.pipeline as pipeline
@@ -25,6 +24,8 @@ SILENCE = "_silence_"
 config = {
     "task_name": "speech_commands",
     "version": "v0.0.2",
+    # TODO: Use these somewhere
+    "task_type": "scene_labeling",
     "download_urls": {
         "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
         "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
@@ -92,12 +93,7 @@ class GenerateTrainDataset(luigi_util.WorkTask):
         self.mark_complete()
 
 
-class ConfigureProcessMetaData(luigi_util.WorkTask):
-    """
-    This config is data dependent and has to be set for each data
-    """
-
-    outfile = luigi.Parameter()
+class ExtractMetadata(pipeline.ExtractMetadata):
     train = luigi.TaskParameter()
     test = luigi.TaskParameter()
 
@@ -107,19 +103,14 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
             "test": self.test,
         }
 
+    """
     @staticmethod
     def apply_label(relative_path):
         label = os.path.basename(os.path.dirname(relative_path))
         if label not in WORDS and label != SILENCE:
             label = UNKNOWN
         return label
-
-    @staticmethod
-    def slugify_file_name(relative_path):
-        folder = os.path.basename(os.path.dirname(relative_path))
-        basename = os.path.basename(relative_path)
-        name, ext = os.path.splitext(basename)
-        return f"{slugify(os.path.join(folder, name))}{ext}"
+    """
 
     def get_split_paths(self):
 
@@ -144,6 +135,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         )
 
         # Train files
+        # [really?? why is it called testing_list?]
         with open(os.path.join(train_path, "testing_list.txt"), "r") as fp:
             train_test_paths = fp.read().strip().splitlines()
         audio_paths = [
@@ -193,19 +185,10 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
         return process_metadata
 
-    def run(self):
+    def get_process_metadata(self) -> pd.DataFrame:
         process_metadata = self.get_split_paths()
         process_metadata = self.get_metadata_attrs(process_metadata)
-
-        # Save the process metadata
-        process_metadata[luigi_util.PROCESSMETADATACOLS].to_csv(
-            os.path.join(self.workdir, self.outfile),
-            columns=luigi_util.PROCESSMETADATACOLS,
-            header=False,
-            index=False,
-        )
-
-        self.mark_complete()
+        return process_metadata
 
 
 def main(num_workers: int, sample_rates: List[int]):
@@ -215,7 +198,7 @@ def main(num_workers: int, sample_rates: List[int]):
     generate = GenerateTrainDataset(
         train_data=download_tasks["train"], data_config=config
     )
-    configure_metadata = ConfigureProcessMetaData(
+    configure_metadata = ExtractMetadata(
         train=generate,
         test=download_tasks["test"],
         outfile="process_metadata.csv",

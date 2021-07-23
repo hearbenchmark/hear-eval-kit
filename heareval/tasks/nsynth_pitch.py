@@ -4,14 +4,12 @@ Pre-processing pipeline for NSynth pitch detection
 """
 
 import logging
-import os
 from functools import partial
 from pathlib import Path
 from typing import List
 
 import luigi
 import pandas as pd
-from slugify import slugify
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
@@ -22,6 +20,8 @@ logger = logging.getLogger("luigi-interface")
 config = {
     "task_name": "nsynth_pitch",
     "version": "v2.2.3",
+    # TODO: Use these somewhere
+    "task_type": "scene_labeling",
     "download_urls": {
         "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",  # noqa: E501
         "valid": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",  # noqa: E501
@@ -38,13 +38,7 @@ config = {
 }
 
 
-class ConfigureProcessMetaData(luigi_util.WorkTask):
-    """
-    Custom metadata pre-processing for the NSynth task. Creates a metadata csv
-    file that will be used by downstream luigi tasks to curate the final dataset.
-    """
-
-    outfile = luigi.Parameter()
+class ExtractMetadata(pipeline.ExtractMetadata):
     train = luigi.TaskParameter()
     test = luigi.TaskParameter()
     valid = luigi.TaskParameter()
@@ -56,16 +50,14 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
             "valid": self.valid,
         }
 
+    """
     @staticmethod
     def get_rel_path(root: Path, item: pd.DataFrame) -> Path:
         # Creates the relative path to an audio file given the note_str
         audio_path = root.joinpath("audio")
         filename = f"{item}.wav"
         return audio_path.joinpath(filename)
-
-    @staticmethod
-    def slugify_file_name(filename: str) -> str:
-        return f"{slugify(filename)}.wav"
+    """
 
     def get_split_metadata(self, split: str) -> pd.DataFrame:
         logger.info(f"Preparing metadata for {split}")
@@ -96,29 +88,13 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
         return metadata[luigi_util.PROCESSMETADATACOLS]
 
-    def run(self):
-
-        # Get metadata for each of the data splits
-        process_metadata = pd.concat(
-            [self.get_split_metadata(split) for split in self.requires()]
-        )
-
-        process_metadata.to_csv(
-            os.path.join(self.workdir, self.outfile),
-            columns=luigi_util.PROCESSMETADATACOLS,
-            header=False,
-            index=False,
-        )
-
-        self.mark_complete()
-
 
 def main(num_workers: int, sample_rates: List[int]):
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)
 
-    configure_metadata = ConfigureProcessMetaData(
+    configure_metadata = ExtractMetadata(
         outfile="process_metadata.csv", data_config=config, **download_tasks
     )
     final = pipeline.FinalizeCorpus(

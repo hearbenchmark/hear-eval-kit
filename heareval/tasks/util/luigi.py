@@ -197,7 +197,7 @@ class SubsampleCorpus(WorkTask):
         process_metadata = self.get_metadata()
         # Subsample the files based on max files per corpus.
         # The filename hash is used here
-        # This task can also be done in ConfigProcessMetadata as that will give
+        # This task can also be done in ExtractMetadata as that will give
         # freedom to stratify the selection on some criterion? That seems kinda
         # fiddly, if we want fancy stratification we should discuss that
         # separately.
@@ -210,7 +210,7 @@ class SubsampleCorpus(WorkTask):
             )
 
         # Sort by the filename hash and select the max file per corpus
-        # The filename hash is done as part of the ConfigProcessMetadata
+        # The filename hash is done as part of the ExtractMetadata
         # because the string to be hashed for each file is dependent on the data
         process_metadata = process_metadata.sort_values(by="filename_hash").iloc[
             :max_files
@@ -342,7 +342,8 @@ class SplitTrainTestMetadata(WorkTask):
             ]
             # This won't work for sound event detection where there might be
             # zero or more than one event per file
-            ## Check if all the labels were found from the metadata
+            # TODO: Do this for scene labeling tho
+            # Check if all the labels were found from the metadata
             # assert len(sublabeldf) == len(audiofiles)
             # Save the slug and the label in as the partition metadata
             sublabeldf.to_csv(
