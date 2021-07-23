@@ -92,7 +92,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             )
             metadatas.append(metadata)
 
-        return pd.concat(metadatas)[luigi_util.PROCESSMETADATACOLS]
+        return pd.concat(metadatas)
 
 
 def main(num_workers: int, sample_rates: List[int]):

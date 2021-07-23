@@ -34,11 +34,22 @@ def get_download_and_extract_tasks(config: Dict):
 
 class ExtractMetadata(luigi_util.WorkTask):
     """
-    This is an abstract class that ... over the full dataset
+    This is an abstract class that extract metadata over the full dataset.
 
-    Custom metadata pre-processing. Creates a metadata csv
-    file that will be used by downstream luigi tasks to curate the final dataset.
-    TODO: It would be nice to have a better description of what this pattern is
+    We create a metadata csv file that will be used by downstream
+    luigi tasks to curate the final dataset.
+
+    The metadata columns are:
+        * relpath - How you find the file path in the original dataset.
+        * slug - This is the filename in our dataset. It should be
+        unique, it should be obvious what the original filename
+        was, and perhaps it should contain the label for audio scene
+        tasks.
+        * filename_hash - TODO: This should be slug_hash
+        * split - Split of this particular audio file.
+        * label - Label for the scene or event.
+        * start, end - Start and end time in seconds of the event,
+        for event_labeling tasks.
     """
 
     outfile = luigi.Parameter()

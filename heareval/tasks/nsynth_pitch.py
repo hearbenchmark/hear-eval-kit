@@ -86,7 +86,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             filename_hash=lambda df: df["slug"].apply(luigi_util.filename_to_int_hash)
         )
 
-        return metadata[luigi_util.PROCESSMETADATACOLS]
+        return metadata
 
 
 def main(num_workers: int, sample_rates: List[int]):
