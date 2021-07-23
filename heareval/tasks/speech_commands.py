@@ -10,12 +10,11 @@ from typing import List
 import luigi
 import pandas as pd
 import soundfile as sf
-from tqdm import tqdm
 from slugify import slugify
+from tqdm import tqdm
 
-import heareval.tasks.util.luigi as luigi_util
 import heareval.tasks.pipeline as pipeline
-
+import heareval.tasks.util.luigi as luigi_util
 
 WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
 BACKGROUND_NOISE = "_background_noise_"

@@ -2,18 +2,18 @@
 Generic pipelines for datasets
 """
 
-from pathlib import Path
 import os
-from typing import List, Union
+from pathlib import Path
+from typing import Dict, List, Union
 from urllib.parse import urlparse
 
 import luigi
 
-from heareval.tasks.dataset_config import DatasetConfig
 import heareval.tasks.util.luigi as luigi_util
+from heareval.tasks.dataset_config import DatasetConfig
 
 
-def get_download_and_extract_tasks(config: DatasetConfig):
+def get_download_and_extract_tasks(config: Dict[str, object]):
 
     tasks = {}
     for name, url in config["download_urls"].items():

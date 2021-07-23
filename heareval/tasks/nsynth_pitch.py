@@ -3,10 +3,10 @@
 Pre-processing pipeline for NSynth pitch detection
 """
 
-import os
-from pathlib import Path
-from functools import partial
 import logging
+import os
+from functools import partial
+from pathlib import Path
 from typing import List
 
 import luigi

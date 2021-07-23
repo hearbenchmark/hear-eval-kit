@@ -1,17 +1,17 @@
 """
 A builder class that helps to construct luigi dataset pre-processing pipelines
 """
-import os
-from urllib.parse import urlparse
-from typing import Any, Dict, List, Union
-from types import new_class
 import logging
+import os
 from functools import partial
+from types import new_class
+from typing import Any, Dict, List, Union
+from urllib.parse import urlparse
 
 import luigi
 
-from heareval.tasks.dataset_config import DatasetConfig, PartitionedDatasetConfig
 import heareval.tasks.util.luigi as luigi_util
+from heareval.tasks.dataset_config import DatasetConfig, PartitionedDatasetConfig
 
 logger = logging.getLogger("luigi-interface")
 

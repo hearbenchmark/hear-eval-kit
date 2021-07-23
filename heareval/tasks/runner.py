@@ -9,8 +9,8 @@ from typing import Optional
 
 import click
 
-import heareval.tasks.speech_commands as speech_commands
 import heareval.tasks.nsynth_pitch as nsynth_pitch
+import heareval.tasks.speech_commands as speech_commands
 
 logger = logging.getLogger("luigi-interface")
 
