@@ -342,7 +342,8 @@ class SplitTrainTestMetadata(WorkTask):
             ]
             # This won't work for sound event detection where there might be
             # zero or more than one event per file
-            ## Check if all the labels were found from the metadata
+            # TODO: Do this for scene labeling tho
+            # Check if all the labels were found from the metadata
             # assert len(sublabeldf) == len(audiofiles)
             # Save the slug and the label in as the partition metadata
             sublabeldf.to_csv(
