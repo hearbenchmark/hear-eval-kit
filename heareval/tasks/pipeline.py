@@ -67,9 +67,12 @@ class ExtractMetadata(luigi_util.WorkTask):
     def slugify_file_name(relative_path: str) -> str:
         """
         This is the filename in our dataset.
-        It should be unique, it should be obvious what the original filename was,
-        and perhaps it should contain the label for audio scene tasks.
-        You can override this and simplify if the slugified filename for this dataset is too long.
+
+        It should be unique, it should be obvious what the original
+        filename was, and perhaps it should contain the label for
+        audio scene tasks.
+        You can override this and simplify if the slugified filename
+        for this dataset is too long.
         TODO: Remove the workdir, if it's present.
         """
         return f"{slugify(str(relative_path))}.wav"
