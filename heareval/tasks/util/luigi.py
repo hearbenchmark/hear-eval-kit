@@ -17,10 +17,13 @@ import heareval.tasks.util.audio as audio_util
 
 PROCESSMETADATACOLS = [
     "relpath",
+    # Like what is this and what is its contract?
     "slug",
     "filename_hash",
     "partition",
     "label",
+    "start",
+    "end",
 ]
 
 

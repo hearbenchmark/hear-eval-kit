@@ -43,8 +43,9 @@ config = {
 
 class ConfigureProcessMetaData(luigi_util.WorkTask):
     """
-    Custom metadata pre-processing for the NSynth task. Creates a metadata csv
+    Custom metadata pre-processing. Creates a metadata csv
     file that will be used by downstream luigi tasks to curate the final dataset.
+    TODO: It would be nice to have a better description of what this pattern is
     """
 
     outfile = luigi.Parameter()
@@ -68,41 +69,54 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
     def slugify_file_name(filename: str) -> str:
         return f"{slugify(filename)}.wav"
 
-    def get_split_metadata(self, split: str) -> pd.DataFrame:
+    def get_split_metadata(self, split: str, split_path_str: str) -> pd.DataFrame:
         logger.info(f"Preparing metadata for {split}")
 
-        # Loads and prepares the metadata for a specific split
-        split_path = Path(self.requires()[split].workdir).joinpath(split)
-        split_path = split_path.joinpath(f"nsynth-{split}")
+        split_path = (
+            Path(self.requires()[split].workdir)
+            .joinpath(split)
+            .joinpath(split_path_str)
+        )
 
-        metadata = pd.read_json(split_path.joinpath("examples.json"), orient="index")
-
-        # Filter out pitches that are not within the range
-        metadata = metadata[metadata["pitch"] >= config["pitch_range_min"]]
-        metadata = metadata[metadata["pitch"] <= config["pitch_range_max"]]
-
-        metadata = metadata.assign(label=lambda df: df["pitch"])
-        metadata = metadata.assign(
-            relpath=lambda df: df["note_str"].apply(
-                partial(self.get_rel_path, split_path)
+        metadatas = []
+        for annotation_file in split_path.glob("annotation/*.txt"):
+            metadata = pd.read_csv(
+                annotation_file, sep="\t", header=None, names=["start", "end", "label"]
             )
-        )
-        metadata = metadata.assign(
-            slug=lambda df: df["note_str"].apply(self.slugify_file_name)
-        )
-        metadata = metadata.assign(partition=lambda df: split)
-        metadata = metadata.assign(
-            filename_hash=lambda df: df["slug"].apply(luigi_util.filename_to_int_hash)
-        )
+            sound_file = (
+                str(annotation_file)
+                .replace("annotation", "sound")
+                .replace(".txt", ".wav")
+            )
+            assert os.path.exists(sound_file)
+            metadata = metadata.assign(relpath=sound_file)
 
-        return metadata[luigi_util.PROCESSMETADATACOLS]
+            metadata = metadata.assign(
+                slug=lambda df: df.relpath.apply(self.slugify_file_name)
+            )
+            metadata = metadata.assign(partition=lambda df: split)
+            metadata = metadata.assign(
+                filename_hash=lambda df: df["slug"].apply(
+                    luigi_util.filename_to_int_hash
+                )
+            )
+            metadatas.append(metadata)
+
+        return pd.concat(metadatas)[luigi_util.PROCESSMETADATACOLS]
 
     def run(self):
-        assert False
-
         # Get metadata for each of the data splits
         process_metadata = pd.concat(
-            [self.get_split_metadata(split) for split in self.requires()]
+            # DCASE 2016 uses funny pathing, so we just hardcode the desired
+            # paths
+            # Note that from our training data, we only use DCASE 2016 dev data.
+            # Their training data is short monophonic events.
+            [
+                self.get_split_metadata(
+                    "train", "dcase2016_task2_train_dev/dcase2016_task2_dev/"
+                ),
+                self.get_split_metadata("test", "dcase2016_task2_test_public/"),
+            ]
         )
 
         process_metadata.to_csv(

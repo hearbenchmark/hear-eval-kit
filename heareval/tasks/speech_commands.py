@@ -175,8 +175,10 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
             # In this case we take the slug and remove the -nohash- as described
             # This nohash removal allows for the speech of similar person to be in the
             # same dataset. Such type of data specific requirements might be there.
+            # [what does this mean??]
             # in the readme of google speech commands. we want to keep similar people
             # in the same group - test or train or val
+            # [so do we do this or not?]
             .assign(
                 filename_hash=lambda df: (
                     df["slug"]
