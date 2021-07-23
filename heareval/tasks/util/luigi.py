@@ -37,7 +37,7 @@ class WorkTask(luigi.Config):
         * The "output" of each task is a touch'ed file,
         indicating that the task is done. Each .run()
         method should end with this command:
-            `_workdir/done-{name}`
+            `_workdir/{name}.done`
             * Optionally, working output of each task will go into:
             `_workdir/{name}`
     Downstream dependencies should be cautious of automatically
