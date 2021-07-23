@@ -182,7 +182,7 @@ class SubsampleCorpus(WorkTask):
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
         metadata = metadata.sort_values(by="filename_hash").drop_duplicates(
-            subset="relpath", ignore_index=True
+            subset="filename_hash", ignore_index=True
         )
         return metadata
 
@@ -204,8 +204,8 @@ class SubsampleCorpus(WorkTask):
             )
 
         # Sort by the filename hash and select the max file per corpus
-        # The filename hash is done as part of the processmetadata because
-        # the string to be hashed for each file is dependent on the data
+        # The filename hash is done as part of the ConfigProcessMetadata
+        # because the string to be hashed for each file is dependent on the data
         process_metadata = process_metadata.sort_values(by="filename_hash").iloc[
             :max_files
         ]
