@@ -37,7 +37,7 @@ class WorkTask(luigi.Task):
         * The "output" of each task is a touch'ed file,
         indicating that the task is done. Each .run()
         method should end with this command:
-            `_workdir/done-{name}`
+            `_workdir/{name}.done`
             * Optionally, working output of each task will go into:
             `_workdir/{name}`
     Downstream dependencies should be cautious of automatically
@@ -47,7 +47,9 @@ class WorkTask(luigi.Task):
     """
 
     # Class attribute sets the task name for all inheriting luigi tasks
-    task_name = None
+    data_config = luigi.DictParameter(
+        visibility=luigi.parameter.ParameterVisibility.PRIVATE
+    )
 
     @property
     def name(self):
@@ -85,9 +87,13 @@ class WorkTask(luigi.Task):
         Task specific subdirectory
         """
         # You must specify a task name for WorkTask
-        assert self.task_name is not None
-        d = ["_workdir", str(self.task_name)]
+        d = ["_workdir", str(self.versioned_task_name)]
         return os.path.join(*d)
+
+    @property
+    def versioned_task_name(self):
+        task_name = f"{self.data_config['task_name']}-{self.data_config['version']}"
+        return task_name
 
     @property
     def stage_number(self) -> int:
@@ -134,17 +140,26 @@ class DownloadCorpus(WorkTask):
 class ExtractArchive(WorkTask):
 
     infile = luigi.Parameter()
+    download = luigi.TaskParameter(
+        visibility=luigi.parameter.ParameterVisibility.PRIVATE
+    )
+    outdir = luigi.Parameter(default=None)
 
     def requires(self):
-        raise NotImplementedError("This method requires a download task")
+        return {"download": self.download}
 
     def run(self):
         corpus_zip = os.path.realpath(
             os.path.join(self.requires()["download"].workdir, self.infile)
         )
-        shutil.unpack_archive(corpus_zip, self.workdir)
-        with self.output().open("w") as _:
-            pass
+        # If there are multiple ExtractArchive tasks then we optionally may want the
+        # extracted results to be placed into separate dirs within the main workdir.
+        output = self.workdir
+        if self.outdir is not None:
+            output = os.path.join(output, self.outdir)
+        shutil.unpack_archive(corpus_zip, output)
+
+        self.mark_complete()
 
 
 class SubsampleCorpus(WorkTask):
@@ -209,10 +224,6 @@ class SubsamplePartition(SubsampleCorpus):
 
 
 class MonoWavTrimCorpus(WorkTask):
-    # This can simultaneously convert to wav type and trim the files as
-    # well. Is this fine?
-    duration = luigi.FloatParameter()
-
     def requires(self):
         raise NotImplementedError("This method requires a corpus tasks")
 
@@ -225,7 +236,7 @@ class MonoWavTrimCorpus(WorkTask):
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
             audio_util.mono_wav_and_fix_duration(
-                audiofile, newaudiofile, duration=self.duration
+                audiofile, newaudiofile, duration=self.data_config["sample_duration"]
             )
 
         self.mark_complete()
@@ -404,7 +415,7 @@ class FinalizeCorpus(WorkTask):
     # the finalized top-level task directory
     @property
     def workdir(self):
-        return os.path.join("tasks", self.task_name)
+        return os.path.join("tasks", self.versioned_task_name)
 
     def run(self):
         if os.path.exists(self.workdir):

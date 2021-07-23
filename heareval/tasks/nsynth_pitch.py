@@ -3,55 +3,39 @@
 Pre-processing pipeline for NSynth pitch detection
 """
 
-import os
-from pathlib import Path
-from functools import partial
 import logging
+import os
+from functools import partial
+from pathlib import Path
 from typing import List
 
 import luigi
 import pandas as pd
 from slugify import slugify
 
-from heareval.tasks.dataset_config import (
-    PartitionedDatasetConfig,
-    PartitionConfig,
-)
-from heareval.tasks.util.dataset_builder import DatasetBuilder
+import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
 
 logger = logging.getLogger("luigi-interface")
 
 
-# Dataset configuration
-class NSynthPitchConfig(PartitionedDatasetConfig):
-    def __init__(self):
-        super().__init__(
-            task_name="nsynth-pitch",
-            version="v2.2.3",
-            download_urls={
-                "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",  # noqa: E501
-                "valid": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",  # noqa: E501
-                "test": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",  # noqa: E501
-            },
-            # All samples will be trimmed / padded to this length
-            sample_duration=4.0,
-            # Pre-defined partitions in the dataset. Number of files in each split is
-            # train: 85,111; valid: 10,102; test: 4890. These values will be a bit less
-            # after filter the pitches to be only within the piano range.
-            # To subsample a partition, set the max_files to an integer.
-            # TODO: Should we subsample NSynth?
-            partitions=[
-                PartitionConfig(name="train", max_files=10000),
-                PartitionConfig(name="valid", max_files=1000),
-                PartitionConfig(name="test", max_files=None),
-            ],
-        )
-        # We only include pitches that are on a standard 88-key MIDI piano
-        self.pitch_range = (21, 108)
-
-
-config = NSynthPitchConfig()
+config = {
+    "task_name": "nsynth_pitch",
+    "version": "v2.2.3",
+    "download_urls": {
+        "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",  # noqa: E501
+        "valid": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",  # noqa: E501
+        "test": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",  # noqa: E501
+    },
+    "sample_duration": 4.0,
+    "partitions": [
+        {"name": "train", "max_files": 100},
+        {"name": "test", "max_files": 100},
+        {"name": "valid", "max_files": 100},
+    ],
+    "pitch_range_min": 21,
+    "pitch_range_max": 108,
+}
 
 
 class ConfigureProcessMetaData(luigi_util.WorkTask):
@@ -61,12 +45,19 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
     """
 
     outfile = luigi.Parameter()
+    train = luigi.TaskParameter()
+    test = luigi.TaskParameter()
+    valid = luigi.TaskParameter()
 
     def requires(self):
-        raise NotImplementedError
+        return {
+            "train": self.train,
+            "test": self.test,
+            "valid": self.valid,
+        }
 
     @staticmethod
-    def get_rel_path(root: Path, item: pd.DataFrame) -> str:
+    def get_rel_path(root: Path, item: pd.DataFrame) -> Path:
         # Creates the relative path to an audio file given the note_str
         audio_path = root.joinpath("audio")
         filename = f"{item}.wav"
@@ -80,13 +71,14 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         logger.info(f"Preparing metadata for {split}")
 
         # Loads and prepares the metadata for a specific split
-        split_path = Path(self.requires()[split].workdir).joinpath(f"nsynth-{split}")
+        split_path = Path(self.requires()[split].workdir).joinpath(split)
+        split_path = split_path.joinpath(f"nsynth-{split}")
 
         metadata = pd.read_json(split_path.joinpath("examples.json"), orient="index")
 
         # Filter out pitches that are not within the range
-        metadata = metadata[metadata["pitch"] >= config.pitch_range[0]]
-        metadata = metadata[metadata["pitch"] <= config.pitch_range[1]]
+        metadata = metadata[metadata["pitch"] >= config["pitch_range_min"]]
+        metadata = metadata[metadata["pitch"] <= config["pitch_range_max"]]
 
         metadata = metadata.assign(label=lambda df: df["pitch"])
         metadata = metadata.assign(
@@ -123,17 +115,14 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
 def main(num_workers: int, sample_rates: List[int]):
 
-    builder = DatasetBuilder(config)
-
     # Build the dataset pipeline with the custom metadata configuration task
-    download_tasks = builder.download_and_extract_tasks()
-    configure_metadata = builder.build_task(
-        ConfigureProcessMetaData,
-        requirements=download_tasks,
-        params={"outfile": "process_metadata.csv"},
+    download_tasks = pipeline.get_download_and_extract_tasks(config)
+
+    configure_metadata = ConfigureProcessMetaData(
+        outfile="process_metadata.csv", data_config=config, **download_tasks
     )
-    audio_tasks = builder.prepare_audio_from_metadata_task(
-        configure_metadata, sample_rates
+    final = pipeline.FinalizeCorpus(
+        sample_rates=sample_rates, metadata=configure_metadata, data_config=config
     )
 
-    builder.run(audio_tasks, num_workers=num_workers)
+    pipeline.run(final, num_workers=num_workers)

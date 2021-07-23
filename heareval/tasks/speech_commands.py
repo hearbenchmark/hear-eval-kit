@@ -10,20 +10,11 @@ from typing import List
 import luigi
 import pandas as pd
 import soundfile as sf
-from tqdm import tqdm
 from slugify import slugify
+from tqdm import tqdm
 
-from heareval.tasks.dataset_config import (
-    PartitionedDatasetConfig,
-    PartitionConfig,
-)
-from heareval.tasks.util.dataset_builder import DatasetBuilder
-from heareval.tasks.util.luigi import (
-    PROCESSMETADATACOLS,
-    WorkTask,
-    filename_to_int_hash,
-)
-
+import heareval.tasks.pipeline as pipeline
+import heareval.tasks.util.luigi as luigi_util
 
 WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
 BACKGROUND_NOISE = "_background_noise_"
@@ -31,29 +22,23 @@ UNKNOWN = "_unknown_"
 SILENCE = "_silence_"
 
 
-class SpeechCommandsConfig(PartitionedDatasetConfig):
-    def __init__(self):
-        super().__init__(
-            task_name="speech_commands",
-            version="v0.0.2",
-            download_urls={
-                "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
-                "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
-            },
-            # All samples will be trimmed / padded to this length
-            sample_duration=1.0,
-            # Pre-defined partitions in the dataset. Number of files in each split is
-            # train: 85,111; valid: 10,102; test: 4890.
-            # To subsample a partition, set the max_files to an integer.
-            partitions=[
-                PartitionConfig(name="train", max_files=None),
-                PartitionConfig(name="valid", max_files=None),
-                PartitionConfig(name="test", max_files=None),
-            ],
-        )
+config = {
+    "task_name": "speech_commands",
+    "version": "v0.0.2",
+    "download_urls": {
+        "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
+        "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
+    },
+    "sample_duration": 1.0,
+    "partitions": [
+        {"name": "train", "max_files": 100},
+        {"name": "test", "max_files": 100},
+        {"name": "valid", "max_files": 100},
+    ],
+}
 
 
-class GenerateTrainDataset(WorkTask):
+class GenerateTrainDataset(luigi_util.WorkTask):
     """
     Silence / background samples in the train / validation sets need to be
     created by slicing up longer background samples into 1sec slices.
@@ -61,13 +46,16 @@ class GenerateTrainDataset(WorkTask):
     https://github.com/tensorflow/datasets/blob/79d56e662a15cd11e1fb3b679e0f978c8041566f/tensorflow_datasets/audio/speech_commands.py#L142
     """
 
+    # Requires an extracted dataset task to be completed
+    train_data = luigi.TaskParameter()
+
     def requires(self):
-        # This requires a task called "train" which is an ExtractArchive task.
-        raise NotImplementedError
+        return {"train": self.train_data}
 
     def run(self):
-        train_path = Path(self.requires()["train"].workdir)
+        train_path = Path(self.requires()["train"].workdir).joinpath("train")
         background_audio = list(train_path.glob(f"{BACKGROUND_NOISE}/*.wav"))
+        assert len(background_audio) > 0
 
         # Read all the background audio files and split into 1 second segments,
         # save all the segments into a folder called _silence_
@@ -76,7 +64,7 @@ class GenerateTrainDataset(WorkTask):
 
         print("Generating silence files from background sounds ...")
         for audio_path in tqdm(background_audio):
-            audio, sr = sf.read(audio_path)
+            audio, sr = sf.read(str(audio_path))
 
             basename = os.path.basename(audio_path)
             name, ext = os.path.splitext(basename)
@@ -104,17 +92,20 @@ class GenerateTrainDataset(WorkTask):
         self.mark_complete()
 
 
-class ConfigureProcessMetaData(WorkTask):
+class ConfigureProcessMetaData(luigi_util.WorkTask):
     """
     This config is data dependent and has to be set for each data
     """
 
     outfile = luigi.Parameter()
+    train = luigi.TaskParameter()
+    test = luigi.TaskParameter()
 
     def requires(self):
-        # This has two requirements: "train" which is a GenerateTrainDataset task
-        # and "test" which is an ExtractArchive task.
-        raise NotImplementedError()
+        return {
+            "train": self.train,
+            "test": self.test,
+        }
 
     @staticmethod
     def apply_label(relative_path):
@@ -133,7 +124,7 @@ class ConfigureProcessMetaData(WorkTask):
     def get_split_paths(self):
 
         # Test files
-        test_path = Path(self.requires()["test"].workdir)
+        test_path = Path(self.requires()["test"].workdir).joinpath("test")
         test_df = pd.DataFrame(test_path.glob("*/*.wav"), columns=["relpath"]).assign(
             partition=lambda df: "test"
         )
@@ -190,7 +181,7 @@ class ConfigureProcessMetaData(WorkTask):
                 filename_hash=lambda df: (
                     df["slug"]
                     .apply(lambda relpath: re.sub(r"-nohash-.*$", "", relpath))
-                    .apply(filename_to_int_hash)
+                    .apply(luigi_util.filename_to_int_hash)
                 )
             )
             # Get label for the data from anywhere.
@@ -205,9 +196,9 @@ class ConfigureProcessMetaData(WorkTask):
         process_metadata = self.get_metadata_attrs(process_metadata)
 
         # Save the process metadata
-        process_metadata[PROCESSMETADATACOLS].to_csv(
+        process_metadata[luigi_util.PROCESSMETADATACOLS].to_csv(
             os.path.join(self.workdir, self.outfile),
-            columns=PROCESSMETADATACOLS,
+            columns=luigi_util.PROCESSMETADATACOLS,
             header=False,
             index=False,
         )
@@ -217,34 +208,20 @@ class ConfigureProcessMetaData(WorkTask):
 
 def main(num_workers: int, sample_rates: List[int]):
 
-    config = SpeechCommandsConfig()
-    builder = DatasetBuilder(config)
+    download_tasks = pipeline.get_download_and_extract_tasks(config)
 
-    # This is a dictionary of the required extraction (untaring) tasks with their
-    # required download tasks. This are required be the custom GenerateTrainDataset
-    # and ConfigureProcessMetaData tasks.
-    download_tasks = builder.download_and_extract_tasks()
-
-    # Run the custom tasks for this dataset to generate samples and configure
-    # the metadata files. We instantiate these with the builder to pass in the
-    # dynamic download and extract requirements.
-    generate_dataset = builder.build_task(
-        GenerateTrainDataset, requirements={"train": download_tasks["train"]}
+    generate = GenerateTrainDataset(
+        train_data=download_tasks["train"], data_config=config
     )
-    configure_metadata = builder.build_task(
-        ConfigureProcessMetaData,
-        requirements={
-            "train": generate_dataset,
-            "test": download_tasks["test"],
-        },
-        params={"outfile": "process_metadata.csv"},
+    configure_metadata = ConfigureProcessMetaData(
+        train=generate,
+        test=download_tasks["test"],
+        outfile="process_metadata.csv",
+        data_config=config,
     )
 
-    # The remainder of the pipeline is a generic audio pipeline
-    # built off of the metadata csv.
-    audio_task = builder.prepare_audio_from_metadata_task(
-        configure_metadata, sample_rates
+    final = pipeline.FinalizeCorpus(
+        sample_rates=sample_rates, metadata=configure_metadata, data_config=config
     )
 
-    # Run the pipeline
-    builder.run(audio_task, num_workers=num_workers)
+    pipeline.run(final, num_workers=num_workers)

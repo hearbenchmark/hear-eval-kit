@@ -9,8 +9,8 @@ from typing import Optional
 
 import click
 
-import heareval.tasks.speech_commands as speech_commands
 import heareval.tasks.nsynth_pitch as nsynth_pitch
+import heareval.tasks.speech_commands as speech_commands
 
 logger = logging.getLogger("luigi-interface")
 
@@ -46,7 +46,7 @@ def run(
     else:
         sample_rates = [sample_rate]
 
-    tasks[task].main(num_workers=num_workers, sample_rates=sample_rates)
+    tasks[task].main(num_workers=num_workers, sample_rates=sample_rates)  # type: ignore
 
 
 if __name__ == "__main__":
