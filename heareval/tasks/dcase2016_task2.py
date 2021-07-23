@@ -15,7 +15,6 @@ from typing import List
 
 import luigi
 import pandas as pd
-from slugify import slugify
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
@@ -49,17 +48,16 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     def requires(self):
         return {"train": self.train, "test": self.test}
 
-    def split_to_path_str(self, split: str) -> str:
-        """
-        DCASE 2016 uses funny pathing, so we just hardcode the desired
-        (paths)
-        Note that for our training data, we only use DCASE 2016 dev data.
-        Their training data is short monophonic events.
-        """
-        return {
-            "train": "dcase2016_task2_train_dev/dcase2016_task2_dev/",
-            "test": "dcase2016_task2_test_public/",
-        }[split]
+    """
+    DCASE 2016 uses funny pathing, so we just hardcode the desired
+    (paths)
+    Note that for our training data, we only use DCASE 2016 dev data.
+    Their training data is short monophonic events.
+    """
+    split_to_path_str = {
+        "train": "dcase2016_task2_train_dev/dcase2016_task2_dev/",
+        "test": "dcase2016_task2_test_public/",
+    }
 
     def get_split_metadata(self, split: str) -> pd.DataFrame:
         logger.info(f"Preparing metadata for {split}")

@@ -4,8 +4,9 @@ Generic pipelines for datasets
 
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Union
 from urllib.parse import urlparse
+from slugify import slugify
 
 import luigi
 import pandas as pd
@@ -73,7 +74,10 @@ class ExtractMetadata(luigi_util.WorkTask):
         on a per-split basis.
         """
         process_metadata = pd.concat(
-            [self.get_split_metadata(split) for split in self.data_config["partitions"]]
+            [
+                self.get_split_metadata(split["name"])
+                for split in self.data_config["partitions"]
+            ]
         )
         return process_metadata
 

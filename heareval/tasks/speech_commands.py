@@ -10,7 +10,6 @@ from typing import List
 import luigi
 import pandas as pd
 import soundfile as sf
-from slugify import slugify
 from tqdm import tqdm
 
 import heareval.tasks.pipeline as pipeline

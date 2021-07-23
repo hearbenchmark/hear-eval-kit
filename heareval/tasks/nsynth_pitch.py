@@ -4,14 +4,12 @@ Pre-processing pipeline for NSynth pitch detection
 """
 
 import logging
-import os
 from functools import partial
 from pathlib import Path
 from typing import List
 
 import luigi
 import pandas as pd
-from slugify import slugify
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
