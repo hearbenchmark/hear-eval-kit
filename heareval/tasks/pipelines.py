@@ -4,7 +4,7 @@ Generic pipelines for datasets
 
 from pathlib import Path
 import os
-from typing import List
+from typing import List, Union
 from urllib.parse import urlparse
 
 import luigi
@@ -178,3 +178,25 @@ class FinalizeCorpus(luigi_util.FinalizeCorpus):
                 metadata=self.metadata, data_config=self.data_config
             ),
         }
+
+
+def run(task: Union[List[luigi.Task], luigi.Task], num_workers: int):
+    """
+    Run a task / set of tasks
+
+    Args:
+        task: a single or list of luigi tasks
+        num_workers: Number of CPU workers to use for this task
+    """
+
+    # If this is just a single task then add it to a list
+    if isinstance(task, luigi.Task):
+        task = [task]
+
+    luigi_util.ensure_dir("_workdir")
+    luigi.build(
+        task,
+        workers=num_workers,
+        local_scheduler=True,
+        log_level="INFO",
+    )
