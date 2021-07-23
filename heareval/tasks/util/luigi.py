@@ -15,10 +15,16 @@ from tqdm import tqdm
 
 import heareval.tasks.util.audio as audio_util
 
+# TODO: Why do we need a list of these columns
 PROCESSMETADATACOLS = [
+    # This is how you find the audio file in the original dataset's file layout
     "relpath",
-    # Like what is this and what is its contract?
+    # This is the filename in our dataset.
+    # It should be unique, it should be obvious what the original filename was,
+    # and perhaps it should contain the label for audio scene tasks.
     "slug",
+    # This is used for deterministically randomly ordering the filenames.
+    # TODO: This should be slug_hash.
     "filename_hash",
     "partition",
     "label",
