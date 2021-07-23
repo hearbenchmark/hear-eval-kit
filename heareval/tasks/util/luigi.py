@@ -47,7 +47,6 @@ class WorkTask(luigi.Config):
     """
 
     # Class attribute sets the task name for all inheriting luigi tasks
-    task_name = None
     data_config = luigi.DictParameter(
         visibility=luigi.parameter.ParameterVisibility.PRIVATE
     )
@@ -88,9 +87,13 @@ class WorkTask(luigi.Config):
         Task specific subdirectory
         """
         # You must specify a task name for WorkTask
-        task_name = f"{self.data_config['task_name']}-{self.data_config['version']}"
-        d = ["_workdir", str(task_name)]
+        d = ["_workdir", str(self.versioned_task_name)]
         return os.path.join(*d)
+
+    @property
+    def versioned_task_name(self):
+        task_name = f"{self.data_config['task_name']}-{self.data_config['version']}"
+        return task_name
 
     @property
     def stage_number(self) -> int:
@@ -412,7 +415,7 @@ class FinalizeCorpus(WorkTask):
     # the finalized top-level task directory
     @property
     def workdir(self):
-        return os.path.join("tasks", self.task_name)
+        return os.path.join("tasks", self.versioned_task_name)
 
     def run(self):
         if os.path.exists(self.workdir):

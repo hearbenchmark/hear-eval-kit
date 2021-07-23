@@ -346,8 +346,8 @@ def main(num_workers: int, sample_rates: List[int]):
         data_config=config,
     )
 
-    final = pipelines.MetadataVocabulary(
-        metadata=configure_metadata, data_config=config
+    final = pipelines.FinalizeCorpus(
+        sample_rates=sample_rates, metadata=configure_metadata, data_config=config
     )
 
     luigi.build(

@@ -4,6 +4,7 @@ Generic pipelines for datasets
 
 from pathlib import Path
 import os
+from typing import List
 from urllib.parse import urlparse
 
 import luigi
@@ -133,4 +134,47 @@ class MetadataVocabulary(luigi_util.MetadataVocabulary):
             "traintestmeta": SplitTrainTestMetadata(
                 metadata=self.metadata, data_config=self.data_config
             )
+        }
+
+
+class ResampleSubCorpus(luigi_util.ResampleSubCorpus):
+
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        # Requires the train test corpus and will take in
+        # parameter for which partition and sr the resampling
+        # has to be done
+        return {
+            "traintestcorpus": SplitTrainTestCorpus(
+                metadata=self.metadata, data_config=self.data_config
+            )
+        }
+
+
+class FinalizeCorpus(luigi_util.FinalizeCorpus):
+
+    sample_rates = luigi.ListParameter()
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        # Will copy the resampled data and the traintestmeta and the vocabmeta
+        partitions = [p["name"] for p in self.data_config["partitions"]]
+        return {
+            "resample": [
+                ResampleSubCorpus(
+                    sr=sr,
+                    partition=partition,
+                    metadata=self.metadata,
+                    data_config=self.data_config,
+                )
+                for sr in self.sample_rates
+                for partition in partitions
+            ],
+            "traintestmeta": SplitTrainTestMetadata(
+                metadata=self.metadata, data_config=self.data_config
+            ),
+            "vocabmeta": MetadataVocabulary(
+                metadata=self.metadata, data_config=self.data_config
+            ),
         }
