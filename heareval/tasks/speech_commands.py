@@ -102,17 +102,14 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             "test": self.test,
         }
 
-    """
     @staticmethod
     def apply_label(relative_path):
         label = os.path.basename(os.path.dirname(relative_path))
         if label not in WORDS and label != SILENCE:
             label = UNKNOWN
         return label
-    """
 
     def get_split_paths(self):
-
         # Test files
         test_path = Path(self.requires()["test"].workdir).joinpath("test")
         test_df = pd.DataFrame(test_path.glob("*/*.wav"), columns=["relpath"]).assign(

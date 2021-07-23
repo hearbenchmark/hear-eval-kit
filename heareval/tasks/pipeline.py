@@ -72,7 +72,7 @@ class ExtractMetadata(luigi_util.WorkTask):
         You can override this and simplify if the slugified filename for this dataset is too long.
         TODO: Remove the workdir, if it's present.
         """
-        return f"{slugify(relative_path)}.wav"
+        return f"{slugify(str(relative_path))}.wav"
 
     def get_process_metadata(self) -> pd.DataFrame:
         """
