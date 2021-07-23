@@ -13,7 +13,7 @@ import heareval.tasks.util.luigi as luigi_util
 from heareval.tasks.dataset_config import DatasetConfig
 
 
-def get_download_and_extract_tasks(config: Dict[str, object]):
+def get_download_and_extract_tasks(config: Dict):
 
     tasks = {}
     for name, url in config["download_urls"].items():
