@@ -110,6 +110,11 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         return label
 
     def get_split_paths(self):
+        """
+        Splits the dataset into train/valid/test files using the same method as
+        described in by the TensorFlow dataset:
+        https://www.tensorflow.org/datasets/catalog/speech_commands
+        """
         # Test files
         test_path = Path(self.requires()["test"].workdir).joinpath("test")
         test_df = pd.DataFrame(test_path.glob("*/*.wav"), columns=["relpath"]).assign(
@@ -124,25 +129,32 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         with open(os.path.join(train_path, "validation_list.txt"), "r") as fp:
             validation_paths = fp.read().strip().splitlines()
         validation_rel_paths = [os.path.join(train_path, p) for p in validation_paths]
+
+        # There are no silence files marked explicitly for validation. We add all
+        # the running_tap.wav samples to the silence class for validation.
+        # https://github.com/tensorflow/datasets/blob/e24fe9e6b03053d9b925d299a2246ea167dc85cd/tensorflow_datasets/audio/speech_commands.py#L183
         val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
         validation_rel_paths.extend(val_silence)
         validation_df = pd.DataFrame(validation_rel_paths, columns=["relpath"]).assign(
             split=lambda df: "valid"
         )
 
-        # Train files
-        # [really?? why is it called testing_list?]
+        # Train-test files.
         with open(os.path.join(train_path, "testing_list.txt"), "r") as fp:
             train_test_paths = fp.read().strip().splitlines()
         audio_paths = [
             str(p.relative_to(train_path)) for p in train_path.glob("[!_]*/*.wav")
         ]
 
+        # The final train set is all the audio files MINUS the files marked as
+        # test / validation files in testing_list.txt or validation_list.txt
         train_paths = list(
             set(audio_paths) - set(train_test_paths) - set(validation_paths)
         )
         train_rel_paths = [os.path.join(train_path, p) for p in train_paths]
 
+        # Training silence is all the generated silence / background noise samples
+        # minus those marked for validation.
         train_silence = list(set(all_silence) - set(val_silence))
         train_rel_paths.extend(train_silence)
         train_df = pd.DataFrame(train_rel_paths, columns=["relpath"]).assign(
