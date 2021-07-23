@@ -33,7 +33,8 @@ config = {
         {"name": "test", "max_files": 100},
         {"name": "valid", "max_files": 100},
     ],
-    "pitch_range": [21, 108],
+    "pitch_range_min": 21,
+    "pitch_range_max": 108,
 }
 
 
@@ -76,8 +77,8 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         metadata = pd.read_json(split_path.joinpath("examples.json"), orient="index")
 
         # Filter out pitches that are not within the range
-        metadata = metadata[metadata["pitch"] >= config["pitch_range"][0]]
-        metadata = metadata[metadata["pitch"] <= config["pitch_range"][1]]
+        metadata = metadata[metadata["pitch"] >= config["pitch_range_min"]]
+        metadata = metadata[metadata["pitch"] <= config["pitch_range_max"]]
 
         metadata = metadata.assign(label=lambda df: df["pitch"])
         metadata = metadata.assign(
