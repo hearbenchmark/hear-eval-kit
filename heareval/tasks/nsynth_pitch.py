@@ -56,7 +56,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         }
 
     @staticmethod
-    def get_rel_path(root: Path, item: pd.DataFrame) -> str:
+    def get_rel_path(root: Path, item: pd.DataFrame) -> Path:
         # Creates the relative path to an audio file given the note_str
         audio_path = root.joinpath("audio")
         filename = f"{item}.wav"
