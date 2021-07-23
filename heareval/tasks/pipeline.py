@@ -67,9 +67,12 @@ class ExtractMetadata(luigi_util.WorkTask):
     def slugify_file_name(relative_path: str) -> str:
         """
         This is the filename in our dataset.
-        It should be unique, it should be obvious what the original filename was,
-        and perhaps it should contain the label for audio scene tasks.
-        You can override this and simplify if the slugified filename for this dataset is too long.
+
+        It should be unique, it should be obvious what the original
+        filename was, and perhaps it should contain the label for
+        audio scene tasks.
+        You can override this and simplify if the slugified filename
+        for this dataset is too long.
         TODO: Remove the workdir, if it's present.
         """
         return f"{slugify(str(relative_path))}.wav"
@@ -96,12 +99,12 @@ class ExtractMetadata(luigi_util.WorkTask):
         process_metadata = self.get_process_metadata()
 
         if self.data_config["task_type"] == "event_labeling":
-            assert set(process_metadata.columns) == set(
+            assert set(
                 ["relpath", "slug", "filename_hash", "split", "label", "start", "end"]
-            )
+            ).issubset(set(process_metadata.columns))
         elif self.data_config["task_type"] == "scene_labeling":
-            assert set(process_metadata.columns) == set(
-                ["relpath", "slug", "filename_hash", "split", "label"]
+            assert set(["relpath", "slug", "filename_hash", "split", "label"]).issubset(
+                set(process_metadata.columns)
             )
         else:
             raise ValueError("%s task_type unknown" % self.data_config["task_type"])
