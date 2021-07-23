@@ -65,7 +65,7 @@ class GenerateTrainDataset(luigi_util.WorkTask):
 
         print("Generating silence files from background sounds ...")
         for audio_path in tqdm(background_audio):
-            audio, sr = sf.read(audio_path)
+            audio, sr = sf.read(str(audio_path))
 
             basename = os.path.basename(audio_path)
             name, ext = os.path.splitext(basename)
