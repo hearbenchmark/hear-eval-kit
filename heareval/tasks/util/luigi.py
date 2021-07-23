@@ -179,6 +179,11 @@ class SubsampleCorpus(WorkTask):
             header=None,
             names=PROCESSMETADATACOLS,
         )[["filename_hash", "slug", "relpath", "partition"]]
+        # Since event detection metadata will have duplicates, we de-dup
+        # TODO: We might consider different choices of subset
+        metadata = metadata.sort_values(by="filename_hash").drop_duplicates(
+            subset="relpath", ignore_index=True
+        )
         return metadata
 
     def run(self):
@@ -186,8 +191,10 @@ class SubsampleCorpus(WorkTask):
         process_metadata = self.get_metadata()
         # Subsample the files based on max files per corpus.
         # The filename hash is used here
-        # This task can also be done in the configprocessmetadata as that will give
-        # freedom to stratify the selection on some criterion?
+        # This task can also be done in ConfigProcessMetadata as that will give
+        # freedom to stratify the selection on some criterion? That seems kinda
+        # fiddly, if we want fancy stratification we should discuss that
+        # separately.
         num_files = len(process_metadata)
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
@@ -291,7 +298,7 @@ class SplitTrainTestMetadata(WorkTask):
             ),
             header=None,
             names=PROCESSMETADATACOLS,
-        )[["slug", "label"]]
+        )[["slug", "label", "start", "end"]]
         return metadata
 
     def run(self):
@@ -324,13 +331,17 @@ class SplitTrainTestMetadata(WorkTask):
             assert len(audiofiles) == len(audiodf.drop_duplicates())
 
             # Get the label from the metadata with the help of the slug of the filename
-            sublabeldf = labeldf.merge(audiodf, on="slug")[["slug", "label"]]
-            # Check if all the labels were found from the metadata
-            assert len(sublabeldf) == len(audiofiles)
-            # Save the slug and the label in as the parition metadata
+            sublabeldf = labeldf.merge(audiodf, on="slug")[
+                ["slug", "label", "start", "end"]
+            ]
+            # This won't work for sound event detection where there might be
+            # zero or more than one event per file
+            ## Check if all the labels were found from the metadata
+            # assert len(sublabeldf) == len(audiofiles)
+            # Save the slug and the label in as the partition metadata
             sublabeldf.to_csv(
                 os.path.join(self.workdir, f"{partition}.csv"),
-                columns=["slug", "label"],
+                columns=["slug", "label", "start", "end"],
                 index=False,
                 header=False,
             )

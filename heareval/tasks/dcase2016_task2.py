@@ -35,8 +35,8 @@ config = {
     # Want different for train and test?
     "sample_duration": 120.0,
     "partitions": [
-        {"name": "train", "max_files": 100},
-        {"name": "test", "max_files": 100},
+        {"name": "train", "max_files": 10},
+        {"name": "test", "max_files": 10},
     ],
 }
 
