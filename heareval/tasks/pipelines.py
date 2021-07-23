@@ -78,3 +78,59 @@ class SubsamplePartitions(luigi_util.WorkTask):
         key = list(self.requires().keys())[0]
         workdir.symlink_to(Path(self.requires()[key].workdir).absolute())
         self.mark_complete()
+
+
+class MonoWavTrimCorpus(luigi_util.MonoWavTrimCorpus):
+
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        return {
+            "corpus": SubsamplePartitions(
+                metadata=self.metadata, data_config=self.data_config
+            )
+        }
+
+
+class SplitTrainTestCorpus(luigi_util.SplitTrainTestCorpus):
+
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        # The metadata helps in provide the partition type for each
+        # audio file
+        return {
+            "corpus": MonoWavTrimCorpus(
+                metadata=self.metadata, data_config=self.data_config
+            ),
+            "meta": self.metadata,
+        }
+
+
+class SplitTrainTestMetadata(luigi_util.SplitTrainTestMetadata):
+
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        # Requires the traintestcorpus and the metadata.
+        # The metadata is split into train and test files
+        # which are in the traintestcorpus
+        return {
+            "traintestcorpus": SplitTrainTestCorpus(
+                metadata=self.metadata, data_config=self.data_config
+            ),
+            "meta": self.metadata,
+        }
+
+
+class MetadataVocabulary(luigi_util.MetadataVocabulary):
+
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        # Depends only on the train test metadata
+        return {
+            "traintestmeta": SplitTrainTestMetadata(
+                metadata=self.metadata, data_config=self.data_config
+            )
+        }

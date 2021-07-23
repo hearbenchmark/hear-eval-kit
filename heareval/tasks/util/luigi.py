@@ -221,10 +221,6 @@ class SubsamplePartition(SubsampleCorpus):
 
 
 class MonoWavTrimCorpus(WorkTask):
-    # This can simultaneously convert to wav type and trim the files as
-    # well. Is this fine?
-    duration = luigi.FloatParameter()
-
     def requires(self):
         raise NotImplementedError("This method requires a corpus tasks")
 
@@ -237,7 +233,7 @@ class MonoWavTrimCorpus(WorkTask):
                 os.path.splitext(audiofile)[0] + ".wav", self.workdir
             )
             audio_util.mono_wav_and_fix_duration(
-                audiofile, newaudiofile, duration=self.duration
+                audiofile, newaudiofile, duration=self.data_config["sample_duration"]
             )
 
         self.mark_complete()

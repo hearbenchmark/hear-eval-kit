@@ -56,7 +56,7 @@ config = {
         "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
         "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
     },
-    "sample_duation": 1.0,
+    "sample_duration": 1.0,
     "partitions": [
         {"name": "train", "max_files": 100},
         {"name": "test", "max_files": 100},
@@ -346,7 +346,7 @@ def main(num_workers: int, sample_rates: List[int]):
         data_config=config,
     )
 
-    final = pipelines.SubsamplePartitions(
+    final = pipelines.MetadataVocabulary(
         metadata=configure_metadata, data_config=config
     )
 
