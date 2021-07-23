@@ -281,7 +281,7 @@ class SplitTrainTestMetadata(WorkTask):
             os.path.join(
                 self.requires()["meta"].workdir, self.requires()["meta"].outfile
             ),
-        )[["slug", "label", "start", "end"]]
+        )
         return metadata
 
     def run(self):
@@ -314,9 +314,7 @@ class SplitTrainTestMetadata(WorkTask):
             assert len(audiofiles) == len(audiodf.drop_duplicates())
 
             # Get the label from the metadata with the help of the slug of the filename
-            sublabeldf = labeldf.merge(audiodf, on="slug")[
-                ["slug", "label", "start", "end"]
-            ]
+            sublabeldf = labeldf.merge(audiodf, on="slug")
 
             if self.data_config["task_type"] == "scene_labeling":
                 # Check if all the labels were found from the metadata
@@ -331,7 +329,6 @@ class SplitTrainTestMetadata(WorkTask):
             # Save the slug and the label in as the split metadata
             sublabeldf.to_csv(
                 os.path.join(self.workdir, f"{split}.csv"),
-                columns=["slug", "label", "start", "end"],
                 index=False,
             )
 

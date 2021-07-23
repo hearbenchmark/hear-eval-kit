@@ -96,12 +96,12 @@ class ExtractMetadata(luigi_util.WorkTask):
         process_metadata = self.get_process_metadata()
 
         if self.data_config["task_type"] == "event_labeling":
-            assert set(process_metadata.columns) == set(
+            assert set(
                 ["relpath", "slug", "filename_hash", "split", "label", "start", "end"]
-            )
+            ).issubset(set(process_metadata.columns))
         elif self.data_config["task_type"] == "scene_labeling":
-            assert set(process_metadata.columns) == set(
-                ["relpath", "slug", "filename_hash", "split", "label"]
+            assert set(["relpath", "slug", "filename_hash", "split", "label"]).issubset(
+                set(process_metadata.columns)
             )
         else:
             raise ValueError("%s task_type unknown" % self.data_config["task_type"])
