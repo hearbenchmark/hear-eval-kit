@@ -59,32 +59,6 @@ config = {
     "sample_duation": 1.0,
 }
 
-# config = SpeechCommandsConfig()
-
-
-class ExtractArchiveTrain(luigi_util.ExtractArchive):
-
-    download = luigi.TaskParameter(
-        visibility=luigi.parameter.ParameterVisibility.PRIVATE
-    )
-
-    def requires(self):
-        return {
-            "download": self.download,
-            # "download": luigi_util.DownloadCorpus(
-            #     url=config.download_urls["train"], outfile="train-corpus.tar.gz"
-            # )
-        }
-
-
-class ExtractArchiveTest(luigi_util.ExtractArchive):
-    def requires(self):
-        return {
-            "download": luigi_util.DownloadCorpus(
-                url=config.download_urls["test"], outfile="test-corpus.tar.gz"
-            )
-        }
-
 
 class GenerateTrainDataset(luigi_util.WorkTask):
     """
@@ -94,12 +68,16 @@ class GenerateTrainDataset(luigi_util.WorkTask):
     https://github.com/tensorflow/datasets/blob/79d56e662a15cd11e1fb3b679e0f978c8041566f/tensorflow_datasets/audio/speech_commands.py#L142
     """
 
+    # Requires an extracted dataset task to be completed
+    train_data = luigi.TaskParameter()
+
     def requires(self):
-        return {"train": ExtractArchiveTrain(infile="train-corpus.tar.gz")}
+        return {"train": self.train_data}
 
     def run(self):
-        train_path = Path(self.requires()["train"].workdir)
+        train_path = Path(self.requires()["train"].workdir).joinpath("train")
         background_audio = list(train_path.glob(f"{BACKGROUND_NOISE}/*.wav"))
+        assert len(background_audio) > 0
 
         # Read all the background audio files and split into 1 second segments,
         # save all the segments into a folder called _silence_
@@ -142,11 +120,13 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
     """
 
     outfile = luigi.Parameter()
+    train = luigi.TaskParameter()
+    test = luigi.TaskParameter()
 
     def requires(self):
         return {
-            "train": GenerateTrainDataset(),
-            "test": ExtractArchiveTest(infile="test-corpus.tar.gz"),
+            "train": self.train,
+            "test": self.test,
         }
 
     @staticmethod
@@ -166,7 +146,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
     def get_split_paths(self):
 
         # Test files
-        test_path = Path(self.requires()["test"].workdir)
+        test_path = Path(self.requires()["test"].workdir).joinpath("test")
         test_df = pd.DataFrame(test_path.glob("*/*.wav"), columns=["relpath"]).assign(
             partition=lambda df: "test"
         )
@@ -351,10 +331,18 @@ def main(num_workers: int, sample_rates: List[int]):
 
     download_tasks = pipelines.get_download_and_extract_tasks(config)
 
-    print(download_tasks)
+    generate = GenerateTrainDataset(
+        train_data=download_tasks["train"], data_config=config
+    )
+    configure_metadata = ConfigureProcessMetaData(
+        train=generate,
+        test=download_tasks["test"],
+        outfile="process_metadata.csv",
+        data_config=config,
+    )
 
     luigi.build(
-        [download_tasks["test"]],
+        [configure_metadata],
         # [FinalizeCorpus(sample_rates=sample_rates, task_string=config.versioned_task_name, next_task=GenerateTrainDataset)],
         workers=num_workers,
         local_scheduler=True,
