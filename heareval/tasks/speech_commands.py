@@ -53,11 +53,17 @@ luigi_util.WorkTask.task_name = config.versioned_task_name
 
 
 class ExtractArchiveTrain(luigi_util.ExtractArchive):
+
+    download = luigi.TaskParameter(
+        visibility=luigi.parameter.ParameterVisibility.PRIVATE
+    )
+
     def requires(self):
         return {
-            "download": luigi_util.DownloadCorpus(
-                url=config.download_urls["train"], outfile="train-corpus.tar.gz"
-            )
+            "download": self.download,
+            # "download": luigi_util.DownloadCorpus(
+            #     url=config.download_urls["train"], outfile="train-corpus.tar.gz"
+            # )
         }
 
 
@@ -312,15 +318,16 @@ class ResampleSubCorpus(luigi_util.ResampleSubCorpus):
         return {"traintestcorpus": SplitTrainTestCorpus()}
 
 
-class FinalizeCorpus(luigi_util.FinalizeCorpus):
+class FinalizeCorpus(luigi_util.WorkTask):
 
     sample_rates = luigi.ListParameter()
+    next_task = luigi.TaskParameter()
 
     def requires(self):
         # Will copy the resampled data and the traintestmeta and the vocabmeta
         return {
             "resample": [
-                ResampleSubCorpus(sr, partition)
+                ResampleSubCorpus(sr=sr, partition=partition)
                 for sr in self.sample_rates
                 for partition in ["train", "test", "valid"]
             ],
@@ -331,8 +338,15 @@ class FinalizeCorpus(luigi_util.FinalizeCorpus):
 
 def main(num_workers: int, sample_rates: List[int]):
     luigi_util.ensure_dir("_workdir")
+
+    download = luigi_util.DownloadCorpus(
+        url=config.download_urls["train"], outfile="train-corpus.tar.gz"
+    )
+    extract = ExtractArchiveTrain(infile="train-corpus.tar.gz", download=download)
+
     luigi.build(
-        [FinalizeCorpus(sample_rates=sample_rates)],
+        [extract],
+        # [FinalizeCorpus(sample_rates=sample_rates, task_string=config.versioned_task_name, next_task=GenerateTrainDataset)],
         workers=num_workers,
         local_scheduler=True,
         log_level="INFO",
