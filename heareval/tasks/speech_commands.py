@@ -14,7 +14,7 @@ from tqdm import tqdm
 from slugify import slugify
 
 import heareval.tasks.util.luigi as luigi_util
-import heareval.tasks.pipelines as pipelines
+import heareval.tasks.pipeline as pipeline
 
 
 WORDS = ["down", "go", "left", "no", "off", "on", "right", "stop", "up", "yes"]
@@ -209,7 +209,7 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
 def main(num_workers: int, sample_rates: List[int]):
 
-    download_tasks = pipelines.get_download_and_extract_tasks(config)
+    download_tasks = pipeline.get_download_and_extract_tasks(config)
 
     generate = GenerateTrainDataset(
         train_data=download_tasks["train"], data_config=config
@@ -221,8 +221,8 @@ def main(num_workers: int, sample_rates: List[int]):
         data_config=config,
     )
 
-    final = pipelines.FinalizeCorpus(
+    final = pipeline.FinalizeCorpus(
         sample_rates=sample_rates, metadata=configure_metadata, data_config=config
     )
 
-    pipelines.run(final, num_workers=num_workers)
+    pipeline.run(final, num_workers=num_workers)
