@@ -76,7 +76,7 @@ class ExtractMetadata(luigi_util.WorkTask):
         process_metadata = pd.concat(
             [
                 self.get_split_metadata(split["name"])
-                for split in self.data_config["partitions"]
+                for split in self.data_config["splits"]
             ]
         )
         return process_metadata
@@ -96,7 +96,7 @@ class ExtractMetadata(luigi_util.WorkTask):
         self.mark_complete()
 
 
-class SubsamplePartition(luigi_util.SubsamplePartition):
+class SubsampleSplit(luigi_util.SubsampleSplit):
     """
     A subsampler that acts on a specific split.
     All instances of this will depend on the combined process metadata csv.
@@ -112,7 +112,7 @@ class SubsamplePartition(luigi_util.SubsamplePartition):
         }
 
 
-class SubsamplePartitions(luigi_util.WorkTask):
+class SubsampleSplits(luigi_util.WorkTask):
     """
     Aggregates subsampling of all the splits into a single task as dependencies.
     All the subsampled files are stored in the requires workdir, so we just link to
@@ -126,7 +126,7 @@ class SubsamplePartitions(luigi_util.WorkTask):
     def requires(self):
         # Perform subsampling on each split independently
         subsample_splits = {
-            split["name"]: SubsamplePartition(
+            split["name"]: SubsampleSplit(
                 metadata=self.metadata,
                 split=split["name"],
                 max_files=split["max_files"],
@@ -152,7 +152,7 @@ class MonoWavTrimCorpus(luigi_util.MonoWavTrimCorpus):
 
     def requires(self):
         return {
-            "corpus": SubsamplePartitions(
+            "corpus": SubsampleSplits(
                 metadata=self.metadata, data_config=self.data_config
             )
         }
