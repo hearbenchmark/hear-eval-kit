@@ -22,6 +22,8 @@ logger = logging.getLogger("luigi-interface")
 config = {
     "task_name": "nsynth_pitch",
     "version": "v2.2.3",
+    # TODO: Use these somewhere
+    "task_type": "scene_labeling",
     "download_urls": {
         "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",  # noqa: E501
         "valid": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",  # noqa: E501

@@ -27,6 +27,8 @@ logger = logging.getLogger("luigi-interface")
 config = {
     "task_name": "dcase2016_task2",
     "version": "hear2021",
+    # TODO: Use these somewhere
+    "task_type": "event_labeling",
     "download_urls": {
         "train": "https://archive.org/download/dcase2016_task2_train_dev/dcase2016_task2_train_dev.zip",  # noqa: E501
         "test": "https://archive.org/download/dcase2016_task2_test_public/dcase2016_task2_test_public.zip",  # noqa: E501
