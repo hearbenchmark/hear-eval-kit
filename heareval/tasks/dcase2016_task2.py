@@ -37,7 +37,6 @@ config = {
     "partitions": [
         {"name": "train", "max_files": 100},
         {"name": "test", "max_files": 100},
-        {"name": "valid", "max_files": 100},
     ],
 }
 
@@ -51,13 +50,11 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
     outfile = luigi.Parameter()
     train = luigi.TaskParameter()
     test = luigi.TaskParameter()
-    valid = luigi.TaskParameter()
 
     def requires(self):
         return {
             "train": self.train,
             "test": self.test,
-            "valid": self.valid,
         }
 
     @staticmethod

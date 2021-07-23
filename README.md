@@ -21,6 +21,11 @@ For NSynth pitch:
 python3 -m heareval.tasks.runner nsynth_pitch
 ```
 
+For DCASE 2016, Task 2 (sound event detection):
+```
+python3 -m heareval.tasks.runner dcase2016_task2
+```
+
 These commands will download and preprocess the entire dataset. An intermediary dir
 call `_workdir` will be created, and then a final directory called `tasks` will contain
 the completed dataset.

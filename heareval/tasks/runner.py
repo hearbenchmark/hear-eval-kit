@@ -11,10 +11,15 @@ import click
 
 import heareval.tasks.nsynth_pitch as nsynth_pitch
 import heareval.tasks.speech_commands as speech_commands
+import heareval.tasks.dcase2016_task2 as dcase2016_task2
 
 logger = logging.getLogger("luigi-interface")
 
-tasks = {"speech_commands": speech_commands, "nsynth_pitch": nsynth_pitch}
+tasks = {
+    "speech_commands": speech_commands,
+    "nsynth_pitch": nsynth_pitch,
+    "dcase2016_task2": dcase2016_task2,
+}
 
 
 @click.command()
