@@ -42,41 +42,32 @@ config = {
 }
 
 
-class ExtractMetadata(luigi_util.WorkTask):
-    """
-    Custom metadata pre-processing. Creates a metadata csv
-    file that will be used by downstream luigi tasks to curate the final dataset.
-    TODO: It would be nice to have a better description of what this pattern is
-    """
-
-    outfile = luigi.Parameter()
+class ExtractMetadata(pipeline.ExtractMetadata):
     train = luigi.TaskParameter()
     test = luigi.TaskParameter()
 
     def requires(self):
+        return {"train": self.train, "test": self.test}
+
+    def split_to_path_str(self, split: str) -> str:
+        """
+        DCASE 2016 uses funny pathing, so we just hardcode the desired
+        (paths)
+        Note that for our training data, we only use DCASE 2016 dev data.
+        Their training data is short monophonic events.
+        """
         return {
-            "train": self.train,
-            "test": self.test,
-        }
+            "train": "dcase2016_task2_train_dev/dcase2016_task2_dev/",
+            "test": "dcase2016_task2_test_public/",
+        }[split]
 
-    @staticmethod
-    def get_rel_path(root: Path, item: pd.DataFrame) -> Path:
-        # Creates the relative path to an audio file given the note_str
-        audio_path = root.joinpath("audio")
-        filename = f"{item}.wav"
-        return audio_path.joinpath(filename)
-
-    @staticmethod
-    def slugify_file_name(filename: str) -> str:
-        return f"{slugify(filename)}.wav"
-
-    def get_split_metadata(self, split: str, split_path_str: str) -> pd.DataFrame:
+    def get_split_metadata(self, split: str) -> pd.DataFrame:
         logger.info(f"Preparing metadata for {split}")
 
         split_path = (
             Path(self.requires()[split].workdir)
             .joinpath(split)
-            .joinpath(split_path_str)
+            .joinpath(self.split_to_path_str[split])
         )
 
         metadatas = []
@@ -104,30 +95,6 @@ class ExtractMetadata(luigi_util.WorkTask):
             metadatas.append(metadata)
 
         return pd.concat(metadatas)[luigi_util.PROCESSMETADATACOLS]
-
-    def run(self):
-        # Get metadata for each of the data splits
-        process_metadata = pd.concat(
-            # DCASE 2016 uses funny pathing, so we just hardcode the desired
-            # paths
-            # Note that from our training data, we only use DCASE 2016 dev data.
-            # Their training data is short monophonic events.
-            [
-                self.get_split_metadata(
-                    "train", "dcase2016_task2_train_dev/dcase2016_task2_dev/"
-                ),
-                self.get_split_metadata("test", "dcase2016_task2_test_public/"),
-            ]
-        )
-
-        process_metadata.to_csv(
-            os.path.join(self.workdir, self.outfile),
-            columns=luigi_util.PROCESSMETADATACOLS,
-            header=False,
-            index=False,
-        )
-
-        self.mark_complete()
 
 
 def main(num_workers: int, sample_rates: List[int]):

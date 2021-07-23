@@ -40,13 +40,7 @@ config = {
 }
 
 
-class ExtractMetadata(luigi_util.WorkTask):
-    """
-    Custom metadata pre-processing for the NSynth task. Creates a metadata csv
-    file that will be used by downstream luigi tasks to curate the final dataset.
-    """
-
-    outfile = luigi.Parameter()
+class ExtractMetadata(pipeline.ExtractMetadata):
     train = luigi.TaskParameter()
     test = luigi.TaskParameter()
     valid = luigi.TaskParameter()
@@ -58,16 +52,14 @@ class ExtractMetadata(luigi_util.WorkTask):
             "valid": self.valid,
         }
 
+    """
     @staticmethod
     def get_rel_path(root: Path, item: pd.DataFrame) -> Path:
         # Creates the relative path to an audio file given the note_str
         audio_path = root.joinpath("audio")
         filename = f"{item}.wav"
         return audio_path.joinpath(filename)
-
-    @staticmethod
-    def slugify_file_name(filename: str) -> str:
-        return f"{slugify(filename)}.wav"
+    """
 
     def get_split_metadata(self, split: str) -> pd.DataFrame:
         logger.info(f"Preparing metadata for {split}")
@@ -97,22 +89,6 @@ class ExtractMetadata(luigi_util.WorkTask):
         )
 
         return metadata[luigi_util.PROCESSMETADATACOLS]
-
-    def run(self):
-
-        # Get metadata for each of the data splits
-        process_metadata = pd.concat(
-            [self.get_split_metadata(split) for split in self.requires()]
-        )
-
-        process_metadata.to_csv(
-            os.path.join(self.workdir, self.outfile),
-            columns=luigi_util.PROCESSMETADATACOLS,
-            header=False,
-            index=False,
-        )
-
-        self.mark_complete()
 
 
 def main(num_workers: int, sample_rates: List[int]):
