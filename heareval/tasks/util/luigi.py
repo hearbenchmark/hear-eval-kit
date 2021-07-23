@@ -317,11 +317,17 @@ class SplitTrainTestMetadata(WorkTask):
             sublabeldf = labeldf.merge(audiodf, on="slug")[
                 ["slug", "label", "start", "end"]
             ]
-            # This won't work for sound event detection where there might be
-            # zero or more than one event per file
-            # TODO: Do this for scene labeling tho
-            # Check if all the labels were found from the metadata
-            # assert len(sublabeldf) == len(audiofiles)
+
+            if self.data_config["task_type"] == "scene_labeling":
+                # Check if all the labels were found from the metadata
+                assert len(sublabeldf) == len(audiofiles)
+            elif self.data_config["task_type"] == "event_labeling":
+                # This won't work for sound event detection where there might be
+                # zero or more than one event per file
+                pass
+            else:
+                raise ValueError
+
             # Save the slug and the label in as the split metadata
             sublabeldf.to_csv(
                 os.path.join(self.workdir, f"{split}.csv"),

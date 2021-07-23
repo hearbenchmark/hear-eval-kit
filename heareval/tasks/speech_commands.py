@@ -24,7 +24,6 @@ SILENCE = "_silence_"
 config = {
     "task_name": "speech_commands",
     "version": "v0.0.2",
-    # TODO: Use these somewhere
     "task_type": "scene_labeling",
     "download_urls": {
         "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
