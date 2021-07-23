@@ -94,7 +94,7 @@ class GenerateTrainDataset(luigi_util.WorkTask):
         self.mark_complete()
 
 
-class ConfigureProcessMetaData(luigi_util.WorkTask):
+class ExtractMetadata(luigi_util.WorkTask):
     """
     This config is data dependent and has to be set for each data
     """
@@ -217,7 +217,7 @@ def main(num_workers: int, sample_rates: List[int]):
     generate = GenerateTrainDataset(
         train_data=download_tasks["train"], data_config=config
     )
-    configure_metadata = ConfigureProcessMetaData(
+    configure_metadata = ExtractMetadata(
         train=generate,
         test=download_tasks["test"],
         outfile="process_metadata.csv",

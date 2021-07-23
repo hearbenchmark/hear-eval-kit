@@ -40,7 +40,7 @@ config = {
 }
 
 
-class ConfigureProcessMetaData(luigi_util.WorkTask):
+class ExtractMetadata(luigi_util.WorkTask):
     """
     Custom metadata pre-processing for the NSynth task. Creates a metadata csv
     file that will be used by downstream luigi tasks to curate the final dataset.
@@ -120,7 +120,7 @@ def main(num_workers: int, sample_rates: List[int]):
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)
 
-    configure_metadata = ConfigureProcessMetaData(
+    configure_metadata = ExtractMetadata(
         outfile="process_metadata.csv", data_config=config, **download_tasks
     )
     final = pipeline.FinalizeCorpus(
