@@ -84,12 +84,19 @@ class ExtractMetadata(luigi_util.WorkTask):
     def run(self):
         process_metadata = self.get_process_metadata()
 
-        # TODO: Check we have the metadata columns we expect??
+        if self.data_config["task_type"] == "event_labeling":
+            assert set(process_metadata.columns) == set(
+                ["relpath", "slug", "filename_hash", "split", "label", "start", "end"]
+            )
+        elif self.data_config["task_type"] == "scene_labeling":
+            assert set(process_metadata.columns) == set(
+                ["relpath", "slug", "filename_hash", "split", "label"]
+            )
+        else:
+            raise ValueError("%s task_type unknown" % self.data_config["task_type"])
 
         process_metadata.to_csv(
             os.path.join(self.workdir, self.outfile),
-            columns=luigi_util.PROCESSMETADATACOLS,
-            header=False,
             index=False,
         )
 

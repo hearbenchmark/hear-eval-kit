@@ -182,8 +182,6 @@ class SubsampleCorpus(WorkTask):
             os.path.join(
                 self.requires()["meta"].workdir, self.requires()["meta"].outfile
             ),
-            header=None,
-            names=PROCESSMETADATACOLS,
         )[["filename_hash", "slug", "relpath", "split"]]
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
@@ -270,8 +268,6 @@ class SplitTrainTestCorpus(WorkTask):
         meta = self.requires()["meta"]
         process_metadata = pd.read_csv(
             os.path.join(meta.workdir, meta.outfile),
-            header=None,
-            names=PROCESSMETADATACOLS,
         )[["slug", "split"]]
 
         # Go over the subsampled folder and pick the audio files. The audio files are
@@ -302,8 +298,6 @@ class SplitTrainTestMetadata(WorkTask):
             os.path.join(
                 self.requires()["meta"].workdir, self.requires()["meta"].outfile
             ),
-            header=None,
-            names=PROCESSMETADATACOLS,
         )[["slug", "label", "start", "end"]]
         return metadata
 
@@ -350,7 +344,6 @@ class SplitTrainTestMetadata(WorkTask):
                 os.path.join(self.workdir, f"{split}.csv"),
                 columns=["slug", "label", "start", "end"],
                 index=False,
-                header=False,
             )
 
         with self.output().open("w") as _:
@@ -370,8 +363,6 @@ class MetadataVocabulary(WorkTask):
                     self.requires()["traintestmeta"].workdir,
                     split_metadata,
                 ),
-                header=None,
-                names=["filename", "label"],
             )
             labelset = labelset | set(labeldf["label"].unique().tolist())
 
@@ -385,7 +376,6 @@ class MetadataVocabulary(WorkTask):
             os.path.join(self.workdir, "labelvocabulary.csv"),
             columns=["idx", "label"],
             index=False,
-            header=False,
         )
 
         with self.output().open("w") as _:
