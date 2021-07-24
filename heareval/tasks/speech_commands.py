@@ -11,6 +11,7 @@ import luigi
 import pandas as pd
 import soundfile as sf
 from tqdm import tqdm
+from slugify import slugify
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
@@ -108,6 +109,18 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         if label not in WORDS and label != SILENCE:
             label = UNKNOWN
         return label
+    
+    @staticmethod
+    def slugify_file_name(relative_path: str) -> str:
+        """
+        For speech command each speaker might have given samples for 
+        different labels. In this case, just sluggifying the file name 
+        without the label would cause duplicates
+        """
+        #Get the foldername which is the label and the filename
+        name = os.path.join(*Path(relative_path).parts[-2:])
+        return f"{slugify(str(name))}"
+
     @staticmethod
     def get_subsample_key(slug: str):
         # Speaker hash is a unique hash at a speaker level.
