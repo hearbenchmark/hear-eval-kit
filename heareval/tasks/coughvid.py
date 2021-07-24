@@ -61,17 +61,6 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             os.path.join("all_data", "public_dataset")
         )
         # Prepare the metadata by reading all the files in the downloaded folder
-        print("##########")
-        print(list(all_data_path.glob("*"))[:10])
-        print("=========")
-        print(
-            list(
-                filter(
-                    lambda p: p.suffix in VALID_EXTENSIONS,
-                    list(all_data_path.glob("*")),
-                )
-            )[:10]
-        )
         metadata = pd.DataFrame(
             # Read all the files with valid extension in the corpus folder
             filter(
@@ -107,7 +96,6 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             filename_hash=lambda df: df["slug"].apply(luigi_util.filename_to_int_hash),
             split=lambda df: df["filename_hash"].apply(which_set),
         )
-        print(metadata.head(5))
 
         return metadata[["relpath", "slug", "filename_hash", "split", "label"]]
 
@@ -125,7 +113,3 @@ def main(num_workers: int, sample_rates: List[int]):
     )
 
     pipeline.run(final, num_workers=num_workers)
-
-
-if __name__ == "__main__":
-    main(2, [16000, 22050])
