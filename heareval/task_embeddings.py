@@ -94,7 +94,11 @@ def get_audio_embedding_numpy(
         embeddings = embeddings.detach().cpu().numpy()
         timestamps = timestamps.detach().cpu().numpy()
         # TODO: Turn this into a validator test
-        assert len(embeddings) == len(timestamps)
+        # What we really want is embeddings.shape[:2] == (batch_size, # timestamps) AND
+        # timestampe.shape[:2] == (batch_size, # timestamps)
+        assert len(embeddings) == len(
+            timestamps
+        ), f"{len(embeddings), embeddings.shape} != {len(timestamps)}"
         return embeddings, timestamps
     else:
         raise ValueError(f"Unknown task_type = {task_type}")
