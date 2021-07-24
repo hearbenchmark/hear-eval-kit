@@ -201,8 +201,8 @@ class SubsampleCorpus(WorkTask):
         # Save file using symlinks
         for _, audio in process_metadata.iterrows():
             audiofile = Path(audio["relpath"])
-            # Get the slug path with the extension. The slug doesnot have 
-            # the extension yet since it might change before making the 
+            # Get the slug path with the extension. The slug doesnot have
+            # the extension yet since it might change before making the
             # train and test metadata
             slug_path = f"{audio['slug']}{audiofile.suffix}"
             newaudiofile = Path(os.path.join(self.workdir, slug_path))
@@ -315,23 +315,23 @@ class SplitTrainTestMetadata(WorkTask):
                 )
             # Get the filename which is also the slug of the file and the
             # corresponding label can be picked up from the metadata
-            
-            #The extension is decided by the preprocessing of the file in the 
-            #pipeline. Get the extension as a separate column to add to the slug
+
+            # The extension is decided by the preprocessing of the file in the
+            # pipeline. Get the extension as a separate column to add to the slug
             audiodf = pd.DataFrame(
-                [os.path.splitext(os.path.basename(a)) for a in audiofiles], 
-                columns=["slug", "ext"]
+                [os.path.splitext(os.path.basename(a)) for a in audiofiles],
+                columns=["slug", "ext"],
             )
             assert len(audiofiles) == len(audiodf.drop_duplicates())
 
             # Get the label from the metadata with the help of the slug of the filename
             sublabeldf = labeldf.merge(audiodf, on="slug")
-            
-            # The extension is fixed at this stage and should be 
+
+            # The extension is fixed at this stage and should be
             # added in the slug now
             sublabeldf["slug"] = sublabeldf["slug"] + sublabeldf["ext"]
-            sublabeldf = sublabeldf.drop("ext", axis = 1)
-            
+            sublabeldf = sublabeldf.drop("ext", axis=1)
+
             if self.data_config["task_type"] == "scene_labeling":
                 # Check if all the labels were found from the metadata
                 assert len(sublabeldf) == len(audiofiles)
