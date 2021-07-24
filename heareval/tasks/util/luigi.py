@@ -325,7 +325,7 @@ class SplitTrainTestMetadata(WorkTask):
                 # zero or more than one event per file
                 pass
             else:
-                raise ValueError("Invalid task_type in dataset config")
+                raise ValueError("Invalid task_type in task config")
 
             # Save the slug and the label in as the split metadata
             sublabeldf.to_csv(
@@ -430,8 +430,8 @@ class FinalizeCorpus(WorkTask):
             self.workdir,
             dirs_exist_ok=True,
         )
-        # Save the dataset config as a json file
-        config_out = os.path.join(self.workdir, "dataset_metadata.json")
+        # Save the task config as a json file
+        config_out = os.path.join(self.workdir, "task_metadata.json")
         with open(config_out, "w") as fp:
             json.dump(
                 self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder

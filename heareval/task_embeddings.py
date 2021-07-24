@@ -24,19 +24,23 @@ TODO:
 
 import csv
 import glob
+import json
 import os.path
 from importlib import import_module
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
+import pandas as pd
 import soundfile as sf
 import torch
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
 # This could instead be something from the participants
-EMBEDDING_PIP = "heareval.model.baseline"
+# TODO: Command line or config?
+EMBEDDING_PIP = "hearbaseline"
 EMBEDDING_MODEL_PATH = ""  # Baseline doesn't load model
+# TODO: Actually load baseline model
 
 # TODO: Support for multiple GPUs?
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -50,25 +54,14 @@ class CSVDataset(Dataset):
     """
 
     def __init__(self, csv_file):
-        # Our CSV files don't have headers, so we can't use
-        # pd.read_csv
-        # I'm on the fence whether we want CSV headers or not,
-        # since the format is standardized.
-        with open(csv_file) as f:
-            csvreader = csv.reader(f)
-            self.rows = [row for row in csvreader]
-        ncol = len(self.rows[0])
-        # Make sure all rows have the same number of column,
-        # and rewrite as [col1, (col2, ...)]
-        for idx, row in enumerate(self.rows):
-            assert len(row) == ncol
-            self.rows[idx] = [row[0], row[1:]]
+        self.rows = pd.read_csv(csv_file)
 
     def __len__(self):
         return len(self.rows)
 
     def __getitem__(self, idx):
-        return self.rows[idx]
+        r = self.rows.iloc[idx]
+        return (r["slug"], r["label"])
 
 
 # High-level wrapper on the basic API that we might
@@ -76,38 +69,48 @@ class CSVDataset(Dataset):
 def get_audio_embedding_numpy(
     audio_numpy: np.ndarray,
     model: Any,
-    frame_rate: float,
-) -> Tuple[Dict[int, np.ndarray], np.ndarray]:
-    embedding, timestamps = EMBED.get_audio_embedding(  # type: ignore
-        torch.tensor(audio_numpy, device=device),
-        model=model,
-        frame_rate=frame_rate,
-    )
-    embedding = embedding.detach().cpu().numpy()
-    timestamps = timestamps.detach().cpu().numpy()
-    return embedding, timestamps
+    task_type: str,
+) -> Tuple[Dict[int, np.ndarray], Optional[np.ndarray]]:
+    if task_type == "scene_labeling":
+        embeddings = EMBED.get_scene_embeddings(
+            torch.tensor(audio_numpy, device=device),
+            model=model,
+        )
+        embeddings = embeddings.detach().cpu().numpy()
+        return embeddings, None
+    elif task_type == "event_labeling":
+        embeddings, timestamps = EMBED.get_timestamp_embeddings(
+            torch.tensor(audio_numpy, device=device),
+            model=model,
+        )
+        embeddings = embeddings.detach().cpu().numpy()
+        timestamps = timestamps.detach().cpu().numpy()
+        return embeddings, timestamps
+    else:
+        raise ValueError(f"Unknown task_type = {task_type}")
 
 
 def task_embeddings():
-    model = EMBED.load_model(EMBEDDING_MODEL_PATH, device=device)  # type: ignore
+    model = EMBED.load_model(EMBEDDING_MODEL_PATH)
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embeddir = os.path.join("embeddings", EMBED.__name__)  # type: ignore
     embed_sr = model.sample_rate
 
+    # TODO: tqdm with task name
     for task in glob.glob("tasks/*"):
-        # TODO: We should be reading the metadata that describes
-        # the frame_rate.
-        # https://github.com/neuralaudio/hear2021-eval-kit/issues/53
-        frame_rate = 10
-
-        # TODO: Include "val" ?
-        for split in ["train", "test"]:
+        print(f"Task {task}")
+        task_config = json.loads(open(os.path.join(task, "task_metadata.json")).read())
+        for split in ["train", "valid", "test"]:
             print(f"Getting embeddings for {split} split:")
 
             # TODO: We might consider skipping files that already
             # have embeddings on disk, for speed
+            # TODO: Choose batch size based upon audio file size?
+            # Or assume that the API is smart enough to do this?
+            # How do we test for memory blow up etc?
+            # e.g. that it won't explode on 10 minute audio
             dataloader = DataLoader(
                 CSVDataset(os.path.join(task, f"{split}.csv")),
                 batch_size=64,
@@ -127,12 +130,18 @@ def task_embeddings():
                     audios.append(x)
 
                 audios = np.vstack(audios)
-                embedding, timestamps = get_audio_embedding_numpy(
-                    audios, model=model, frame_rate=frame_rate
+                embeddings, timestamps = get_audio_embedding_numpy(
+                    audios, model=model, task_type=task_config["task_type"]
                 )
-
+                assert len(files) == embeddings.shape[0]
                 for i, filename in enumerate(files):
-                    np.save(os.path.join(outdir, f"{filename}.npy"), embedding[i])
+                    if timestamps:
+                        np.save(
+                            os.path.join(outdir, f"{filename}.npy"),
+                            (embeddings[i], timestamps[i]),
+                        )
+                    else:
+                        np.save(os.path.join(outdir, f"{filename}.npy"), embeddings[i])
 
 
 if __name__ == "__main__":
