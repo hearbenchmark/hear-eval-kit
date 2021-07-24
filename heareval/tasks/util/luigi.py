@@ -524,7 +524,7 @@ def which_set(filename_hash, validation_percentage, testing_percentage):
 
     percentage_hash = filename_hash % 100
     if percentage_hash < validation_percentage:
-        result = "val"
+        result = "valid"
     elif percentage_hash < (testing_percentage + validation_percentage):
         result = "test"
     else:
