@@ -54,6 +54,12 @@ class CSVDataset(Dataset):
 
     def __init__(self, csv_file):
         self.rows = pd.read_csv(csv_file)
+        # Since event detection metadata will have duplicates, we de-dup
+        # TODO: Make this a generic util function somewhere?
+        # TODO: Is this the right column to dedup on ???
+        self.rows = self.rows.sort_values(by="slug").drop_duplicates(
+            subset="slug", ignore_index=True
+        )
 
     def __len__(self):
         return len(self.rows)
@@ -104,6 +110,10 @@ def task_embeddings():
         for split in ["train", "valid", "test"]:
             print(f"Getting embeddings for {split} split:")
 
+            metadata_csv = os.path.join(task, f"{split}.csv")
+            if not os.path.exists(metadata_csv):
+                continue
+
             # TODO: We might consider skipping files that already
             # have embeddings on disk, for speed
             # TODO: Choose batch size based upon audio file size?
@@ -111,8 +121,8 @@ def task_embeddings():
             # How do we test for memory blow up etc?
             # e.g. that it won't explode on 10 minute audio
             dataloader = DataLoader(
-                CSVDataset(os.path.join(task, f"{split}.csv")),
-                batch_size=64,
+                CSVDataset(metadata_csv),
+                batch_size=1,  # batch_size=64,
                 shuffle=True,
             )
             outdir = os.path.join(embeddir, task, split)
@@ -134,7 +144,7 @@ def task_embeddings():
                 )
                 assert len(files) == embeddings.shape[0]
                 for i, filename in enumerate(files):
-                    if timestamps:
+                    if timestamps is not None:
                         np.save(
                             os.path.join(outdir, f"{filename}.npy"),
                             (embeddings[i], timestamps[i]),
