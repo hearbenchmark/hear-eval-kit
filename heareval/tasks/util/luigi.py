@@ -7,6 +7,7 @@ import os
 import shutil
 from glob import glob
 from pathlib import Path
+import json
 
 import luigi
 import pandas as pd
@@ -429,6 +430,12 @@ class FinalizeCorpus(WorkTask):
             self.workdir,
             dirs_exist_ok=True,
         )
+        # Save the dataset config as a json file
+        config_out = os.path.join(self.workdir, "dataset_metadata.json")
+        with open(config_out, "w") as fp:
+            json.dump(
+                self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
+            )
 
         with self.output().open("w") as _:
             pass
