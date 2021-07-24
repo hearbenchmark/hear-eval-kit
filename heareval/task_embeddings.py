@@ -71,14 +71,14 @@ def get_audio_embedding_numpy(
     task_type: str,
 ) -> Tuple[Dict[int, np.ndarray], Optional[np.ndarray]]:
     if task_type == "scene_labeling":
-        embeddings = EMBED.get_scene_embeddings(
+        embeddings = EMBED.get_scene_embeddings(  # type: ignore
             torch.tensor(audio_numpy, device=device),
             model=model,
         )
         embeddings = embeddings.detach().cpu().numpy()
         return embeddings, None
     elif task_type == "event_labeling":
-        embeddings, timestamps = EMBED.get_timestamp_embeddings(
+        embeddings, timestamps = EMBED.get_timestamp_embeddings(  # type: ignore
             torch.tensor(audio_numpy, device=device),
             model=model,
         )
