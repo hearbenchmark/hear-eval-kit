@@ -47,14 +47,17 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 EMBED = import_module(EMBEDDING_PIP)
 
 
-class CSVDataset(Dataset):
+class AudioFileDataset(Dataset):
     """
-    Read in a CSV file, and return data rows as [column 1, (column 2, ...)]
+    Read in a CSV file, and return audio filenames.
     """
 
     def __init__(self, csv_file):
         self.rows = pd.read_csv(csv_file)
         # Since event detection metadata will have duplicates, we de-dup
+        # TODO: This suggests we might want to, instead of using CSV files,
+        # have a JSONL for metadata, with one file per line.
+        # Then there can be timestamp: list[labels].
         # TODO: Make this a generic util function somewhere?
         # TODO: Is this the right column to dedup on ???
         self.rows = self.rows.sort_values(by="slug").drop_duplicates(
@@ -66,7 +69,7 @@ class CSVDataset(Dataset):
 
     def __getitem__(self, idx):
         r = self.rows.iloc[idx]
-        return (r["slug"], r["label"])
+        return r["slug"]
 
 
 # High-level wrapper on the basic API that we might
@@ -121,7 +124,7 @@ def task_embeddings():
             # How do we test for memory blow up etc?
             # e.g. that it won't explode on 10 minute audio
             dataloader = DataLoader(
-                CSVDataset(metadata_csv),
+                AudioFileDataset(metadata_csv),
                 batch_size=1,  # batch_size=64,
                 shuffle=True,
             )
@@ -129,7 +132,7 @@ def task_embeddings():
             if not os.path.exists(outdir):
                 os.makedirs(outdir)
             for batch in tqdm(dataloader):
-                files, labels = batch
+                files = batch
                 audios = []
                 for f in files:
                     x, sr = sf.read(
