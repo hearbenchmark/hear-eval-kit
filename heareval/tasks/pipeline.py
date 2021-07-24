@@ -45,7 +45,7 @@ class ExtractMetadata(luigi_util.WorkTask):
         unique, it should be obvious what the original filename
         was, and perhaps it should contain the label for audio scene
         tasks.
-        * filename_hash - TODO: This should be slug_hash
+        * subsample_key - Hash or a tuple of hash to do subsampling
         * split - Split of this particular audio file.
         * label - Label for the scene or event.
         * start, end - Start and end time in seconds of the event,
@@ -75,7 +75,38 @@ class ExtractMetadata(luigi_util.WorkTask):
         for this dataset is too long.
         TODO: Remove the workdir, if it's present.
         """
-        return f"{slugify(str(relative_path))}.wav"
+        name, ext = os.path.splitext(os.path.basename(relative_path))
+        return f"{slugify(str(name))}"
+    
+    @staticmethod
+    def get_subsample_key(slug: str):
+        """
+        Gets the subsample key.
+        Subsample key is a unique hash at a file level used for subsampling.
+
+        This hash can be composed of multiple hashes as a tuple or can be a
+        single hash
+        For example - (hash1, hash2, ...). In this case the subsampling is done by
+        considering successive hashes in priority.
+        This ensures two things -
+            1. Priority wise subsampling.
+                The fate of files with same hash1 is decided in a group. Either
+                they are subsampled or they are not.
+            2. Stable sampling
+                Each row, either a tuple or not uniquely identifies the data point.
+                This ensures that the sampling is unique everytime the pipeline
+                runs
+
+        The base method makes the hash of the slug. This can be overridden
+        to return a tuple as well
+        """
+        # Filename hash is a unique hash at a file level.
+        filename_hash = luigi_util.filename_to_int_hash(slug)
+        # This way the sampling will be at file level
+        # To make some grouped subsampling please consider overriding this
+        # and returning a tuple (see speech_command.py for example)
+        subsample_key = filename_hash
+        return subsample_key
 
     def get_process_metadata(self) -> pd.DataFrame:
         """
@@ -100,10 +131,10 @@ class ExtractMetadata(luigi_util.WorkTask):
 
         if self.data_config["task_type"] == "event_labeling":
             assert set(
-                ["relpath", "slug", "filename_hash", "split", "label", "start", "end"]
+                ["relpath", "slug", "subsample_key", "split", "label", "start", "end"]
             ).issubset(set(process_metadata.columns))
         elif self.data_config["task_type"] == "scene_labeling":
-            assert set(["relpath", "slug", "filename_hash", "split", "label"]).issubset(
+            assert set(["relpath", "slug", "subsample_key", "split", "label"]).issubset(
                 set(process_metadata.columns)
             )
         else:
