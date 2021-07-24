@@ -93,6 +93,8 @@ def get_audio_embedding_numpy(
         )
         embeddings = embeddings.detach().cpu().numpy()
         timestamps = timestamps.detach().cpu().numpy()
+        # TODO: Turn this into a validator test
+        assert len(embeddings) == len(timestamps)
         return embeddings, timestamps
     else:
         raise ValueError(f"Unknown task_type = {task_type}")
@@ -142,17 +144,20 @@ def task_embeddings():
                     audios.append(x)
 
                 audios = np.vstack(audios)
+                task_type = task_config["task_type"]
                 embeddings, timestamps = get_audio_embedding_numpy(
-                    audios, model=model, task_type=task_config["task_type"]
+                    audios, model=model, task_type=task_type
                 )
                 assert len(files) == embeddings.shape[0]
                 for i, filename in enumerate(files):
                     if timestamps is not None:
+                        assert task_type in ["event_labeling"]
                         np.save(
                             os.path.join(outdir, f"{filename}.npy"),
                             (embeddings[i], timestamps[i]),
                         )
                     else:
+                        assert task_type in ["scene_labeling"]
                         np.save(os.path.join(outdir, f"{filename}.npy"), embeddings[i])
 
 

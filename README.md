@@ -11,6 +11,10 @@ pip install heareval
 ```
 
 ### Evaluation Tasks
+
+These Luigi pipelines are used to preprocess the evaluation tasks
+into a common format for downstream evaluation.
+
 To run the preprocessing pipeline for Google Speech Commands:
 ```
 python3 -m heareval.tasks.runner speech_commands
@@ -42,7 +46,13 @@ Options:
 
 
 
-[later we will include more details here]
+### Downstream Evaluation
+
+```
+python3 heareval/task_embeddings.py
+```
+
+[TODO: make sure this works with pip3 install]
 
 ## Development
 
