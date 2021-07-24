@@ -34,7 +34,7 @@ def get_download_and_extract_tasks(config: Dict):
 
 class ExtractMetadata(luigi_util.WorkTask):
     """
-    This is an abstract class that extract metadata over the full dataset.
+    This is an abstract class that extracts metadata over the full dataset.
 
     We create a metadata csv file that will be used by downstream
     luigi tasks to curate the final dataset.

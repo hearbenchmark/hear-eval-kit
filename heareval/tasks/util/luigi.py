@@ -324,7 +324,7 @@ class SplitTrainTestMetadata(WorkTask):
                 # zero or more than one event per file
                 pass
             else:
-                raise ValueError
+                raise ValueError("Invalid task_type in dataset config")
 
             # Save the slug and the label in as the split metadata
             sublabeldf.to_csv(
