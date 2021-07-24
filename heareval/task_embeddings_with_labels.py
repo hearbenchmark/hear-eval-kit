@@ -2,6 +2,10 @@
 """
 Attached labels to all task embeddings.
 
+This is particularly useful for timestamp embeddings, so that instead
+of metadata time intervals, we have embedding timestamps with their
+precise labels.
+
 TODO: Consider combining this with task_embeddings.py. A lot of the
 code is shared, and there should be util functions.
 """
@@ -10,12 +14,9 @@ import glob
 import json
 import os.path
 from importlib import import_module
-from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
-import soundfile as sf
-import torch
 from torch.utils.data import DataLoader, IterableDataset
 from tqdm.auto import tqdm
 
@@ -28,6 +29,7 @@ EMBEDDING_MODEL_PATH = ""  # Baseline doesn't load model
 EMBED = import_module(EMBEDDING_PIP)
 
 
+# TODO: REMOVME?? But keep the comment thread?
 class EmbeddingDataset(IterableDataset):
     """
     Read in all audio file embeddings, and find the labels in the
@@ -95,19 +97,21 @@ def task_embeddings_with_labels():
             # This is perhaps a kinda shitty way to get the embedding files
             # because creating a npy with the labels will clobber these
             # filenames or overlap.
-            for embedding_file in tqdm(list(glob.glob(os.path.join(outdir, "*.npy")))):
+            for embedding_file in tqdm(
+                list(glob.glob(os.path.join(outdir, "*.embedding.npy")))
+            ):
                 # TODO: This is a pretty gross way of recovering the slug, and I wish there were something cleaner.
-                embedding_slug = os.path.split(embedding_file)[1].replace(".npy", "")
+                embedding_slug = os.path.split(embedding_file)[1].replace(
+                    ".embedding.npy", ""
+                )
                 if task_type == "scene_labeling":
-                    embedding = np.load(embedding_file, allow_pickle=False)
+                    # embedding = np.load(embedding_file, allow_pickle=False)
 
                     rows = metadata[metadata["slug"] == embedding_slug]
                     assert len(rows) == 1
                     label = rows.iloc[0]["label"]
-                    # TODO: Insert somewhere
-                    # import IPython;
-                    # ipshell = IPython.embed;
-                    # ipshell(banner1='ipshell')
+
+                    np.save(os.path.join(outdir, f"{embedding_slug}.label.npy"), label)
                 elif task_type == "event_labeling":
                     embeddings, timestamps = np.load(embedding_file, allow_pickle=True)
 
@@ -115,6 +119,7 @@ def task_embeddings_with_labels():
 
                     ipshell = IPython.embed
                     ipshell(banner1="ipshell")
+                    assert False
                 else:
                     raise ValueError
 

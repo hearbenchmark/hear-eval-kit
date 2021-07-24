@@ -95,7 +95,7 @@ def get_audio_embedding_numpy(
         timestamps = timestamps.detach().cpu().numpy()
         # TODO: Turn this into a validator test
         # What we really want is embeddings.shape[:2] == (batch_size, # timestamps) AND
-        # timestampe.shape[:2] == (batch_size, # timestamps)
+        # timestamps.shape[:2] == (batch_size, # timestamps)
         assert len(embeddings) == len(
             timestamps
         ), f"{len(embeddings), embeddings.shape} != {len(timestamps)}"
@@ -157,12 +157,15 @@ def task_embeddings():
                     if timestamps is not None:
                         assert task_type in ["event_labeling"]
                         np.save(
-                            os.path.join(outdir, f"{filename}.npy"),
+                            os.path.join(outdir, f"{filename}.embedding.npy"),
                             (embeddings[i], timestamps[i]),
                         )
                     else:
                         assert task_type in ["scene_labeling"]
-                        np.save(os.path.join(outdir, f"{filename}.npy"), embeddings[i])
+                        np.save(
+                            os.path.join(outdir, f"{filename}.embedding.npy"),
+                            embeddings[i],
+                        )
 
 
 if __name__ == "__main__":
