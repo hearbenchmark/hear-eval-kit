@@ -92,6 +92,9 @@ def task_embeddings_with_labels():
 
             outdir = os.path.join(embeddir, task, split)
 
+            # This is perhaps a kinda shitty way to get the embedding files
+            # because creating a npy with the labels will clobber these
+            # filenames or overlap.
             for embedding_file in tqdm(list(glob.glob(os.path.join(outdir, "*.npy")))):
                 # TODO: This is a pretty gross way of recovering the slug, and I wish there were something cleaner.
                 embedding_slug = os.path.split(embedding_file)[1].replace(".npy", "")
