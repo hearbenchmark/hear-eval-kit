@@ -7,6 +7,7 @@ import os
 import shutil
 from glob import glob
 from pathlib import Path
+import json
 
 import luigi
 import pandas as pd
@@ -14,14 +15,6 @@ import requests
 from tqdm import tqdm
 
 import heareval.tasks.util.audio as audio_util
-
-PROCESSMETADATACOLS = [
-    "relpath",
-    "slug",
-    "filename_hash",
-    "partition",
-    "label",
-]
 
 
 class WorkTask(luigi.Task):
@@ -173,9 +166,12 @@ class SubsampleCorpus(WorkTask):
             os.path.join(
                 self.requires()["meta"].workdir, self.requires()["meta"].outfile
             ),
-            header=None,
-            names=PROCESSMETADATACOLS,
-        )[["filename_hash", "slug", "relpath", "partition"]]
+        )[["filename_hash", "slug", "relpath", "split"]]
+        # Since event detection metadata will have duplicates, we de-dup
+        # TODO: We might consider different choices of subset
+        metadata = metadata.sort_values(by="filename_hash").drop_duplicates(
+            subset="filename_hash", ignore_index=True
+        )
         return metadata
 
     def run(self):
@@ -183,8 +179,10 @@ class SubsampleCorpus(WorkTask):
         process_metadata = self.get_metadata()
         # Subsample the files based on max files per corpus.
         # The filename hash is used here
-        # This task can also be done in the configprocessmetadata as that will give
-        # freedom to stratify the selection on some criterion?
+        # This task can also be done in ExtractMetadata as that will give
+        # freedom to stratify the selection on some criterion? That seems kinda
+        # fiddly, if we want fancy stratification we should discuss that
+        # separately.
         num_files = len(process_metadata)
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
@@ -194,8 +192,8 @@ class SubsampleCorpus(WorkTask):
             )
 
         # Sort by the filename hash and select the max file per corpus
-        # The filename hash is done as part of the processmetadata because
-        # the string to be hashed for each file is dependent on the data
+        # The filename hash is done as part of the ExtractMetadata
+        # because the string to be hashed for each file is dependent on the data
         process_metadata = process_metadata.sort_values(by="filename_hash").iloc[
             :max_files
         ]
@@ -210,16 +208,16 @@ class SubsampleCorpus(WorkTask):
         self.mark_complete()
 
 
-class SubsamplePartition(SubsampleCorpus):
+class SubsampleSplit(SubsampleCorpus):
     """
-    Performs subsampling on a specific partition
+    Performs subsampling on a specific split
     """
 
-    partition = luigi.Parameter()
+    split = luigi.Parameter()
 
     def get_metadata(self):
         metadata = super().get_metadata()
-        metadata = metadata[metadata["partition"] == self.partition]
+        metadata = metadata[metadata["split"] == self.split]
         return metadata
 
 
@@ -250,26 +248,24 @@ class SplitTrainTestCorpus(WorkTask):
         # Get the process metadata. This gives the freedom of picking the train test
         # label either from the provide metadata file or any other method.
 
-        # Writing slug and partition makes it explicit that these columns are required
+        # Writing slug and split makes it explicit that these columns are required
         meta = self.requires()["meta"]
         process_metadata = pd.read_csv(
             os.path.join(meta.workdir, meta.outfile),
-            header=None,
-            names=PROCESSMETADATACOLS,
-        )[["slug", "partition"]]
+        )[["slug", "split"]]
 
         # Go over the subsampled folder and pick the audio files. The audio files are
         # saved with their slug names and hence the corresponding label can be picked
         # up from the preprocess config
         for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*.wav"))):
             audio_slug = os.path.basename(audiofile)
-            partition = process_metadata.loc[
-                process_metadata["slug"] == audio_slug, "partition"
+            split = process_metadata.loc[
+                process_metadata["slug"] == audio_slug, "split"
             ].values[0]
-            partition_dir = f"{self.workdir}/{partition}"
-            ensure_dir(partition_dir)
+            split_dir = f"{self.workdir}/{split}"
+            ensure_dir(split_dir)
 
-            newaudiofile = new_basedir(audiofile, partition_dir)
+            newaudiofile = new_basedir(audiofile, split_dir)
             os.symlink(os.path.realpath(audiofile), newaudiofile)
         with self.output().open("w") as _:
             pass
@@ -286,32 +282,30 @@ class SplitTrainTestMetadata(WorkTask):
             os.path.join(
                 self.requires()["meta"].workdir, self.requires()["meta"].outfile
             ),
-            header=None,
-            names=PROCESSMETADATACOLS,
-        )[["slug", "label"]]
+        )
         return metadata
 
     def run(self):
         # Get the process metadata and select the required columns slug and label
         labeldf = self.get_metadata()
 
-        # Automatically get the partitions from the traintestcorpus task
+        # Automatically get the splits from the traintestcorpus task
         # and then get the files there.
-        for partition in os.listdir(self.requires()["traintestcorpus"].workdir):
+        for split in os.listdir(self.requires()["traintestcorpus"].workdir):
             audiofiles = list(
                 glob(
                     os.path.join(
                         self.requires()["traintestcorpus"].workdir,
-                        partition,
+                        split,
                         "*.wav",
                     )
                 )
             )
-            # Check if we got any file in the partition
+            # Check if we got any file in the split
             if len(audiofiles) == 0:
                 raise RuntimeError(
                     "No audio files found in "
-                    f"{self.requires()['traintestcorpus'].workdir}/{partition}"
+                    f"{self.requires()['traintestcorpus'].workdir}/{split}"
                 )
             # Get the filename which is also the slug of the file and the
             # corresponding label can be picked up from the metadata
@@ -321,15 +315,22 @@ class SplitTrainTestMetadata(WorkTask):
             assert len(audiofiles) == len(audiodf.drop_duplicates())
 
             # Get the label from the metadata with the help of the slug of the filename
-            sublabeldf = labeldf.merge(audiodf, on="slug")[["slug", "label"]]
-            # Check if all the labels were found from the metadata
-            assert len(sublabeldf) == len(audiofiles)
-            # Save the slug and the label in as the parition metadata
+            sublabeldf = labeldf.merge(audiodf, on="slug")
+
+            if self.data_config["task_type"] == "scene_labeling":
+                # Check if all the labels were found from the metadata
+                assert len(sublabeldf) == len(audiofiles)
+            elif self.data_config["task_type"] == "event_labeling":
+                # This won't work for sound event detection where there might be
+                # zero or more than one event per file
+                pass
+            else:
+                raise ValueError("Invalid task_type in dataset config")
+
+            # Save the slug and the label in as the split metadata
             sublabeldf.to_csv(
-                os.path.join(self.workdir, f"{partition}.csv"),
-                columns=["slug", "label"],
+                os.path.join(self.workdir, f"{split}.csv"),
                 index=False,
-                header=False,
             )
 
         with self.output().open("w") as _:
@@ -342,15 +343,13 @@ class MetadataVocabulary(WorkTask):
 
     def run(self):
         labelset = set()
-        # Iterate over all the files in the traintestmeta and get the partition_metadata
-        for partition_metadata in os.listdir(self.requires()["traintestmeta"].workdir):
+        # Iterate over all the files in the traintestmeta and get the split_metadata
+        for split_metadata in os.listdir(self.requires()["traintestmeta"].workdir):
             labeldf = pd.read_csv(
                 os.path.join(
                     self.requires()["traintestmeta"].workdir,
-                    partition_metadata,
+                    split_metadata,
                 ),
-                header=None,
-                names=["filename", "label"],
             )
             labelset = labelset | set(labeldf["label"].unique().tolist())
 
@@ -364,7 +363,6 @@ class MetadataVocabulary(WorkTask):
             os.path.join(self.workdir, "labelvocabulary.csv"),
             columns=["idx", "label"],
             index=False,
-            header=False,
         )
 
         with self.output().open("w") as _:
@@ -373,7 +371,7 @@ class MetadataVocabulary(WorkTask):
 
 class ResampleSubCorpus(WorkTask):
     sr = luigi.IntParameter()
-    partition = luigi.Parameter()
+    split = luigi.Parameter()
 
     def requires(self):
         raise NotImplementedError("This method requires a traintestcorpus task")
@@ -382,8 +380,8 @@ class ResampleSubCorpus(WorkTask):
         # Check if the original directory exists and then move ahead to make the
         # directory in the resample folder. This ensures val is not made if val is
         # not there
-        original_dir = f"{self.requires()['traintestcorpus'].workdir}/{self.partition}"
-        resample_dir = f"{self.workdir}/{self.sr}/{self.partition}/"
+        original_dir = f"{self.requires()['traintestcorpus'].workdir}/{self.split}"
+        resample_dir = f"{self.workdir}/{self.sr}/{self.split}/"
         if os.path.isdir(original_dir):
             # The below command can run in parallel and might fail.
             # This is because maybe the other resampling task has the directory
@@ -432,6 +430,12 @@ class FinalizeCorpus(WorkTask):
             self.workdir,
             dirs_exist_ok=True,
         )
+        # Save the dataset config as a json file
+        config_out = os.path.join(self.workdir, "dataset_metadata.json")
+        with open(config_out, "w") as fp:
+            json.dump(
+                self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
+            )
 
         with self.output().open("w") as _:
             pass
@@ -477,7 +481,7 @@ def which_set(filename_hash, validation_percentage, testing_percentage):
     """
     Code adapted from Google Speech Commands dataset.
 
-    Determines which data partition the file should belong to, based
+    Determines which data split the file should belong to, based
     upon the filename.
 
     We want to keep files in the same training, validation, or testing

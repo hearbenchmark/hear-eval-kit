@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 from typing import Dict, List, Union
 from urllib.parse import urlparse
+from slugify import slugify
 
 import luigi
+import pandas as pd
 
 import heareval.tasks.util.luigi as luigi_util
 
@@ -30,9 +32,94 @@ def get_download_and_extract_tasks(config: Dict):
     return tasks
 
 
-class SubsamplePartition(luigi_util.SubsamplePartition):
+class ExtractMetadata(luigi_util.WorkTask):
     """
-    A subsampler that acts on a specific partition.
+    This is an abstract class that extracts metadata over the full dataset.
+
+    We create a metadata csv file that will be used by downstream
+    luigi tasks to curate the final dataset.
+
+    The metadata columns are:
+        * relpath - How you find the file path in the original dataset.
+        * slug - This is the filename in our dataset. It should be
+        unique, it should be obvious what the original filename
+        was, and perhaps it should contain the label for audio scene
+        tasks.
+        * filename_hash - TODO: This should be slug_hash
+        * split - Split of this particular audio file.
+        * label - Label for the scene or event.
+        * start, end - Start and end time in seconds of the event,
+        for event_labeling tasks.
+    """
+
+    outfile = luigi.Parameter()
+
+    # This should have something like the following:
+    # train = luigi.TaskParameter()
+    # test = luigi.TaskParameter()
+
+    def requires(self):
+        ...
+        # This should have something like the following:
+        # return { "train": self.train, "test": self.test }
+
+    @staticmethod
+    def slugify_file_name(relative_path: str) -> str:
+        """
+        This is the filename in our dataset.
+
+        It should be unique, it should be obvious what the original
+        filename was, and perhaps it should contain the label for
+        audio scene tasks.
+        You can override this and simplify if the slugified filename
+        for this dataset is too long.
+        TODO: Remove the workdir, if it's present.
+        """
+        return f"{slugify(str(relative_path))}.wav"
+
+    def get_process_metadata(self) -> pd.DataFrame:
+        """
+        Return a dataframe containing the task metadata for this
+        entire task.
+
+        By default, we do one split at a time and then concat them.
+        You might consider overriding this for some datasets (like
+        Google Speech Commands) where you cannot process metadata
+        on a per-split basis.
+        """
+        process_metadata = pd.concat(
+            [
+                self.get_split_metadata(split["name"])
+                for split in self.data_config["splits"]
+            ]
+        )
+        return process_metadata
+
+    def run(self):
+        process_metadata = self.get_process_metadata()
+
+        if self.data_config["task_type"] == "event_labeling":
+            assert set(
+                ["relpath", "slug", "filename_hash", "split", "label", "start", "end"]
+            ).issubset(set(process_metadata.columns))
+        elif self.data_config["task_type"] == "scene_labeling":
+            assert set(["relpath", "slug", "filename_hash", "split", "label"]).issubset(
+                set(process_metadata.columns)
+            )
+        else:
+            raise ValueError("%s task_type unknown" % self.data_config["task_type"])
+
+        process_metadata.to_csv(
+            os.path.join(self.workdir, self.outfile),
+            index=False,
+        )
+
+        self.mark_complete()
+
+
+class SubsampleSplit(luigi_util.SubsampleSplit):
+    """
+    A subsampler that acts on a specific split.
     All instances of this will depend on the combined process metadata csv.
     """
 
@@ -46,9 +133,9 @@ class SubsamplePartition(luigi_util.SubsamplePartition):
         }
 
 
-class SubsamplePartitions(luigi_util.WorkTask):
+class SubsampleSplits(luigi_util.WorkTask):
     """
-    Aggregates subsampling of all the partitions into a single task as dependencies.
+    Aggregates subsampling of all the splits into a single task as dependencies.
     All the subsampled files are stored in the requires workdir, so we just link to
     that since there aren't any real outputs associated with this task.
     This is a bit of a hack -- but it allows us to avoid rewriting
@@ -58,17 +145,17 @@ class SubsamplePartitions(luigi_util.WorkTask):
     metadata = luigi.TaskParameter()
 
     def requires(self):
-        # Perform subsampling on each partition independently
-        subsample_partitions = {
-            partition["name"]: SubsamplePartition(
+        # Perform subsampling on each split independently
+        subsample_splits = {
+            split["name"]: SubsampleSplit(
                 metadata=self.metadata,
-                partition=partition["name"],
-                max_files=partition["max_files"],
+                split=split["name"],
+                max_files=split["max_files"],
                 data_config=self.data_config,
             )
-            for partition in self.data_config["partitions"]
+            for split in self.data_config["splits"]
         }
-        return subsample_partitions
+        return subsample_splits
 
     def run(self):
         workdir = Path(self.workdir)
@@ -86,7 +173,7 @@ class MonoWavTrimCorpus(luigi_util.MonoWavTrimCorpus):
 
     def requires(self):
         return {
-            "corpus": SubsamplePartitions(
+            "corpus": SubsampleSplits(
                 metadata=self.metadata, data_config=self.data_config
             )
         }
@@ -97,7 +184,7 @@ class SplitTrainTestCorpus(luigi_util.SplitTrainTestCorpus):
     metadata = luigi.TaskParameter()
 
     def requires(self):
-        # The metadata helps in provide the partition type for each
+        # The metadata helps in provide the split type for each
         # audio file
         return {
             "corpus": MonoWavTrimCorpus(
@@ -142,7 +229,7 @@ class ResampleSubCorpus(luigi_util.ResampleSubCorpus):
 
     def requires(self):
         # Requires the train test corpus and will take in
-        # parameter for which partition and sr the resampling
+        # parameter for which split and sr the resampling
         # has to be done
         return {
             "traintestcorpus": SplitTrainTestCorpus(
@@ -158,17 +245,17 @@ class FinalizeCorpus(luigi_util.FinalizeCorpus):
 
     def requires(self):
         # Will copy the resampled data and the traintestmeta and the vocabmeta
-        partitions = [p["name"] for p in self.data_config["partitions"]]
+        splits = [p["name"] for p in self.data_config["splits"]]
         return {
             "resample": [
                 ResampleSubCorpus(
                     sr=sr,
-                    partition=partition,
+                    split=split,
                     metadata=self.metadata,
                     data_config=self.data_config,
                 )
                 for sr in self.sample_rates
-                for partition in partitions
+                for split in splits
             ],
             "traintestmeta": SplitTrainTestMetadata(
                 metadata=self.metadata, data_config=self.data_config

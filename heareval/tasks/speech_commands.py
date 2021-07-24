@@ -10,7 +10,6 @@ from typing import List
 import luigi
 import pandas as pd
 import soundfile as sf
-from slugify import slugify
 from tqdm import tqdm
 
 import heareval.tasks.pipeline as pipeline
@@ -25,12 +24,13 @@ SILENCE = "_silence_"
 config = {
     "task_name": "speech_commands",
     "version": "v0.0.2",
+    "task_type": "scene_labeling",
     "download_urls": {
         "train": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
         "test": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
     },
     "sample_duration": 1.0,
-    "partitions": [
+    "splits": [
         {"name": "train", "max_files": 100},
         {"name": "test", "max_files": 100},
         {"name": "valid", "max_files": 100},
@@ -92,12 +92,7 @@ class GenerateTrainDataset(luigi_util.WorkTask):
         self.mark_complete()
 
 
-class ConfigureProcessMetaData(luigi_util.WorkTask):
-    """
-    This config is data dependent and has to be set for each data
-    """
-
-    outfile = luigi.Parameter()
+class ExtractMetadata(pipeline.ExtractMetadata):
     train = luigi.TaskParameter()
     test = luigi.TaskParameter()
 
@@ -114,19 +109,16 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
             label = UNKNOWN
         return label
 
-    @staticmethod
-    def slugify_file_name(relative_path):
-        folder = os.path.basename(os.path.dirname(relative_path))
-        basename = os.path.basename(relative_path)
-        name, ext = os.path.splitext(basename)
-        return f"{slugify(os.path.join(folder, name))}{ext}"
-
     def get_split_paths(self):
-
+        """
+        Splits the dataset into train/valid/test files using the same method as
+        described in by the TensorFlow dataset:
+        https://www.tensorflow.org/datasets/catalog/speech_commands
+        """
         # Test files
         test_path = Path(self.requires()["test"].workdir).joinpath("test")
         test_df = pd.DataFrame(test_path.glob("*/*.wav"), columns=["relpath"]).assign(
-            partition=lambda df: "test"
+            split=lambda df: "test"
         )
 
         # All silence paths to add to the train and validation
@@ -137,28 +129,36 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
         with open(os.path.join(train_path, "validation_list.txt"), "r") as fp:
             validation_paths = fp.read().strip().splitlines()
         validation_rel_paths = [os.path.join(train_path, p) for p in validation_paths]
+
+        # There are no silence files marked explicitly for validation. We add all
+        # the running_tap.wav samples to the silence class for validation.
+        # https://github.com/tensorflow/datasets/blob/e24fe9e6b03053d9b925d299a2246ea167dc85cd/tensorflow_datasets/audio/speech_commands.py#L183
         val_silence = list(train_path.glob(f"{SILENCE}/running_tap*.wav"))
         validation_rel_paths.extend(val_silence)
         validation_df = pd.DataFrame(validation_rel_paths, columns=["relpath"]).assign(
-            partition=lambda df: "valid"
+            split=lambda df: "valid"
         )
 
-        # Train files
+        # Train-test files.
         with open(os.path.join(train_path, "testing_list.txt"), "r") as fp:
             train_test_paths = fp.read().strip().splitlines()
         audio_paths = [
             str(p.relative_to(train_path)) for p in train_path.glob("[!_]*/*.wav")
         ]
 
+        # The final train set is all the audio files MINUS the files marked as
+        # test / validation files in testing_list.txt or validation_list.txt
         train_paths = list(
             set(audio_paths) - set(train_test_paths) - set(validation_paths)
         )
         train_rel_paths = [os.path.join(train_path, p) for p in train_paths]
 
+        # Training silence is all the generated silence / background noise samples
+        # minus those marked for validation.
         train_silence = list(set(all_silence) - set(val_silence))
         train_rel_paths.extend(train_silence)
         train_df = pd.DataFrame(train_rel_paths, columns=["relpath"]).assign(
-            partition=lambda df: "train"
+            split=lambda df: "train"
         )
         assert len(train_df.merge(validation_df, on="relpath")) == 0
 
@@ -175,8 +175,10 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
             # In this case we take the slug and remove the -nohash- as described
             # This nohash removal allows for the speech of similar person to be in the
             # same dataset. Such type of data specific requirements might be there.
+            # [what does this mean??]
             # in the readme of google speech commands. we want to keep similar people
             # in the same group - test or train or val
+            # [so do we do this or not?]
             .assign(
                 filename_hash=lambda df: (
                     df["slug"]
@@ -191,19 +193,10 @@ class ConfigureProcessMetaData(luigi_util.WorkTask):
 
         return process_metadata
 
-    def run(self):
+    def get_process_metadata(self) -> pd.DataFrame:
         process_metadata = self.get_split_paths()
         process_metadata = self.get_metadata_attrs(process_metadata)
-
-        # Save the process metadata
-        process_metadata[luigi_util.PROCESSMETADATACOLS].to_csv(
-            os.path.join(self.workdir, self.outfile),
-            columns=luigi_util.PROCESSMETADATACOLS,
-            header=False,
-            index=False,
-        )
-
-        self.mark_complete()
+        return process_metadata
 
 
 def main(num_workers: int, sample_rates: List[int]):
@@ -213,7 +206,7 @@ def main(num_workers: int, sample_rates: List[int]):
     generate = GenerateTrainDataset(
         train_data=download_tasks["train"], data_config=config
     )
-    configure_metadata = ConfigureProcessMetaData(
+    configure_metadata = ExtractMetadata(
         train=generate,
         test=download_tasks["test"],
         outfile="process_metadata.csv",

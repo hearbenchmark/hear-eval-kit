@@ -276,12 +276,12 @@ class SplitTrainTestCorpus(WorkTask):
 
     def run(self):
         for audiofile in tqdm(list(glob.glob(f"{self.requires().workdir}/*.wav"))):
-            partition = luigi_util.which_set(
+            split = luigi_util.which_set(
                 audiofile, validation_percentage=0.0, testing_percentage=10.0
             )
-            partition_dir = f"{self.workdir}/{partition}"
-            luigi_util.ensure_dir(partition_dir)
-            newaudiofile = luigi_util.new_basedir(audiofile, partition_dir)
+            split_dir = f"{self.workdir}/{split}"
+            luigi_util.ensure_dir(split_dir)
+            newaudiofile = luigi_util.new_basedir(audiofile, split_dir)
             os.symlink(os.path.realpath(audiofile), newaudiofile)
         with self.output().open("w") as _:
             pass
@@ -294,7 +294,7 @@ class SplitTrainTestMetadata(WorkTask):
 
     def requires(self):
         """
-        This depends upon SplitTrainTestCorpus to get the partitioned WAV
+        This depends upon SplitTrainTestCorpus to get the splited WAV
         filenames, and the subsampled metadata in SubsampleMetadata.
         """
         return [SplitTrainTestCorpus(), FilterLabeledMetadata()]
@@ -308,15 +308,15 @@ class SplitTrainTestMetadata(WorkTask):
         # of self.requires
 
         # Might also want "val" for some corpora
-        for partition in ["train", "test"]:
+        for split in ["train", "test"]:
             audiofiles = list(
-                glob.glob(os.path.join(self.requires()[0].workdir, partition, "*.wav"))
+                glob.glob(os.path.join(self.requires()[0].workdir, split, "*.wav"))
             )
 
             # Make sure we found audio files to work with
             if len(audiofiles) == 0:
                 raise RuntimeError(
-                    f"No audio files found in {self.requires()[0].workdir}/{partition}"
+                    f"No audio files found in {self.requires()[0].workdir}/{split}"
                 )
 
             labeldf = pd.read_csv(
@@ -334,7 +334,7 @@ class SplitTrainTestMetadata(WorkTask):
             sublabeldf = labeldf.merge(audiodf, on="filename")
 
             sublabeldf.to_csv(
-                os.path.join(self.workdir, f"{partition}.csv"),
+                os.path.join(self.workdir, f"{split}.csv"),
                 columns=["filename", "label"],
                 index=False,
                 header=False,
@@ -359,9 +359,9 @@ class MetadataVocabulary(WorkTask):
     def run(self):
         labelset = set()
         # Might also want "val" for some corpora
-        for partition in ["train", "test"]:
+        for split in ["train", "test"]:
             labeldf = pd.read_csv(
-                os.path.join(self.requires().workdir, f"{partition}.csv"),
+                os.path.join(self.requires().workdir, f"{split}.csv"),
                 header=None,
                 names=["filename", "label"],
             )
@@ -378,7 +378,7 @@ class MetadataVocabulary(WorkTask):
 
 class ResampleSubCorpus(WorkTask):
     sr = luigi.IntParameter()
-    partition = luigi.Parameter()
+    split = luigi.Parameter()
 
     def requires(self):
         return SplitTrainTestCorpus()
@@ -394,14 +394,14 @@ class ResampleSubCorpus(WorkTask):
     def output(self):
         return luigi.LocalTarget(
             "_workdir/%02d-%s-%d-%s.done"
-            % (self.stage_number, self.name, self.sr, self.partition)
+            % (self.stage_number, self.name, self.sr, self.split)
         )
 
     def run(self):
-        resample_dir = f"{self.workdir}/{self.sr}/{self.partition}/"
+        resample_dir = f"{self.workdir}/{self.sr}/{self.split}/"
         luigi_util.ensure_dir(resample_dir)
         for audiofile in tqdm(
-            list(glob.glob(f"{self.requires().workdir}/{self.partition}/*.wav"))
+            list(glob.glob(f"{self.requires().workdir}/{self.split}/*.wav"))
         ):
             resampled_audiofile = luigi_util.new_basedir(audiofile, resample_dir)
             audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
@@ -418,9 +418,9 @@ class FinalizeCorpus(WorkTask):
     def requires(self):
         return (
             [
-                ResampleSubCorpus(sr, partition)
+                ResampleSubCorpus(sr, split)
                 for sr in config.SAMPLE_RATES
-                for partition in ["train", "test", "val"]
+                for split in ["train", "test", "val"]
             ]
             + [SplitTrainTestMetadata()]
             + [MetadataVocabulary()]
@@ -442,9 +442,9 @@ class FinalizeCorpus(WorkTask):
         # Fragilely depends upon the order of the requires
         shutil.copytree(self.requires()[0].workdir, self.workdir)
         # Might also want "val" for some corpora
-        for partition in ["train", "test"]:
+        for split in ["train", "test"]:
             shutil.copy(
-                os.path.join(self.requires()[-2].workdir, f"{partition}.csv"),
+                os.path.join(self.requires()[-2].workdir, f"{split}.csv"),
                 self.workdir,
             )
         shutil.copy(
