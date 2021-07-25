@@ -102,7 +102,143 @@ class WorkTask(luigi.Task):
             raise ValueError(f"Unknown requires: {self.requires()}")
 
 
+def get_download_and_extract_tasks(config: Dict):
+
+    tasks = {}
+    for name, url in config["download_urls"].items():
+        filename = os.path.basename(urlparse(url).path)
+        task = ExtractArchive(
+            download=DownloadCorpus(url=url, outfile=filename, data_config=config),
+            infile=filename,
+            outdir=name,
+            data_config=config,
+        )
+        tasks[name] = task
+
+    return tasks
+
+
+class ExtractMetadata(WorkTask):
+    """
+    This is an abstract class that extracts metadata over the full dataset.
+
+    We create a metadata csv file that will be used by downstream
+    luigi tasks to curate the final dataset.
+
+    The metadata columns are:
+        * relpath - How you find the file path in the original dataset.
+        * slug - This is the filename in our dataset. It should be
+        unique, it should be obvious what the original filename
+        was, and perhaps it should contain the label for audio scene
+        tasks.
+        * subsample_key - Hash or a tuple of hash to do subsampling
+        * split - Split of this particular audio file.
+        * label - Label for the scene or event.
+        * start, end - Start and end time in seconds of the event,
+        for event_labeling tasks.
+    """
+
+    outfile = luigi.Parameter()
+
+    # This should have something like the following:
+    # train = luigi.TaskParameter()
+    # test = luigi.TaskParameter()
+
+    def requires(self):
+        ...
+        # This should have something like the following:
+        # return { "train": self.train, "test": self.test }
+
+    @staticmethod
+    def slugify_file_name(relative_path: str) -> str:
+        """
+        This is the filename in our dataset.
+
+        It should be unique, it should be obvious what the original
+        filename was, and perhaps it should contain the label for
+        audio scene tasks.
+        You can override this and simplify if the slugified filename
+        for this dataset is too long.
+        TODO: Remove the workdir, if it's present.
+        """
+        name, ext = os.path.splitext(os.path.basename(relative_path))
+        return f"{slugify(str(name))}"
+
+    @staticmethod
+    def get_subsample_key(slug: str):
+        """
+        Gets the subsample key.
+        Subsample key is a unique hash at a file level used for subsampling.
+
+        This hash can be composed of multiple hashes as a tuple or can be a
+        single hash
+        For example - (hash1, hash2, ...). In this case the subsampling is done by
+        considering successive hashes in priority.
+        This ensures two things -
+            1. Priority wise subsampling.
+                The fate of files with same hash1 is decided in a group. Either
+                they are subsampled or they are not.
+            2. Stable sampling
+                Each row, either a tuple or not uniquely identifies the data point.
+                This ensures that the sampling is unique everytime the pipeline
+                runs
+
+        The base method makes the hash of the slug. This can be overridden
+        to return a tuple as well
+        """
+        # Filename hash is a unique hash at a file level.
+        filename_hash = filename_to_int_hash(slug)
+        # This way the sampling will be at file level
+        # To make some grouped subsampling please consider overriding this
+        # and returning a tuple (see speech_command.py for example)
+        subsample_key = filename_hash
+        return subsample_key
+
+    def get_process_metadata(self) -> pd.DataFrame:
+        """
+        Return a dataframe containing the task metadata for this
+        entire task.
+
+        By default, we do one split at a time and then concat them.
+        You might consider overriding this for some datasets (like
+        Google Speech Commands) where you cannot process metadata
+        on a per-split basis.
+        """
+        process_metadata = pd.concat(
+            [
+                self.get_split_metadata(split["name"])
+                for split in self.data_config["splits"]
+            ]
+        )
+        return process_metadata
+
+    def run(self):
+        process_metadata = self.get_process_metadata()
+
+        if self.data_config["task_type"] == "event_labeling":
+            assert set(
+                ["relpath", "slug", "subsample_key", "split", "label", "start", "end"]
+            ).issubset(set(process_metadata.columns))
+        elif self.data_config["task_type"] == "scene_labeling":
+            assert set(["relpath", "slug", "subsample_key", "split", "label"]).issubset(
+                set(process_metadata.columns)
+            )
+        else:
+            raise ValueError("%s task_type unknown" % self.data_config["task_type"])
+
+        process_metadata.to_csv(
+            self.workdir.joinpath(self.outfile),
+            index=False,
+        )
+
+        self.mark_complete()
+
+
 class DownloadCorpus(WorkTask):
+    """
+    Downloads from the url and saveds it in the workdir with name
+    outfile
+    """
 
     url = luigi.Parameter()
     outfile = luigi.Parameter()
@@ -550,6 +686,27 @@ class FinalizeCorpus(WorkTask):
 
         self.mark_complete()
 
+
+def run(task: Union[List[luigi.Task], luigi.Task], num_workers: int):
+    """
+    Run a task / set of tasks
+
+    Args:
+        task: a single or list of luigi tasks
+        num_workers: Number of CPU workers to use for this task
+    """
+
+    # If this is just a single task then add it to a list
+    if isinstance(task, luigi.Task):
+        task = [task]
+
+    Path("_workdir").mkdir(exist_ok=True)
+    luigi.build(
+        task,
+        workers=num_workers,
+        local_scheduler=True,
+        log_level="INFO",
+    )
 
 
 def download_file(url, local_filename):
