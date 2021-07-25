@@ -22,7 +22,8 @@ config = {
     "version": "v2.2.3",
     "task_type": "scene_labeling",
     "download_urls": {
-        "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",  # noqa: E501
+        # "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",  # noqa: E501
+        "train": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",  # noqa: E501
         "valid": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",  # noqa: E501
         "test": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",  # noqa: E501
     },
@@ -65,25 +66,25 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
         metadata = pd.read_json(split_path.joinpath("examples.json"), orient="index")
 
-        # Filter out pitches that are not within the range
-        metadata = metadata[metadata["pitch"] >= config["pitch_range_min"]]
-        metadata = metadata[metadata["pitch"] <= config["pitch_range_max"]]
-
-        metadata = metadata.assign(label=lambda df: df["pitch"])
-        metadata = metadata.assign(
-            relpath=lambda df: df["note_str"].apply(
-                partial(self.get_rel_path, split_path)
+        metadata = (
+            # Filter out pitches that are not within the range
+            metadata.loc[
+                metadata["pitch"].between(
+                    config["pitch_range_min"], config["pitch_range_max"]
+                )
+                # Assign metadata columns
+            ].assign(
+                label=lambda df: df["pitch"],
+                relpath=lambda df: df["note_str"].apply(
+                    partial(self.get_rel_path, split_path)
+                ),
+                slug=lambda df: df["note_str"].apply(self.slugify_file_name),
+                split=lambda df: split,
+                subsample_key=lambda df: df["slug"].apply(self.get_subsample_key),
             )
         )
-        metadata = metadata.assign(
-            slug=lambda df: df["note_str"].apply(self.slugify_file_name)
-        )
-        metadata = metadata.assign(split=lambda df: split)
-        metadata = metadata.assign(
-            filename_hash=lambda df: df["slug"].apply(luigi_util.filename_to_int_hash)
-        )
 
-        return metadata
+        return metadata[["relpath", "slug", "subsample_key", "split", "label"]]
 
 
 def main(num_workers: int, sample_rates: List[int]):

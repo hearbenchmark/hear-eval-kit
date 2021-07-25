@@ -62,7 +62,7 @@ class WorkTask(luigi.Task):
     def workdir(self):
         """Working directory"""
         d = self.task_subdir.joinpath(f"{self.stage_number:02d}-{self.name}")
-        d.mkdir(exist_ok=True)
+        d.mkdir(parents=True, exist_ok=True)
         return d
 
     @property

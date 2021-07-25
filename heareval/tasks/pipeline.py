@@ -607,7 +607,7 @@ class FinalizeCorpus(WorkTask):
             self.requires()["traintestmeta"].workdir,
             self.workdir,
             dirs_exist_ok=True,
-            ignore = shutil.ignore_patterns('*.csv')
+            ignore=shutil.ignore_patterns("*.csv"),
         )
         # Copy the vocabmetadata
         shutil.copytree(

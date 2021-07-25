@@ -93,7 +93,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         # Do an inner join
         metadata = metadata.merge(base_metadata, on=["uuid"], how="inner").assign(
             slug=lambda df: df["relpath"].apply(self.slugify_file_name),
-            subsample_key = lambda df: df["slug"].apply(self.get_subsample_key),
+            subsample_key=lambda df: df["slug"].apply(self.get_subsample_key),
             filename_hash=lambda df: df["slug"].apply(luigi_util.filename_to_int_hash),
             split=lambda df: df["filename_hash"].apply(which_set),
         )
