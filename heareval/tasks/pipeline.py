@@ -497,7 +497,8 @@ class MetadataVocabulary(WorkTask):
 
     def run(self):
         labelset = set()
-        # Iterate over all the files in the traintestmeta and get the split_metadata
+        # Iterate over all the files in the traintestmeta and get the 
+        # split_metadata
         for split_metadata in list(
             self.requires()["traintestmeta"].workdir.glob("*.csv")
         ):

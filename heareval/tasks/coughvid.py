@@ -55,7 +55,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         return f"{slugify(str(name))}"
 
     def get_process_metadata(self) -> pd.DataFrame:
-        logger.info(f"Preparing metadata")
+        logger.info("Preparing metadata")
 
         all_data_path = Path(self.requires()["all_data"].workdir).joinpath(
             os.path.join("all_data", "public_dataset")

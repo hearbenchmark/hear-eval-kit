@@ -4,16 +4,9 @@ Common Luigi classes and functions for evaluation tasks
 
 import hashlib
 import os
-import shutil
-from glob import glob
 from pathlib import Path
-import json
-from typing import Dict, List, Union
-from urllib.parse import urlparse
-from slugify import slugify
 
 import luigi
-import pandas as pd
 import requests
 from tqdm import tqdm
 
