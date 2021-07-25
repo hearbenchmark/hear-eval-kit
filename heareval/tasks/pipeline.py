@@ -449,19 +449,25 @@ class SplitTrainTestMetadata(WorkTask):
                     .set_index("slug_path")
                     .to_dict("index")
                 )
-                # Scene lablelling specific metadata saving
-                json.dump(
-                    audiolabel_json,
-                    self.workdir.joinpath(f"{split_path.stem}.json").open("w"),
-                    indent=True,
-                )
 
             elif self.data_config["task_type"] == "event_labeling":
-                # This won't work for sound event detection where there might be
-                # zero or more than one event per file
-                pass
+                # For event labeling each file will have a list of labels
+                audiolabel_json = (
+                    audiolabel_df[["slug_path", "label", "start", "end"]]
+                    .set_index("slug_path")
+                    .groupby(level=0)
+                    .apply(lambda group: group.to_dict(orient="records"))
+                    .to_dict()
+                )
             else:
                 raise ValueError("Invalid task_type in dataset config")
+
+            # Save the json used for training purpose
+            json.dump(
+                audiolabel_json,
+                self.workdir.joinpath(f"{split_path.stem}.json").open("w"),
+                indent=True,
+            )
 
             # Save the slug and the label in as the split metadata
             audiolabel_df.to_csv(
