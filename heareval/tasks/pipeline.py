@@ -435,15 +435,27 @@ class SplitTrainTestMetadata(WorkTask):
             ), "Duplicate files in: {split_path}"
 
             # Get the label from the metadata with the help of the slug of the filename
-            sublabeldf = (
+            audiolabel_df = (
                 labeldf.merge(audiodf, on="slug")
-                .assign(slug=lambda df: df["slug"] + df["ext"])
+                .assign(slug_path=lambda df: df["slug"] + df["ext"])
                 .drop("ext", axis=1)
             )
 
             if self.data_config["task_type"] == "scene_labeling":
-                # Check if all the labels were found from the metadata
-                assert len(sublabeldf) == len(audiodf)
+                # For scene labeling each scene should have one label
+                assert len(audiolabel_df) == len(audiodf)
+                audiolabel_json = (
+                    audiolabel_df[["slug_path", "label"]]
+                    .set_index("slug_path")
+                    .to_dict("index")
+                )
+                # Scene lablelling specific metadata saving
+                json.dump(
+                    audiolabel_json,
+                    self.workdir.joinpath(f"{split_path.stem}.json").open("w"),
+                    indent=True,
+                )
+
             elif self.data_config["task_type"] == "event_labeling":
                 # This won't work for sound event detection where there might be
                 # zero or more than one event per file
@@ -452,7 +464,7 @@ class SplitTrainTestMetadata(WorkTask):
                 raise ValueError("Invalid task_type in dataset config")
 
             # Save the slug and the label in as the split metadata
-            sublabeldf.to_csv(
+            audiolabel_df.to_csv(
                 self.workdir.joinpath(f"{split_path.stem}.csv"),
                 index=False,
             )
@@ -481,7 +493,7 @@ class MetadataVocabulary(WorkTask):
     def run(self):
         labelset = set()
         # Iterate over all the files in the traintestmeta and get the split_metadata
-        for split_metadata in self.requires()["traintestmeta"].workdir.iterdir():
+        for split_metadata in self.requires()["traintestmeta"].workdir.glob("*.csv"):
             labeldf = pd.read_csv(split_metadata)
             labelset = labelset | set(labeldf["label"].unique().tolist())
 
@@ -595,6 +607,7 @@ class FinalizeCorpus(WorkTask):
             self.requires()["traintestmeta"].workdir,
             self.workdir,
             dirs_exist_ok=True,
+            ignore = shutil.ignore_patterns('*.csv')
         )
         # Copy the vocabmetadata
         shutil.copytree(
