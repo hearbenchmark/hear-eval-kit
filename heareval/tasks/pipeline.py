@@ -5,7 +5,6 @@ Generic pipelines for datasets
 import os
 import json
 import shutil
-from glob import glob
 from pathlib import Path
 from typing import Dict, List, Union
 from urllib.parse import urlparse
@@ -382,7 +381,7 @@ class SplitTrainTestCorpus(WorkTask):
         # Go over the subsampled folder and pick the audio files. The audio files are
         # saved with their slug names and hence the corresponding label can be picked
         # up from the preprocess config
-        for audiofile in tqdm(self.requires()["corpus"].workdir.glob("*.wav")):
+        for audiofile in tqdm(list(self.requires()["corpus"].workdir.glob("*.wav"))):
             # Compare the filename with the slug.
             # Please note that the slug doesnot has the extension of the file
             split = metadata.loc[metadata["slug"] == audiofile.stem, "split"].values[0]
@@ -426,7 +425,7 @@ class SplitTrainTestMetadata(WorkTask):
 
         for split_path in self.requires()["traintestcorpus"].workdir.iterdir():
             audiodf = pd.DataFrame(
-                [(a.stem, a.suffix) for a in split_path.glob("*.wav")],
+                [(a.stem, a.suffix) for a in list(split_path.glob("*.wav"))],
                 columns=["slug", "ext"],
             )
             assert len(audiodf) != 0, f"No audio files found in: {split_path}"
@@ -499,7 +498,7 @@ class MetadataVocabulary(WorkTask):
     def run(self):
         labelset = set()
         # Iterate over all the files in the traintestmeta and get the split_metadata
-        for split_metadata in self.requires()["traintestmeta"].workdir.glob("*.csv"):
+        for split_metadata in list(self.requires()["traintestmeta"].workdir.glob("*.csv")):
             labeldf = pd.read_csv(split_metadata)
             labelset = labelset | set(labeldf["label"].unique().tolist())
 
@@ -547,7 +546,7 @@ class ResampleSubCorpus(WorkTask):
         )
         resample_dir = self.workdir.joinpath(str(self.sr)).joinpath(str(self.split))
         resample_dir.mkdir(parents=True, exist_ok=True)
-        for audiofile in tqdm(original_dir.glob("*.wav")):
+        for audiofile in tqdm(list(original_dir.glob("*.wav"))):
             resampled_audiofile = new_basedir(audiofile, resample_dir)
             audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
 
