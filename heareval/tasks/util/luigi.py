@@ -117,6 +117,19 @@ class DownloadCorpus(WorkTask):
 
 
 class ExtractArchive(WorkTask):
+    """
+    Extracts the downloaded file in the workdir(optionally in subdir inside
+    workdir)
+
+    Parameter
+        infile: filename which has to be extracted from the
+            download task working directory
+        download(DownloadCorpus): task which downloads the corpus to be
+            extracted
+    Requires:
+        download(DownloadCorpus): task which downloads the corpus to be
+            extracted
+    """
 
     infile = luigi.Parameter()
     download = luigi.TaskParameter(
@@ -140,6 +153,19 @@ class ExtractArchive(WorkTask):
 
         self.mark_complete()
 
+
+class SubsampleSplit(WorkTask):
+    """
+    A subsampler that acts on a specific split.
+    All instances of this will depend on the combined process metadata csv.
+
+    Parameters:
+        split: name of the split for which subsampling has to be done
+        max_files: maximum files required from the subsampling
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requirements:
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    """
 
     split = luigi.Parameter()
     max_files = luigi.IntParameter()
@@ -198,7 +224,12 @@ class ExtractArchive(WorkTask):
 
 class SubsampleSplits(WorkTask):
     """
-    Performs subsampling on a specific split
+    Aggregates subsampling of all the splits into a single task as dependencies.
+
+    Parameter:
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires:
+        subsample_splits (list(SubsampleSplit)): task subsamples each split
     """
 
     metadata = luigi.TaskParameter()
@@ -227,6 +258,18 @@ class SubsampleSplits(WorkTask):
 
 
 class MonoWavTrimCorpus(WorkTask):
+    """
+    Converts the file to mono, changes to wav encoding,
+    trims and pads the audio to be same length
+
+    Parameters
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires:
+        corpus(SubsampleSplits): task which aggregates the subsampling for each split
+    """
+
+    metadata = luigi.TaskParameter()
+
     def requires(self):
         return {
             "corpus": SubsampleSplits(
@@ -291,6 +334,16 @@ class SplitTrainTestCorpus(WorkTask):
 
 
 class SplitTrainTestMetadata(WorkTask):
+    """
+    Parameters
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires
+        traintestcorpus(SplitTrainTestCorpus): which produces the split
+            level corpus
+    """
+
+    metadata = luigi.TaskParameter()
+
     def requires(self):
         return {
             "traintestcorpus": SplitTrainTestCorpus(
@@ -347,6 +400,16 @@ class SplitTrainTestMetadata(WorkTask):
 
 
 class MetadataVocabulary(WorkTask):
+    """
+    Parameters
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires
+        traintestmeta(SplitTrainTestMetadata): task which produces the split
+            level metadata
+    """
+
+    metadata = luigi.TaskParameter()
+
     def requires(self):
         return {
             "traintestmeta": SplitTrainTestMetadata(
@@ -377,6 +440,17 @@ class MetadataVocabulary(WorkTask):
 
 
 class ResampleSubCorpus(WorkTask):
+    """
+    Resamples the Subsampled corpus in different sampling rate
+    Parameters
+        split(str): The split for which the resampling has to be done
+        sr(int): output sampling rate
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires
+        traintestcorpus(SplitTrainTestCorpus): task which produces the split
+            level corpus
+    """
+
     sr = luigi.IntParameter()
     split = luigi.Parameter()
     metadata = luigi.TaskParameter()
@@ -405,6 +479,14 @@ class FinalizeCorpus(WorkTask):
     """
     Create a final corpus, no longer in _workdir but in the top-level
     at directory config.TASKNAME.
+    Parameters:
+        sample_rates (list(int)): The list of sampling rates in which the corpus
+            is required
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires:
+        resample(List(ResampleSubCorpus)): list of task which resamples each split
+        traintestmeta(SplitTrainTestMetadata): task which produces the split
+            level metadata
     """
 
     sample_rates = luigi.ListParameter()
