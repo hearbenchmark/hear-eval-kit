@@ -20,19 +20,16 @@ import heareval.tasks.util.audio as audio_util
 class WorkTask(luigi.Task):
     """
     We assume following conventions:
-        * Each luigi Task will have a name property:
-            {classname}
-            or
-            {classname}-{task parameters}
-            depending upon what your want the name to be.
-            (TODO: Since we always use {classname}, just
-            make this constant?)
+        * Each luigi Task will have a name property
         * The "output" of each task is a touch'ed file,
         indicating that the task is done. Each .run()
         method should end with this command:
-            `_workdir/{name}.done`
+            `_workdir/{task_subdir}{task_id}.done`
+            task_id unique identifies the task by a combination of name and
+            input parameters
             * Optionally, working output of each task will go into:
-            `_workdir/{name}`
+            `_workdir/{task_subdir}{name}`
+
     Downstream dependencies should be cautious of automatically
     removing the working output, unless they are sure they are the
     only downstream dependency of a particular task (i.e. no
@@ -46,63 +43,53 @@ class WorkTask(luigi.Task):
 
     @property
     def name(self):
-        # Make the default name here. If required change in any
-        # subtask. This folder is not named with task_id as the name
-        # can be set anytime
-        # Should we make it with task_id?
         return type(self).__name__
 
     def output(self):
-        # Replace the name with task_id as it is unique at task and parameter level
-        f = os.path.join(
-            self.task_subdir, f"{self.stage_number:02d}-{self.task_id}.done"
-        )
-        return luigi.LocalTarget(f)
+        """
+        Outfile to mark a task as complete.
+        """
+        output_name = f"{self.stage_number:02d}-{self.task_id}.done"
+        output_file = self.task_subdir.joinpath(output_name)
+        return luigi.LocalTarget(output_file)
 
     def mark_complete(self):
-        # Touches the output file, marking this task as complete
+        """Touches the output file, marking this task as complete"""
         self.output().open("w").close()
 
     @property
     def workdir(self):
-        d = os.path.join(self.task_subdir, f"{self.stage_number:02d}-{self.name}")
-        # In parallel task called from one parent task, ensure_dir might run from
-        # multiple calls and it might fail due the condition which is being checked.
-        # The folder might not exist while doing the if statement but meanwhile might
-        # come into existance from the parallel call.
-        os.makedirs(d, exist_ok=True)
-        # ensure_dir(d)
+        """Working directory"""
+        d = self.task_subdir.joinpath(f"{self.stage_number:02d}-{self.name}")
+        d.mkdir(exist_ok=True)
         return d
 
     @property
     def task_subdir(self):
-        """
-        Task specific subdirectory
-        """
-        # You must specify a task name for WorkTask
-        d = ["_workdir", str(self.versioned_task_name)]
-        return os.path.join(*d)
+        """Task specific subdirectory"""
+        return Path("_workdir").joinpath(str(self.versioned_task_name))
 
     @property
     def versioned_task_name(self):
-        task_name = f"{self.data_config['task_name']}-{self.data_config['version']}"
-        return task_name
+        """
+        Versioned Task name contains the provided name in the
+        data config and the version
+        """
+        return f"{self.data_config['task_name']}-{self.data_config['version']}"
 
     @property
-    def stage_number(self) -> int:
+    def stage_number(self):
         """
         Numerically sort the DAG tasks.
         This stage number will go into the name.
-            This should be overridden as 0 by any task that has no
+
+        This should be overridden as 0 by any task that has no
         requirements.
         """
         if isinstance(self.requires(), WorkTask):
             return 1 + self.requires().stage_number
         elif isinstance(self.requires(), list):
             return 1 + max([task.stage_number for task in self.requires()])
-
-        # Add a new dict method here so that dicts can be handled
-        # The intermediate tasks can also be a list of task.
         elif isinstance(self.requires(), dict):
             parentasks = []
             for task in list(self.requires().values()):
@@ -112,7 +99,7 @@ class WorkTask(luigi.Task):
                     parentasks.append(task)
             return 1 + max([task.stage_number for task in parentasks])
         else:
-            raise ValueError("Unknown requires: %s" % self.requires())
+            raise ValueError(f"Unknown requires: {self.requires()}")
 
 
 class DownloadCorpus(WorkTask):
