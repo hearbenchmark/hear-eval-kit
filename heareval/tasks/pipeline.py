@@ -21,6 +21,7 @@ from heareval.tasks.util.luigi import (
     filename_to_int_hash,
     new_basedir,
 )
+import heareval.tasks.util.audio as audio_util
 
 
 class DownloadCorpus(WorkTask):
@@ -80,6 +81,10 @@ class ExtractArchive(WorkTask):
 
 
 def get_download_and_extract_tasks(config: Dict):
+    """
+    Iterates over the dowload urls and builds download and extract
+    tasks for them
+    """
 
     tasks = {}
     for name, url in config["download_urls"].items():
@@ -136,10 +141,10 @@ class ExtractMetadata(WorkTask):
         audio scene tasks.
         You can override this and simplify if the slugified filename
         for this dataset is too long.
-        TODO: Remove the workdir, if it's present.
+
+        The basic version here takes the filename and slugifies it.
         """
-        name, ext = os.path.splitext(os.path.basename(relative_path))
-        return f"{slugify(str(name))}"
+        return f"{slugify(str(Path(relative_path).stem))}"
 
     @staticmethod
     def get_subsample_key(slug: str):
@@ -268,6 +273,7 @@ class SubsampleSplit(WorkTask):
 
         for _, audio in metadata.iterrows():
             audiofile = Path(audio["relpath"])
+            # Add the original extension to the slug
             newaudiofile = Path(
                 self.workdir.joinpath(f"{audio['slug']}{audiofile.suffix}")
             )
@@ -335,11 +341,8 @@ class MonoWavTrimCorpus(WorkTask):
     def run(self):
         # TODO: this should check to see if the audio is already a mono wav at the
         #   correct length and just create a symlink if that is this case.
-        for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*"))):
-
-            newaudiofile = new_basedir(
-                os.path.splitext(audiofile)[0] + ".wav", self.workdir
-            )
+        for audiofile in tqdm(self.requires()["corpus"].workdir.iterdir()):
+            newaudiofile = self.workdir.joinpath(f"{audiofile.stem}.wav")
             audio_util.mono_wav_and_fix_duration(
                 audiofile, newaudiofile, duration=self.data_config["sample_duration"]
             )
@@ -348,6 +351,14 @@ class MonoWavTrimCorpus(WorkTask):
 
 
 class SplitTrainTestCorpus(WorkTask):
+    """
+    Parameters
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+            the metadata helps to provide the split type of each audio file
+    Requires
+        corpus(MonoWavTrimCorpus): which processes the audio file and converts
+            them to wav format
+    """
 
     metadata = luigi.TaskParameter()
 
@@ -362,12 +373,9 @@ class SplitTrainTestCorpus(WorkTask):
         }
 
     def run(self):
-        # Get the process metadata. This gives the freedom of picking the train test
-        # label either from the provide metadata file or any other method.
 
-        # Writing slug and split makes it explicit that these columns are required
         meta = self.requires()["metadata"]
-        process_metadata = pd.read_csv(
+        metadata = pd.read_csv(
             os.path.join(meta.workdir, meta.outfile),
         )[["slug", "split"]]
 
@@ -375,11 +383,9 @@ class SplitTrainTestCorpus(WorkTask):
         # saved with their slug names and hence the corresponding label can be picked
         # up from the preprocess config
         for audiofile in tqdm(self.requires()["corpus"].workdir.glob("*.wav")):
-            # The metadata slug doesnot have the extension as monowavtrim has not
-            # been run yet so get the name without the extension
-            split = process_metadata.loc[
-                process_metadata["slug"] == audiofile.stem, "split"
-            ].values[0]
+            # Compare the filename with the slug.
+            # Please note that the slug doesnot has the extension of the file
+            split = metadata.loc[metadata["slug"] == audiofile.stem, "split"].values[0]
             split_dir = self.workdir.joinpath(split)
             split_dir.mkdir(exist_ok=True)
             newaudiofile = new_basedir(audiofile, split_dir)

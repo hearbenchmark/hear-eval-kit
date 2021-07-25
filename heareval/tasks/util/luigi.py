@@ -18,9 +18,6 @@ import requests
 from tqdm import tqdm
 
 
-import heareval.tasks.util.audio as audio_util
-
-
 class WorkTask(luigi.Task):
     """
     We assume following conventions:
