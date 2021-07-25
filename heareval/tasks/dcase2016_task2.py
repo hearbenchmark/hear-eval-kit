@@ -78,17 +78,13 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 .replace(".txt", ".wav")
             )
             assert os.path.exists(sound_file)
-            metadata = metadata.assign(relpath=sound_file)
+            metadata = metadata.assign(
+                relpath=sound_file,
+                slug=lambda df: df.relpath.apply(self.slugify_file_name),
+                split=lambda df: split,
+                subsample_key=lambda df: df["slug"].apply(self.get_subsample_key),
+            )
 
-            metadata = metadata.assign(
-                slug=lambda df: df.relpath.apply(self.slugify_file_name)
-            )
-            metadata = metadata.assign(split=lambda df: split)
-            metadata = metadata.assign(
-                filename_hash=lambda df: df["slug"].apply(
-                    luigi_util.filename_to_int_hash
-                )
-            )
             metadatas.append(metadata)
 
         return pd.concat(metadatas)
