@@ -58,9 +58,9 @@ class Embedding:
         # Load the model using the model weights path if they were provided
         if model_path is not None:
             print(f"Loading model using: {model_path}")
-            self.model = self.module.load_model(model_path)
+            self.model = self.module.load_model(model_path)  # type: ignore
         else:
-            self.model = self.module.load_model()
+            self.model = self.module.load_model()  # type: ignore
 
         # Check to see what type of model this is: torch or tensorflow
         if isinstance(self.model, torch.nn.Module):
@@ -110,7 +110,7 @@ class Embedding:
     ) -> np.ndarray:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings = self.module.get_scene_embeddings(audio, self.model)
+            embeddings = self.module.get_scene_embeddings(audio, self.model)  # type: ignore
             return embeddings.detach().cpu().numpy()
         else:
             raise NotImplementedError("Not implemented for TF")
@@ -120,7 +120,7 @@ class Embedding:
     ) -> Tuple[np.ndarray, np.ndarray]:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings, timestamps = self.module.get_timestamp_embeddings(
+            embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
                 audio, self.model
             )
             embeddings = embeddings.detach().cpu().numpy()
