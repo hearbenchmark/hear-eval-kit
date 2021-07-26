@@ -2,8 +2,8 @@
 Generic pipelines for datasets
 """
 
-import os
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Union
@@ -11,16 +11,16 @@ from urllib.parse import urlparse
 
 import luigi
 import pandas as pd
-from tqdm import tqdm
 from slugify import slugify
+from tqdm import tqdm
 
+import heareval.tasks.util.audio as audio_util
 from heareval.tasks.util.luigi import (
     WorkTask,
     download_file,
     filename_to_int_hash,
     new_basedir,
 )
-import heareval.tasks.util.audio as audio_util
 
 
 class DownloadCorpus(WorkTask):
@@ -263,9 +263,7 @@ class SubsampleSplit(WorkTask):
         num_files = len(metadata)
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
-            print(
-                f"{len(str(num_files))} audio files in corpus, keeping only {max_files}"
-            )
+            print(f"{num_files} audio files in corpus, keeping only {max_files}")
 
         # Sort by the subsample key and select the max_files number of samples
         metadata = metadata.sort_values(by="subsample_key").iloc[:max_files]
@@ -507,7 +505,7 @@ class MetadataVocabulary(WorkTask):
 
         # Build the label idx csv and save it
         labelcsv = pd.DataFrame(
-            [(label, idx) for (idx, label) in enumerate(sorted(list(labelset)))],
+            [(idx, label) for (idx, label) in enumerate(sorted(list(labelset)))],
             columns=["idx", "label"],
         )
 
@@ -624,7 +622,7 @@ class FinalizeCorpus(WorkTask):
             dirs_exist_ok=True,
         )
         # Save the dataset config as a json file
-        config_out = self.workdir.joinpath("dataset_metadata.json")
+        config_out = self.workdir.joinpath("task_metadata.json")
         with open(config_out, "w") as fp:
             json.dump(
                 self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
