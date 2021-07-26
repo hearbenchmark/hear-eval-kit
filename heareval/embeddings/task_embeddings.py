@@ -250,7 +250,7 @@ def memmap_embeddings(
     ndim = None
     dtype = None
     for embedding_file in tqdm(embedding_files):
-        emb = np.load(embedding_file)
+        emb = np.load(embedding_file).astype(np.float32)
         if metadata["embedding_type"] == "scene":
             assert emb.ndim == 1
             nembeddings += 1
@@ -269,7 +269,7 @@ def memmap_embeddings(
     ).write(json.dumps((nembeddings, ndim)))
     embedding_memmap = np.memmap(
         filename=embed_dir.joinpath(task_name, f"{split_name}.embeddings.npy"),
-        dtype=dtype,
+        dtype=np.float32,
         mode="w+",
         shape=(nembeddings, ndim),
     )
