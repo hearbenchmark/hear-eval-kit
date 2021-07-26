@@ -23,16 +23,17 @@ TODO:
 """
 import json
 import os.path
-from pathlib import Path
+import shutil
 from importlib import import_module
+from pathlib import Path
 from typing import Any, Dict, List, Tuple, Union
 
-from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
 import soundfile as sf
 import tensorflow as tf
 import torch
+from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
@@ -194,8 +195,12 @@ def save_timestamp_embedding_and_label(
 
 
 def get_labels_for_timestamps(
-    labels: List, timestamps: np.ndarray, vocab: pd.DataFrame
+    labels: List, timestamps: np.ndarray, label_vocab: pd.DataFrame
 ) -> np.ndarray:
+    import IPython
+
+    ipshell = IPython.embed
+    ipshell(banner1="ipshell")
     # Create a dictionary of the integer id for the label keyed on the str label.
     # We want to do this so we can map from the str label to an integer and create
     # a binary vector of labels for each timestamp.
@@ -230,12 +235,19 @@ def task_embeddings(embedding: Embedding, task_path: Path):
 
     metadata = json.load(task_path.joinpath("task_metadata.json").open())
 
-    # FIXME: idx and label columns are switched in labelvocab
     label_vocab = pd.read_csv(task_path.joinpath("labelvocabulary.csv"))
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embed_dir = Path("embeddings").joinpath(embedding.name)
+
+    # Copy these two files to the embeddings directory,
+    # so we have everything we need in embeddings for doing downstream
+    # prediction and evaluation.
+    if not os.path.exists(embed_dir):
+        os.makedirs(embed_dir)
+    shutil.copyfile(metadata, embed_dir)
+    shutil.copyfile(label_vocab, embed_dir)
 
     for split in metadata["splits"]:
         print(f"Getting embeddings for split: {split['name']}")
