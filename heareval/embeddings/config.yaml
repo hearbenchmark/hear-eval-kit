@@ -1,0 +1,4 @@
+# The module, or list of modules to get embeddings for
+module:
+  - hearbaseline:
+      - optional weights:
