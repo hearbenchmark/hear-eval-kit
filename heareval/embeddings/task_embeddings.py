@@ -122,8 +122,8 @@ class Embedding:
     ) -> Tuple[np.ndarray, np.ndarray]:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings, timestamps = self.module.get_timestamp_embeddings(
-                # type: ignore
+            # flake8: noqa
+            embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
                 audio,
                 self.model,
             )
