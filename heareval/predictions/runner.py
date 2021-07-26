@@ -20,7 +20,7 @@ from heareval.predictions.task_predictions import task_predictions
     type=click.Path(exists=True),
 )
 def runner(module: str, embeddings_dir: str = None) -> None:
-    embeddings_dir = embeddings_dir.joinpath(module)
+    embeddings_dir = Path(embeddings_dir).joinpath(module)
     if not embeddings_dir.is_dir():
         raise ValueError(
             "Cannot locate directory containing embeddings. "

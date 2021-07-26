@@ -29,10 +29,27 @@ TORCH = "torch"
 TENSORFLOW = "tf"
 
 
+class RandomProjectionPrediction(torch.nn.Module):
+    def __init__(self, nfeatures: int, nlabels: int, prediction_type: str):
+        super().__init__()
+
+        self.projection = torch.nn.Linear(self.nfeatures, self.nlabels)
+        if prediction_type == "multilabel":
+            self.activation = torch.nn.Sigmoid()
+        elif prediction_type == "multiclass":
+            self.activation = torch.nn.SoftMax()
+        else:
+            raise ValueError(f"Unknown prediction_type {prediction_type}")
+
+    def forward(self, x: Tensor):
+        x = self.projection(x)
+        x = self.activation(x)
+        return x
+
+
+"""
 class AudioFileDataset(Dataset):
-    """
-    Read in a JSON file and return audio and audio filenames
-    """
+    #Read in a JSON file and return audio and audio filenames
 
     def __init__(self, data: Dict, audio_dir: Path, sample_rate: int):
         self.filenames = list(data.keys())
@@ -52,7 +69,6 @@ class AudioFileDataset(Dataset):
         return audio, self.filenames[idx]
 
 
-"""
 def get_dataloader_for_embedding(
     data_path: Path, audio_dir: Path, embedding: Embedding, batch_size: int = 64
 ):
@@ -75,6 +91,9 @@ def task_predictions(embedding_path: Path):
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
 
     label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
+
+    nlabels = len(label_vocab)
+    assert nlabels == label_vocab["idx"].max() + 1
 
     ## TODO: Would be good to include the version here
     ## https://github.com/neuralaudio/hear2021-eval-kit/issues/37
