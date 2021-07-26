@@ -41,6 +41,16 @@ TENSORFLOW = "tf"
 
 
 class Embedding:
+    """
+    A wrapper class to help with loading embedding models and computing embeddings
+    using the HEAR 2021 API for both torch and tensorflow models.
+    # TODO: Still need to implement and test this with TensorFlow
+
+    Args:
+        module_name: the import name for the embedding module
+        model_path: location to load the model from
+    """
+
     def __init__(self, module_name: str, model_path: str = None):
         print(f"Importing {module_name}")
         self.module = import_module(module_name)
@@ -65,6 +75,9 @@ class Embedding:
 
     @property
     def name(self):
+        # TODO: would be nice to include version in this string, a versioned string.
+        #   Potentially can set a version from the command line too to help with testing
+        #   the same model but with difference versions of the weights.
         return self.module.__name__
 
     @property
@@ -248,6 +261,7 @@ def task_embeddings(embedding: Embedding, task_path: Path):
 
         for audios, filenames in tqdm(dataloader):
             labels = [split_data[file] for file in filenames]
+
             if metadata["task_type"] == "scene_labeling":
                 embeddings = embedding.get_scene_embedding_as_numpy(audios)
                 save_scene_embedding_and_label(embeddings, labels, filenames, outdir)
