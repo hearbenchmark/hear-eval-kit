@@ -267,11 +267,11 @@ def task_embeddings(embedding: Embedding, task_path: Path):
         for audios, filenames in tqdm(dataloader):
             labels = [split_data[file] for file in filenames]
 
-            if metadata["task_type"] == "scene_labeling":
+            if metadata["embedding_type"] == "scene":
                 embeddings = embedding.get_scene_embedding_as_numpy(audios)
                 save_scene_embedding_and_label(embeddings, labels, filenames, outdir)
 
-            elif metadata["task_type"] == "event_labeling":
+            elif metadata["embedding_type"] == "event":
                 embeddings, timestamps = embedding.get_timestamp_embedding_as_numpy(
                     audios
                 )
@@ -283,4 +283,6 @@ def task_embeddings(embedding: Embedding, task_path: Path):
                 )
 
             else:
-                raise ValueError(f"Unknown task type: {metadata['task_type']}")
+                raise ValueError(
+                    f"Unknown embedding type: {metadata['embedding_type']}"
+                )
