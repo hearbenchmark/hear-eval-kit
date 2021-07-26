@@ -595,6 +595,82 @@ class ResampleSubcorpuses(WorkTask):
         workdir.symlink_to(requires_workdir)
         self.mark_complete()
 
+
+class GenerateAudioStats(WorkTask):
+    """
+    Generates the statistics of the extracted and sampled audio files
+    Parameters
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires
+        traintestmeta(SplitTrainTestMetadata): task which produces the split
+            level metadata
+    """
+
+    sample_rates = luigi.Parameter()
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        return {
+            "resample": ResampleSubcorpuses(
+                sample_rates=self.sample_rates,
+                metadata=self.metadata,
+                data_config=self.data_config,
+            ),
+            "metadata": self.metadata,
+        }
+
+    def get_metadata(self):
+        metadata = pd.read_csv(
+            self.requires()["metadata"].workdir.joinpath(
+                self.requires()["metadata"].outfile
+            )
+        )
+        return metadata
+
+    @staticmethod
+    def get_stats(audiofiles):
+        """Product the summary of a list of audio directory as dict"""
+        audio_stats = list(map(audio_util.get_audiostats, audiofiles))
+        durations = [stats["duration"] for stats in audio_stats]
+        sample_rates = [stats["sample_rate"] for stats in audio_stats]
+
+        stats = {
+            "total_audiofiles": len(durations),
+            "mean_samplerate": np.mean(sample_rates),
+            "mean_dur(sec)": np.mean(durations),
+            "median_dur)sec)": np.median(durations),
+        }
+        stats.update(
+            {
+                f"{str(p)}th percentile dur(sec)": np.percentile(durations, p)
+                for p in [10, 25, 75, 90]
+            }
+        )
+        return stats
+
+    def run(self):
+        master_stats = {"extracted": {}, "sampled": {}}
+        master_stats["extracted"] = self.get_stats(
+            self.get_metadata()["relpath"].apply(Path).tolist()
+        )
+
+        for sr_dir in list(self.requires()["resample"].workdir.absolute().iterdir()):
+            master_stats["sampled"][sr_dir.stem] = {}
+            for split_dir in list(sr_dir.absolute().iterdir()):
+                audiofiles = list(split_dir.absolute().glob("*.wav"))
+                master_stats["sampled"][sr_dir.stem][split_dir.stem] = self.get_stats(
+                    audiofiles
+                )
+
+        json.dump(
+            master_stats,
+            open(self.workdir.joinpath("audio_stats.json"), "w"),
+            indent=True,
+        )
+
+        self.mark_complete()
+
+
 class FinalizeCorpus(WorkTask):
     """
     Create a final corpus, no longer in _workdir but in the top-level
@@ -614,8 +690,12 @@ class FinalizeCorpus(WorkTask):
 
     def requires(self):
         # Will copy the resampled data and the traintestmeta and the vocabmeta
-        splits = [p["name"] for p in self.data_config["splits"]]
         return {
+            "stats": GenerateAudioStats(
+                metadata=self.metadata,
+                sample_rates=self.sample_rates,
+                data_config=self.data_config,
+            ),
             "resample": ResampleSubcorpuses(
                 sample_rates=self.sample_rates,
                 metadata=self.metadata,
@@ -642,6 +722,8 @@ class FinalizeCorpus(WorkTask):
         # Copy the resampled files
         shutil.copytree(self.requires()["resample"].workdir, self.workdir)
 
+        # Copy the stats
+        shutil.copytree(self.requires()["stats"].workdir, self.workdir, dirs_exist_ok=True,)
 
         # Copy the traintestmetadata
         shutil.copytree(
