@@ -154,11 +154,11 @@ class AudioFileDataset(Dataset):
 
 
 def get_dataloader_for_embedding(
-    data_path: Path, audio_dir: Path, embedding: Embedding, batch_size: int = 64
+    data: Dict, audio_dir: Path, embedding: Embedding, batch_size: int = 64
 ):
     if embedding.type == TORCH:
         return DataLoader(
-            AudioFileDataset(data_path, audio_dir, embedding.sample_rate),
+            AudioFileDataset(data, audio_dir, embedding.sample_rate),
             batch_size=batch_size,
             shuffle=True,
         )
