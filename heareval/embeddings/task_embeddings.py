@@ -231,13 +231,16 @@ def task_embeddings(embedding: Embedding, task_path: Path):
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embed_dir = Path("embeddings").joinpath(embedding.name)
 
+    task_name = task_path.name
+    embed_task_dir = embed_dir.joinpath(task_name)
+
     # Copy these two files to the embeddings directory,
     # so we have everything we need in embeddings for doing downstream
     # prediction and evaluation.
-    if not os.path.exists(embed_dir):
-        os.makedirs(embed_dir)
-    shutil.copy(metadata_path, embed_dir)
-    shutil.copy(label_vocab_path, embed_dir)
+    if not os.path.exists(embed_task_dir):
+        os.makedirs(embed_task_dir)
+    shutil.copy(metadata_path, embed_task_dir)
+    shutil.copy(label_vocab_path, embed_task_dir)
 
     for split in metadata["splits"]:
         print(f"Getting embeddings for split: {split['name']}")
