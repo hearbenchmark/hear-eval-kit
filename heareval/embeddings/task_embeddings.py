@@ -110,7 +110,9 @@ class Embedding:
     ) -> np.ndarray:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings = self.module.get_scene_embeddings(audio, self.model)  # type: ignore
+            embeddings = self.module.get_scene_embeddings(  # type: ignore
+                audio, self.model
+            )
             return embeddings.detach().cpu().numpy()
         else:
             raise NotImplementedError("Not implemented for TF")
@@ -120,8 +122,10 @@ class Embedding:
     ) -> Tuple[np.ndarray, np.ndarray]:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
+            # flake8: noqa
             embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
-                audio, self.model
+                audio,
+                self.model,
             )
             embeddings = embeddings.detach().cpu().numpy()
             timestamps = timestamps.detach().cpu().numpy()
