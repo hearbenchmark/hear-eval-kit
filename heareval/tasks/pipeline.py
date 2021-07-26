@@ -624,7 +624,7 @@ class FinalizeCorpus(WorkTask):
             dirs_exist_ok=True,
         )
         # Save the dataset config as a json file
-        config_out = self.workdir.joinpath("dataset_metadata.json")
+        config_out = self.workdir.joinpath("task_metadata.json")
         with open(config_out, "w") as fp:
             json.dump(
                 self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
