@@ -9,7 +9,6 @@ from typing import Optional
 
 import click
 
-import heareval.tasks.coughvid as coughvid
 import heareval.tasks.nsynth_pitch as nsynth_pitch
 import heareval.tasks.speech_commands as speech_commands
 import heareval.tasks.dcase2016_task2 as dcase2016_task2
@@ -20,7 +19,6 @@ tasks = {
     "speech_commands": speech_commands,
     "nsynth_pitch": nsynth_pitch,
     "dcase2016_task2": dcase2016_task2,
-    "coughvid": coughvid,
 }
 
 
