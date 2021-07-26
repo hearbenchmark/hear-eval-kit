@@ -25,9 +25,11 @@ import json
 import os.path
 from pathlib import Path
 from importlib import import_module
-from typing import Any, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
+from intervaltree import IntervalTree
 import numpy as np
+import pandas as pd
 import soundfile as sf
 import tensorflow as tf
 import torch
@@ -100,12 +102,14 @@ class Embedding:
         else:
             raise NotImplementedError("Not implemented for TF")
 
-    def get_event_embedding_as_numpy(
+    def get_timestamp_embedding_as_numpy(
         self, audio: Union[np.ndarray, torch.Tensor]
     ) -> Tuple[np.ndarray, np.ndarray]:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings, timestamps = self.module.get_event_embeddings(audio, self.model)
+            embeddings, timestamps = self.module.get_timestamp_embeddings(
+                audio, self.model
+            )
             embeddings = embeddings.detach().cpu().numpy()
             timestamps = timestamps.detach().cpu().numpy()
             return embeddings, timestamps
@@ -115,26 +119,25 @@ class Embedding:
 
 class AudioFileDataset(Dataset):
     """
-    Read in a JSON file and return audio filenames and labels
+    Read in a JSON file and return audio and audio filenames
     """
 
-    def __init__(self, json_file: Path, audio_dir: Path, sample_rate: int):
-        self.data = json.load(json_file.open())
-        self.keys = list(self.data.keys())
+    def __init__(self, data: Dict, audio_dir: Path, sample_rate: int):
+        self.filenames = list(data.keys())
         self.audio_dir = audio_dir
         assert self.audio_dir.is_dir()
         self.sample_rate = sample_rate
 
     def __len__(self):
-        return len(self.data)
+        return len(self.filenames)
 
     def __getitem__(self, idx):
         # Load in audio here in the Dataset. When the batch size is larger than
         # 1 then the torch dataloader can take advantage of multiprocessing.
-        audio_path = self.audio_dir.joinpath(self.keys[idx])
+        audio_path = self.audio_dir.joinpath(self.filenames[idx])
         audio, sr = sf.read(audio_path, dtype=np.float32)
         assert sr == self.sample_rate
-        return audio, self.data[self.keys[idx]]["label"], self.keys[idx]
+        return audio, self.filenames[idx]
 
 
 def get_dataloader_for_embedding(
@@ -160,13 +163,62 @@ def save_scene_embedding_and_label(
     for i, file in enumerate(filename):
         out_file = outdir.joinpath(f"{file}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
+        np.save(f"{out_file}.label.npy", labels[i]["label"])
+
+
+def save_timestamp_embedding_and_label(
+    embeddings: np.ndarray,
+    timestamps: np.ndarray,
+    labels: np.ndarray,
+    filename: Tuple,
+    outdir: Path,
+):
+    for i, file in enumerate(filename):
+        out_file = outdir.joinpath(f"{file}")
+        np.save(f"{out_file}.embedding.npy", embeddings[i])
+        np.save(f"{out_file}.timestamps.npy", timestamps[i])
         np.save(f"{out_file}.label.npy", labels[i])
+
+
+def get_labels_for_timestamps(
+    labels: List, timestamps: np.ndarray, vocab: pd.DataFrame
+) -> np.ndarray:
+    # Create a dictionary of the integer id for the label keyed on the str label.
+    # We want to do this so we can map from the str label to an integer and create
+    # a binary vector of labels for each timestamp.
+    # FIXME: the idx and label columns are switched. Needs to be fixed in the data
+    #   preprocessing pipeline and then updated here.
+    vocab = vocab.set_index("idx")
+    vocab = vocab.to_dict()["label"]
+
+    # Binary vector of labels for each timestamp
+    timestamp_labels = np.zeros((timestamps.shape[0], timestamps.shape[1], len(vocab)))
+
+    # TODO: make sure we are saving the labels in the correct units.
+    #   dcase gives units in seconds whereas the timestamps from the API
+    #   are in millseconds. Make sure dataset events are specified in ms.
+    assert len(labels) == len(timestamps)
+    for i, label in enumerate(labels):
+        tree = IntervalTree()
+        # Add all events to the label tree
+        for event in label:
+            # FIXME: Remove conversion to ms
+            tree.addi(1000 * event["start"], 1000 * event["end"], vocab[event["label"]])
+
+        # Update the binary vector of labels with intervals for each timestamp
+        for j, t in enumerate(timestamps[i]):
+            for interval in tree[t]:
+                timestamp_labels[i, j, interval.data] = 1.0
+
+    return timestamp_labels
 
 
 def task_embeddings(embedding: Embedding, task_path: Path):
 
     metadata = json.load(task_path.joinpath("task_metadata.json").open())
-    task_type = metadata["task_type"]
+
+    # FIXME: idx and label columns are switched in labelvocab
+    label_vocab = pd.read_csv(task_path.joinpath("labelvocabulary.csv"))
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
@@ -187,19 +239,27 @@ def task_embeddings(embedding: Embedding, task_path: Path):
         # Or assume that the API is smart enough to do this?
         # How do we test for memory blow up etc?
         # e.g. that it won't explode on 10 minute audio
-        dataloader = get_dataloader_for_embedding(split_path, audio_dir, embedding, 4)
+        split_data = json.load(split_path.open())
+        dataloader = get_dataloader_for_embedding(split_data, audio_dir, embedding, 4)
 
         outdir = embed_dir.joinpath(task_path.name, split["name"])
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
-        for audio, label, filename in tqdm(dataloader):
+        for audios, filenames in tqdm(dataloader):
+            labels = [split_data[file] for file in filenames]
             if metadata["task_type"] == "scene_labeling":
-                embeddings = embedding.get_scene_embedding_as_numpy(audio)
-                save_scene_embedding_and_label(embeddings, label, filename, outdir)
+                embeddings = embedding.get_scene_embedding_as_numpy(audios)
+                save_scene_embedding_and_label(embeddings, labels, filenames, outdir)
 
             elif metadata["task_type"] == "event_labeling":
-                embeddings, timestamps = embedding.get_event_embedding_as_numpy(audio)
+                embeddings, timestamps = embedding.get_timestamp_embedding_as_numpy(
+                    audios
+                )
+                labels = get_labels_for_timestamps(labels, timestamps, label_vocab)
+                save_timestamp_embedding_and_label(
+                    embeddings, timestamps, labels, filenames, outdir
+                )
 
             else:
                 raise ValueError(f"Unknown task type: {metadata['task_type']}")
