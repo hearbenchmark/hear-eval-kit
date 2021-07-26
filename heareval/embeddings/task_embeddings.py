@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
-import pandas as pd
 import soundfile as sf
 import tensorflow as tf
 import torch
@@ -59,9 +58,9 @@ class Embedding:
         # Load the model using the model weights path if they were provided
         if model_path is not None:
             print(f"Loading model using: {model_path}")
-            self.model = self.module.load_model(model_path)
+            self.model = self.module.load_model(model_path)  # type: ignore
         else:
-            self.model = self.module.load_model()
+            self.model = self.module.load_model()  # type: ignore
 
         # Check to see what type of model this is: torch or tensorflow
         if isinstance(self.model, torch.nn.Module):
@@ -111,7 +110,9 @@ class Embedding:
     ) -> np.ndarray:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings = self.module.get_scene_embeddings(audio, self.model)
+            embeddings = self.module.get_scene_embeddings(  # type: ignore
+                audio, self.model
+            )
             return embeddings.detach().cpu().numpy()
         else:
             raise NotImplementedError("Not implemented for TF")
@@ -121,8 +122,10 @@ class Embedding:
     ) -> Tuple[np.ndarray, np.ndarray]:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings, timestamps = self.module.get_timestamp_embeddings(
-                audio, self.model
+            # flake8: noqa
+            embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
+                audio,
+                self.model,
             )
             embeddings = embeddings.detach().cpu().numpy()
             timestamps = timestamps.detach().cpu().numpy()
@@ -155,11 +158,11 @@ class AudioFileDataset(Dataset):
 
 
 def get_dataloader_for_embedding(
-    data_path: Path, audio_dir: Path, embedding: Embedding, batch_size: int = 64
+    data: Dict, audio_dir: Path, embedding: Embedding, batch_size: int = 64
 ):
     if embedding.type == TORCH:
         return DataLoader(
-            AudioFileDataset(data_path, audio_dir, embedding.sample_rate),
+            AudioFileDataset(data, audio_dir, embedding.sample_rate),
             batch_size=batch_size,
             shuffle=True,
         )
@@ -214,7 +217,7 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
         # Update the binary vector of labels with intervals for each timestamp
         for j, t in enumerate(timestamps[i]):
             interval_labels = [interval.data for interval in tree[t]]
-            labels_for_sound.append(interval_labels)
+            labels_for_sound.append([float(t), interval_labels])
 
         timestamp_labels.append(labels_for_sound)
 
