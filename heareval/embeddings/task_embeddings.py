@@ -264,6 +264,9 @@ def memmap_embeddings(
         else:
             raise ValueError(f"Unknown embedding type: {metadata['embedding_type']}")
 
+    open(
+        embed_dir.joinpath(task_name, f"{split_name}.embedding-dimensions.json"), "wt"
+    ).write(json.dumps((nembeddings, ndim)))
     embedding_memmap = np.memmap(
         filename=embed_dir.joinpath(task_name, f"{split_name}.embeddings.npy"),
         dtype=dtype,
