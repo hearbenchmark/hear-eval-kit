@@ -723,8 +723,8 @@ class FinalizeCorpus(WorkTask):
 
         # Copy the stats
         shutil.copytree(
-            self.requires()["stats"].workdir, 
-            self.workdir, 
+            self.requires()["stats"].workdir,
+            self.workdir,
             dirs_exist_ok=True,
         )
 
