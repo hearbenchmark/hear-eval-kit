@@ -72,10 +72,9 @@ def get_dataloader_for_embedding(
 
 
 def task_predictions(embedding_path: Path):
-    # metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
 
-    ## FIXME: idx and label columns are switched in labelvocab
-    # label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
+    label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
 
     ## TODO: Would be good to include the version here
     ## https://github.com/neuralaudio/hear2021-eval-kit/issues/37
