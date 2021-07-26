@@ -5,6 +5,8 @@ Audio utility functions for evaluation task preparation
 import os
 import subprocess
 
+import soundfile as sf
+
 
 def mono_wav_and_fix_duration(in_file: str, out_file: str, duration: float):
     """
@@ -69,3 +71,12 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
     )
     # Make sure the return code is 0 and the command was successful.
     assert ret == 0
+
+
+def get_audiostats(in_file: str):
+    audio = sf.SoundFile(in_file)
+    return {
+        "samples": len(audio),
+        "sample_rate": audio.samplerate,
+        "duration": round(len(audio) / audio.samplerate, 2),
+    }
