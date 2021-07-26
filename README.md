@@ -52,13 +52,13 @@ embedding model that follows the
 
 To compute embeddings using the [HEAR baseline](https://github.com/neuralaudio/hear-baseline):
 
-First install the hearbaseline and download the model weights:
+1) Install the hearbaseline and download the model weights:
 ```
 pip install hearbaseline
 wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
 ```
 
-Compute the embeddings for all the tasks
+2) Compute the embeddings for all the tasks
 ```
 python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt
 ```
