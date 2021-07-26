@@ -23,16 +23,17 @@ TODO:
 """
 import json
 import os.path
-from pathlib import Path
+import shutil
 from importlib import import_module
+from pathlib import Path
 from typing import Any, Dict, List, Tuple, Union
 
-from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
 import soundfile as sf
 import tensorflow as tf
 import torch
+from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
@@ -195,7 +196,6 @@ def save_timestamp_embedding_and_label(
 
 
 def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
-
     # A list of labels present at each timestamp
     timestamp_labels = []
 
@@ -223,11 +223,24 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
 
 def task_embeddings(embedding: Embedding, task_path: Path):
 
-    metadata = json.load(task_path.joinpath("task_metadata.json").open())
+    metadata_path = task_path.joinpath("task_metadata.json")
+    metadata = json.load(metadata_path.open())
+    label_vocab_path = task_path.joinpath("labelvocabulary.csv")
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embed_dir = Path("embeddings").joinpath(embedding.name)
+
+    task_name = task_path.name
+    embed_task_dir = embed_dir.joinpath(task_name)
+
+    # Copy these two files to the embeddings directory,
+    # so we have everything we need in embeddings for doing downstream
+    # prediction and evaluation.
+    if not os.path.exists(embed_task_dir):
+        os.makedirs(embed_task_dir)
+    shutil.copy(metadata_path, embed_task_dir)
+    shutil.copy(label_vocab_path, embed_task_dir)
 
     for split in metadata["splits"]:
         print(f"Getting embeddings for split: {split['name']}")

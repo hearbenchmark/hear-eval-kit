@@ -2,8 +2,8 @@
 Generic pipelines for datasets
 """
 
-import os
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Dict, List, Union
@@ -11,16 +11,16 @@ from urllib.parse import urlparse
 
 import luigi
 import pandas as pd
-from tqdm import tqdm
 from slugify import slugify
+from tqdm import tqdm
 
+import heareval.tasks.util.audio as audio_util
 from heareval.tasks.util.luigi import (
     WorkTask,
     download_file,
     filename_to_int_hash,
     new_basedir,
 )
-import heareval.tasks.util.audio as audio_util
 
 
 class DownloadCorpus(WorkTask):
@@ -505,7 +505,7 @@ class MetadataVocabulary(WorkTask):
 
         # Build the label idx csv and save it
         labelcsv = pd.DataFrame(
-            [(label, idx) for (idx, label) in enumerate(sorted(list(labelset)))],
+            [(idx, label) for (idx, label) in enumerate(sorted(list(labelset)))],
             columns=["idx", "label"],
         )
 
