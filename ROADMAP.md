@@ -104,19 +104,10 @@ command from any directory:
 ```python
 python3 -m heareval.tasks.<taskname>
 ```
-Example, for coughvid:
-```python
-python3 -m heareval.tasks.coughvid
-```
 This will create the following:
 * `_workdir` - intermediate temporary work directory used by Luigi to checkpoint and 
   save output from each stage of the pipeline
 * `tasks` - directory that holds the finalized preprocessed data for each task
-
-We currently only have COUGHVID implemented. Once we have a second
-evaluation task implemented in Luigi, we are hoping to make the
-Luigi pipeline super generic and modular, and abstract away all
-boilerplate, so that adding the next 20 tasks is really straightforward.
 
 ### Evaluation pipeline
 
