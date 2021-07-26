@@ -16,7 +16,7 @@ from heareval.predictions.task_predictions import task_predictions
 @click.option(
     "--embeddings-dir",
     default="embeddings",
-    help="Location of tasks to compute embeddings on",
+    help="Location of task embeddings to compute predictions on",
     type=click.Path(exists=True),
 )
 def runner(module: str, embeddings_dir: str = None) -> None:
