@@ -176,7 +176,7 @@ def save_scene_embedding_and_label(
     for i, file in enumerate(filename):
         out_file = outdir.joinpath(f"{file}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
-        np.save(f"{out_file}.label.npy", labels[i]["label"])
+        np.save(f"{out_file}.target-label.npy", labels[i]["label"])
 
 
 def save_timestamp_embedding_and_label(
@@ -190,7 +190,7 @@ def save_timestamp_embedding_and_label(
         out_file = outdir.joinpath(f"{file}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
         np.save(f"{out_file}.timestamps.npy", timestamps[i])
-        np.save(f"{out_file}.label.npy", labels[i])
+        np.save(f"{out_file}.target-labels.npy", labels[i])
 
 
 def get_labels_for_timestamps(
