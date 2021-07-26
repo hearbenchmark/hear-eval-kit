@@ -23,16 +23,17 @@ TODO:
 """
 import json
 import os.path
-from pathlib import Path
+import shutil
 from importlib import import_module
+from pathlib import Path
 from typing import Any, Dict, List, Tuple, Union
 
-from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
 import soundfile as sf
 import tensorflow as tf
 import torch
+from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
@@ -176,7 +177,7 @@ def save_scene_embedding_and_label(
     for i, file in enumerate(filename):
         out_file = outdir.joinpath(f"{file}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
-        np.save(f"{out_file}.target-label.npy", labels[i]["label"])
+        json.dump(labels[i], open(f"{out_file}.target-label.json", "w"))
 
 
 def save_timestamp_embedding_and_label(
@@ -189,23 +190,14 @@ def save_timestamp_embedding_and_label(
     for i, file in enumerate(filename):
         out_file = outdir.joinpath(f"{file}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
-        np.save(f"{out_file}.timestamps.npy", timestamps[i])
-        np.save(f"{out_file}.target-labels.npy", labels[i])
+        assert len(timestamps[i].shape) == 1
+        json.dump(timestamps[i].tolist(), open(f"{out_file}.timestamps.json", "w"))
+        json.dump(labels[i], open(f"{out_file}.target-labels.json", "w"), indent=4)
 
 
-def get_labels_for_timestamps(
-    labels: List, timestamps: np.ndarray, vocab: pd.DataFrame
-) -> np.ndarray:
-    # Create a dictionary of the integer id for the label keyed on the str label.
-    # We want to do this so we can map from the str label to an integer and create
-    # a binary vector of labels for each timestamp.
-    # FIXME: the idx and label columns are switched. Needs to be fixed in the data
-    #   preprocessing pipeline and then updated here.
-    vocab = vocab.set_index("idx")
-    vocab = vocab.to_dict()["label"]
-
-    # Binary vector of labels for each timestamp
-    timestamp_labels = np.zeros((timestamps.shape[0], timestamps.shape[1], len(vocab)))
+def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
+    # A list of labels present at each timestamp
+    timestamp_labels = []
 
     # TODO: make sure we are saving the labels in the correct units.
     #   dcase gives units in seconds whereas the timestamps from the API
@@ -216,26 +208,39 @@ def get_labels_for_timestamps(
         # Add all events to the label tree
         for event in label:
             # FIXME: Remove conversion to ms
-            tree.addi(1000 * event["start"], 1000 * event["end"], vocab[event["label"]])
+            tree.addi(1000 * event["start"], 1000 * event["end"], event["label"])
 
+        labels_for_sound = []
         # Update the binary vector of labels with intervals for each timestamp
         for j, t in enumerate(timestamps[i]):
-            for interval in tree[t]:
-                timestamp_labels[i, j, interval.data] = 1.0
+            interval_labels = [interval.data for interval in tree[t]]
+            labels_for_sound.append(interval_labels)
+
+        timestamp_labels.append(labels_for_sound)
 
     return timestamp_labels
 
 
 def task_embeddings(embedding: Embedding, task_path: Path):
 
-    metadata = json.load(task_path.joinpath("task_metadata.json").open())
-
-    # FIXME: idx and label columns are switched in labelvocab
-    label_vocab = pd.read_csv(task_path.joinpath("labelvocabulary.csv"))
+    metadata_path = task_path.joinpath("task_metadata.json")
+    metadata = json.load(metadata_path.open())
+    label_vocab_path = task_path.joinpath("labelvocabulary.csv")
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
     embed_dir = Path("embeddings").joinpath(embedding.name)
+
+    task_name = task_path.name
+    embed_task_dir = embed_dir.joinpath(task_name)
+
+    # Copy these two files to the embeddings directory,
+    # so we have everything we need in embeddings for doing downstream
+    # prediction and evaluation.
+    if not os.path.exists(embed_task_dir):
+        os.makedirs(embed_task_dir)
+    shutil.copy(metadata_path, embed_task_dir)
+    shutil.copy(label_vocab_path, embed_task_dir)
 
     for split in metadata["splits"]:
         print(f"Getting embeddings for split: {split['name']}")
@@ -270,7 +275,9 @@ def task_embeddings(embedding: Embedding, task_path: Path):
                 embeddings, timestamps = embedding.get_timestamp_embedding_as_numpy(
                     audios
                 )
-                labels = get_labels_for_timestamps(labels, timestamps, label_vocab)
+                labels = get_labels_for_timestamps(labels, timestamps)
+                assert len(labels) == len(filenames)
+                assert len(labels[0]) == len(timestamps[0])
                 save_timestamp_embedding_and_label(
                     embeddings, timestamps, labels, filenames, outdir
                 )
