@@ -4,35 +4,26 @@ Common Luigi classes and functions for evaluation tasks
 
 import hashlib
 import os
-import shutil
-from glob import glob
 from pathlib import Path
-import json
 
 import luigi
-import pandas as pd
 import requests
 from tqdm import tqdm
-
-import heareval.tasks.util.audio as audio_util
 
 
 class WorkTask(luigi.Task):
     """
     We assume following conventions:
-        * Each luigi Task will have a name property:
-            {classname}
-            or
-            {classname}-{task parameters}
-            depending upon what your want the name to be.
-            (TODO: Since we always use {classname}, just
-            make this constant?)
+        * Each luigi Task will have a name property
         * The "output" of each task is a touch'ed file,
         indicating that the task is done. Each .run()
         method should end with this command:
-            `_workdir/{name}.done`
+            `_workdir/{task_subdir}{task_id}.done`
+            task_id unique identifies the task by a combination of name and
+            input parameters
             * Optionally, working output of each task will go into:
-            `_workdir/{name}`
+            `_workdir/{task_subdir}{name}`
+
     Downstream dependencies should be cautious of automatically
     removing the working output, unless they are sure they are the
     only downstream dependency of a particular task (i.e. no
@@ -46,63 +37,53 @@ class WorkTask(luigi.Task):
 
     @property
     def name(self):
-        # Make the default name here. If required change in any
-        # subtask. This folder is not named with task_id as the name
-        # can be set anytime
-        # Should we make it with task_id?
         return type(self).__name__
 
     def output(self):
-        # Replace the name with task_id as it is unique at task and parameter level
-        f = os.path.join(
-            self.task_subdir, f"{self.stage_number:02d}-{self.task_id}.done"
-        )
-        return luigi.LocalTarget(f)
+        """
+        Outfile to mark a task as complete.
+        """
+        output_name = f"{self.stage_number:02d}-{self.task_id}.done"
+        output_file = self.task_subdir.joinpath(output_name)
+        return luigi.LocalTarget(output_file)
 
     def mark_complete(self):
-        # Touches the output file, marking this task as complete
+        """Touches the output file, marking this task as complete"""
         self.output().open("w").close()
 
     @property
     def workdir(self):
-        d = os.path.join(self.task_subdir, f"{self.stage_number:02d}-{self.name}")
-        # In parallel task called from one parent task, ensure_dir might run from
-        # multiple calls and it might fail due the condition which is being checked.
-        # The folder might not exist while doing the if statement but meanwhile might
-        # come into existance from the parallel call.
-        os.makedirs(d, exist_ok=True)
-        # ensure_dir(d)
+        """Working directory"""
+        d = self.task_subdir.joinpath(f"{self.stage_number:02d}-{self.name}")
+        d.mkdir(parents=True, exist_ok=True)
         return d
 
     @property
     def task_subdir(self):
-        """
-        Task specific subdirectory
-        """
-        # You must specify a task name for WorkTask
-        d = ["_workdir", str(self.versioned_task_name)]
-        return os.path.join(*d)
+        """Task specific subdirectory"""
+        return Path("_workdir").joinpath(str(self.versioned_task_name))
 
     @property
     def versioned_task_name(self):
-        task_name = f"{self.data_config['task_name']}-{self.data_config['version']}"
-        return task_name
+        """
+        Versioned Task name contains the provided name in the
+        data config and the version
+        """
+        return f"{self.data_config['task_name']}-{self.data_config['version']}"
 
     @property
-    def stage_number(self) -> int:
+    def stage_number(self):
         """
         Numerically sort the DAG tasks.
         This stage number will go into the name.
-            This should be overridden as 0 by any task that has no
+
+        This should be overridden as 0 by any task that has no
         requirements.
         """
         if isinstance(self.requires(), WorkTask):
             return 1 + self.requires().stage_number
         elif isinstance(self.requires(), list):
             return 1 + max([task.stage_number for task in self.requires()])
-
-        # Add a new dict method here so that dicts can be handled
-        # The intermediate tasks can also be a list of task.
         elif isinstance(self.requires(), dict):
             parentasks = []
             for task in list(self.requires().values()):
@@ -112,339 +93,14 @@ class WorkTask(luigi.Task):
                     parentasks.append(task)
             return 1 + max([task.stage_number for task in parentasks])
         else:
-            raise ValueError("Unknown requires: %s" % self.requires())
-
-
-class DownloadCorpus(WorkTask):
-
-    url = luigi.Parameter()
-    outfile = luigi.Parameter()
-
-    def run(self):
-        download_file(self.url, os.path.join(self.workdir, self.outfile))
-        with self.output().open("w") as _:
-            pass
-
-    @property
-    def stage_number(self) -> int:
-        return 0
-
-
-class ExtractArchive(WorkTask):
-
-    infile = luigi.Parameter()
-    download = luigi.TaskParameter(
-        visibility=luigi.parameter.ParameterVisibility.PRIVATE
-    )
-    outdir = luigi.Parameter(default=None)
-
-    def requires(self):
-        return {"download": self.download}
-
-    def run(self):
-        corpus_zip = os.path.realpath(
-            os.path.join(self.requires()["download"].workdir, self.infile)
-        )
-        # If there are multiple ExtractArchive tasks then we optionally may want the
-        # extracted results to be placed into separate dirs within the main workdir.
-        output = self.workdir
-        if self.outdir is not None:
-            output = os.path.join(output, self.outdir)
-        shutil.unpack_archive(corpus_zip, output)
-
-        self.mark_complete()
-
-
-class SubsampleCorpus(WorkTask):
-    max_files = luigi.IntParameter()
-
-    def requires(self):
-        raise NotImplementedError("This method requires a meta tasks")
-
-    def get_metadata(self):
-        metadata = pd.read_csv(
-            os.path.join(
-                self.requires()["meta"].workdir, self.requires()["meta"].outfile
-            ),
-        )[["filename_hash", "slug", "relpath", "split"]]
-        # Since event detection metadata will have duplicates, we de-dup
-        # TODO: We might consider different choices of subset
-        metadata = metadata.sort_values(by="filename_hash").drop_duplicates(
-            subset="filename_hash", ignore_index=True
-        )
-        return metadata
-
-    def run(self):
-
-        process_metadata = self.get_metadata()
-        # Subsample the files based on max files per corpus.
-        # The filename hash is used here
-        # This task can also be done in ExtractMetadata as that will give
-        # freedom to stratify the selection on some criterion? That seems kinda
-        # fiddly, if we want fancy stratification we should discuss that
-        # separately.
-        num_files = len(process_metadata)
-        max_files = num_files if self.max_files is None else self.max_files
-        if num_files > max_files:
-            print(
-                f"{len(process_metadata)} audio files in corpus, \
-                    keeping only {max_files}"
-            )
-
-        # Sort by the filename hash and select the max file per corpus
-        # The filename hash is done as part of the ExtractMetadata
-        # because the string to be hashed for each file is dependent on the data
-        process_metadata = process_metadata.sort_values(by="filename_hash").iloc[
-            :max_files
-        ]
-
-        # Save file using symlinks
-        for _, audio in process_metadata.iterrows():
-            audiofile = Path(audio["relpath"])
-            newaudiofile = Path(os.path.join(self.workdir, audio["slug"]))
-            newaudiofile.unlink(missing_ok=True)
-            newaudiofile.symlink_to(audiofile.resolve())
-
-        self.mark_complete()
-
-
-class SubsampleSplit(SubsampleCorpus):
-    """
-    Performs subsampling on a specific split
-    """
-
-    split = luigi.Parameter()
-
-    def get_metadata(self):
-        metadata = super().get_metadata()
-        metadata = metadata[metadata["split"] == self.split]
-        return metadata
-
-
-class MonoWavTrimCorpus(WorkTask):
-    def requires(self):
-        raise NotImplementedError("This method requires a corpus tasks")
-
-    def run(self):
-        # TODO: this should check to see if the audio is already a mono wav at the
-        #   correct length and just create a symlink if that is this case.
-        for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*"))):
-
-            newaudiofile = new_basedir(
-                os.path.splitext(audiofile)[0] + ".wav", self.workdir
-            )
-            audio_util.mono_wav_and_fix_duration(
-                audiofile, newaudiofile, duration=self.data_config["sample_duration"]
-            )
-
-        self.mark_complete()
-
-
-class SplitTrainTestCorpus(WorkTask):
-    def requires(self):
-        raise NotImplementedError("This method requires a meta and a corpus tasks")
-
-    def run(self):
-        # Get the process metadata. This gives the freedom of picking the train test
-        # label either from the provide metadata file or any other method.
-
-        # Writing slug and split makes it explicit that these columns are required
-        meta = self.requires()["meta"]
-        process_metadata = pd.read_csv(
-            os.path.join(meta.workdir, meta.outfile),
-        )[["slug", "split"]]
-
-        # Go over the subsampled folder and pick the audio files. The audio files are
-        # saved with their slug names and hence the corresponding label can be picked
-        # up from the preprocess config
-        for audiofile in tqdm(list(glob(f"{self.requires()['corpus'].workdir}/*.wav"))):
-            audio_slug = os.path.basename(audiofile)
-            split = process_metadata.loc[
-                process_metadata["slug"] == audio_slug, "split"
-            ].values[0]
-            split_dir = f"{self.workdir}/{split}"
-            ensure_dir(split_dir)
-
-            newaudiofile = new_basedir(audiofile, split_dir)
-            os.symlink(os.path.realpath(audiofile), newaudiofile)
-        with self.output().open("w") as _:
-            pass
-
-
-class SplitTrainTestMetadata(WorkTask):
-    def requires(self):
-        raise NotImplementedError(
-            "This method requires a meta and a traintestcorpus task"
-        )
-
-    def get_metadata(self):
-        metadata = pd.read_csv(
-            os.path.join(
-                self.requires()["meta"].workdir, self.requires()["meta"].outfile
-            ),
-        )
-        return metadata
-
-    def run(self):
-        # Get the process metadata and select the required columns slug and label
-        labeldf = self.get_metadata()
-
-        # Automatically get the splits from the traintestcorpus task
-        # and then get the files there.
-        for split in os.listdir(self.requires()["traintestcorpus"].workdir):
-            audiofiles = list(
-                glob(
-                    os.path.join(
-                        self.requires()["traintestcorpus"].workdir,
-                        split,
-                        "*.wav",
-                    )
-                )
-            )
-            # Check if we got any file in the split
-            if len(audiofiles) == 0:
-                raise RuntimeError(
-                    "No audio files found in "
-                    f"{self.requires()['traintestcorpus'].workdir}/{split}"
-                )
-            # Get the filename which is also the slug of the file and the
-            # corresponding label can be picked up from the metadata
-            audiodf = pd.DataFrame(
-                [os.path.basename(a) for a in audiofiles], columns=["slug"]
-            )
-            assert len(audiofiles) == len(audiodf.drop_duplicates())
-
-            # Get the label from the metadata with the help of the slug of the filename
-            sublabeldf = labeldf.merge(audiodf, on="slug")
-
-            if self.data_config["task_type"] == "scene_labeling":
-                # Check if all the labels were found from the metadata
-                assert len(sublabeldf) == len(audiofiles)
-            elif self.data_config["task_type"] == "event_labeling":
-                # This won't work for sound event detection where there might be
-                # zero or more than one event per file
-                pass
-            else:
-                raise ValueError("Invalid task_type in task config")
-
-            # Save the slug and the label in as the split metadata
-            sublabeldf.to_csv(
-                os.path.join(self.workdir, f"{split}.csv"),
-                index=False,
-            )
-
-        with self.output().open("w") as _:
-            pass
-
-
-class MetadataVocabulary(WorkTask):
-    def requires(self):
-        raise NotImplementedError("This method requires a traintestmeta task")
-
-    def run(self):
-        labelset = set()
-        # Iterate over all the files in the traintestmeta and get the split_metadata
-        for split_metadata in os.listdir(self.requires()["traintestmeta"].workdir):
-            labeldf = pd.read_csv(
-                os.path.join(
-                    self.requires()["traintestmeta"].workdir,
-                    split_metadata,
-                ),
-            )
-            labelset = labelset | set(labeldf["label"].unique().tolist())
-
-        # Build the label idx csv and save it
-        labelcsv = pd.DataFrame(
-            [(label, idx) for (idx, label) in enumerate(sorted(list(labelset)))],
-            columns=["idx", "label"],
-        )
-
-        labelcsv.to_csv(
-            os.path.join(self.workdir, "labelvocabulary.csv"),
-            columns=["idx", "label"],
-            index=False,
-        )
-
-        with self.output().open("w") as _:
-            pass
-
-
-class ResampleSubCorpus(WorkTask):
-    sr = luigi.IntParameter()
-    split = luigi.Parameter()
-
-    def requires(self):
-        raise NotImplementedError("This method requires a traintestcorpus task")
-
-    def run(self):
-        # Check if the original directory exists and then move ahead to make the
-        # directory in the resample folder. This ensures val is not made if val is
-        # not there
-        original_dir = f"{self.requires()['traintestcorpus'].workdir}/{self.split}"
-        resample_dir = f"{self.workdir}/{self.sr}/{self.split}/"
-        if os.path.isdir(original_dir):
-            # The below command can run in parallel and might fail.
-            # This is because maybe the other resampling task has the directory
-            # while the current resampling task just checked for the directory.
-            # luigi_util.ensure_dir(resample_dir)
-
-            # This is more safe
-            os.makedirs(resample_dir, exist_ok=True)
-            for audiofile in tqdm(list(glob(f"{original_dir}/*.wav"))):
-                resampled_audiofile = new_basedir(audiofile, resample_dir)
-                audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
-
-        self.mark_complete()
-
-
-class FinalizeCorpus(WorkTask):
-    """
-    Create a final corpus, no longer in _workdir but in the top-level
-    at directory config.TASKNAME.
-    """
-
-    def requires(self):
-        raise NotImplementedError(
-            "This method requires a list of resample tasks "
-            "and a traintestmeta and vocabmeta task"
-        )
-
-    # We overwrite workdir here, because we want the output to be
-    # the finalized top-level task directory
-    @property
-    def workdir(self):
-        return os.path.join("tasks", self.versioned_task_name)
-
-    def run(self):
-        if os.path.exists(self.workdir):
-            shutil.rmtree(self.workdir)
-        # The workdirectory of the resample method is same so this would work
-        shutil.copytree(self.requires()["resample"][0].workdir, self.workdir)
-        shutil.copytree(
-            self.requires()["traintestmeta"].workdir,
-            self.workdir,
-            dirs_exist_ok=True,
-        )
-        shutil.copytree(
-            self.requires()["vocabmeta"].workdir,
-            self.workdir,
-            dirs_exist_ok=True,
-        )
-        # Save the task config as a json file
-        config_out = os.path.join(self.workdir, "task_metadata.json")
-        with open(config_out, "w") as fp:
-            json.dump(
-                self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
-            )
-
-        with self.output().open("w") as _:
-            pass
+            raise ValueError(f"Unknown requires: {self.requires()}")
 
 
 def download_file(url, local_filename):
     """
     The downside of this approach versus `wget -c` is that this
     code does not resume.
+
     The benefit is that we are sure if the download completely
     successfuly, otherwise we should have an exception.
     From: https://stackoverflow.com/a/16696317/82733
@@ -466,14 +122,11 @@ def download_file(url, local_filename):
     return local_filename
 
 
-def ensure_dir(dirname):
-    if not os.path.exists(dirname):
-        os.makedirs(dirname)
-
-
-def filename_to_int_hash(filename):
-    # Adapted from Google Speech Commands convention.
-    hash_name_hashed = hashlib.sha1(filename.encode("utf-8")).hexdigest()
+def filename_to_int_hash(text):
+    """
+    Returns the sha1 hash of the text passed in.
+    """
+    hash_name_hashed = hashlib.sha1(text.encode("utf-8")).hexdigest()
     return int(hash_name_hashed, 16)
 
 
@@ -482,7 +135,7 @@ def which_set(filename_hash, validation_percentage, testing_percentage):
     Code adapted from Google Speech Commands dataset.
 
     Determines which data split the file should belong to, based
-    upon the filename.
+    upon the filename int hash.
 
     We want to keep files in the same training, validation, or testing
     sets even if new ones are added over time. This makes it less
@@ -495,21 +148,16 @@ def which_set(filename_hash, validation_percentage, testing_percentage):
 
     Args:
       filename: File path of the data sample.
-            NOTE: Should be a relative path.
       validation_percentage: How much of the data set to use for validation.
       testing_percentage: How much of the data set to use for testing.
 
     Returns:
-      String, one of 'train', 'val', or 'test'.
+      String, one of 'train', 'valid', or 'test'.
     """
-    # Change below line to accept the hash directly as the hash
-    # is data dependent on which files do we need to consider as a
-    # group. For example we might want to keep audio by one speaker
-    # in the test or train rather than distributing them.
 
     percentage_hash = filename_hash % 100
     if percentage_hash < validation_percentage:
-        result = "val"
+        result = "valid"
     elif percentage_hash < (testing_percentage + validation_percentage):
         result = "test"
     else:
