@@ -236,8 +236,8 @@ def task_embeddings(embedding: Embedding, task_path: Path):
     # prediction and evaluation.
     if not os.path.exists(embed_dir):
         os.makedirs(embed_dir)
-    shutil.copyfile(metadata_path, embed_dir)
-    shutil.copyfile(label_vocab_path, embed_dir)
+    shutil.copy(metadata_path, embed_dir)
+    shutil.copy(label_vocab_path, embed_dir)
 
     for split in metadata["splits"]:
         print(f"Getting embeddings for split: {split['name']}")
