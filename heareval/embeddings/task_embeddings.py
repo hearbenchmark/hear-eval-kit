@@ -21,152 +21,185 @@ TODO:
     have this work both for pytorch and tensorflow.
     https://github.com/neuralaudio/hear2021-eval-kit/issues/49
 """
-
-import glob
 import json
 import os.path
+from pathlib import Path
 from importlib import import_module
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Tuple, Union
 
 import numpy as np
-import pandas as pd
 import soundfile as sf
+import tensorflow as tf
 import torch
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-# This could instead be something from the participants
-# TODO: Command line or config?
-EMBEDDING_PIP = "hearbaseline"
-EMBEDDING_MODEL_PATH = ""  # Baseline doesn't load model
-# TODO: Actually load baseline model
+TORCH = "torch"
+TENSORFLOW = "tf"
 
-# TODO: Support for multiple GPUs?
-device = "cuda" if torch.cuda.is_available() else "cpu"
 
-EMBED = import_module(EMBEDDING_PIP)
+class Embedding:
+    def __init__(self, module_name: str, model_path: str = None):
+        print(f"Importing {module_name}")
+        self.module = import_module(module_name)
+
+        # Load the model using the model weights path if they were provided
+        if model_path is not None:
+            print(f"Loading model using: {model_path}")
+            self.model = self.module.load_model(model_path)
+        else:
+            self.model = self.module.load_model()
+
+        # Check to see what type of model this is: torch or tensorflow
+        if isinstance(self.model, torch.nn.Module):
+            self.type = TORCH
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.model.to(self.device)
+        elif isinstance(self.model, tf.Module):
+            self.type = TENSORFLOW
+            raise NotImplementedError("TensorFlow embeddings not supported yet.")
+        else:
+            raise TypeError(f"Unsupported model type received: {type(self.model)}")
+
+    @property
+    def name(self):
+        return self.module.__name__
+
+    @property
+    def sample_rate(self):
+        return self.model.sample_rate
+
+    def as_tensor(self, x: Union[np.ndarray, torch.Tensor]):
+        if self.type == TORCH:
+            # Load array as tensor onto device
+            if isinstance(x, np.ndarray):
+                x = torch.tensor(x, device=self.device)
+            elif isinstance(x, torch.Tensor):
+                x = x.to(self.device)
+            else:
+                raise TypeError(
+                    "Input must be one of np.ndarray or torch.Tensor for"
+                    f"torch audio embedding models. "
+                    f"Received: {type(x)}"
+                )
+
+        elif self.type == TENSORFLOW:
+            NotImplementedError("TensorFlow not implemented yet")
+        else:
+            raise AssertionError("Unknown type")
+
+        return x
+
+    def get_scene_embedding_as_numpy(
+        self, audio: Union[np.ndarray, torch.Tensor]
+    ) -> np.ndarray:
+        audio = self.as_tensor(audio)
+        if self.type == TORCH:
+            embeddings = self.module.get_scene_embeddings(audio, self.model)
+            return embeddings.detach().cpu().numpy()
+        else:
+            raise NotImplementedError("Not implemented for TF")
+
+    def get_event_embedding_as_numpy(
+        self, audio: Union[np.ndarray, torch.Tensor]
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        audio = self.as_tensor(audio)
+        if self.type == TORCH:
+            embeddings, timestamps = self.module.get_event_embeddings(audio, self.model)
+            embeddings = embeddings.detach().cpu().numpy()
+            timestamps = timestamps.detach().cpu().numpy()
+            return embeddings, timestamps
+        else:
+            raise NotImplementedError("Not implemented for TF")
 
 
 class AudioFileDataset(Dataset):
     """
-    Read in a CSV file, and return audio filenames.
+    Read in a JSON file and return audio filenames and labels
     """
 
-    def __init__(self, csv_file):
-        self.rows = pd.read_csv(csv_file)
-        # Since event detection metadata will have duplicates, we de-dup
-        # TODO: This suggests we might want to, instead of using CSV files,
-        # have a JSONL for metadata, with one file per line.
-        # Then there can be timestamp: list[labels].
-        # TODO: Make this a generic util function somewhere?
-        # TODO: Is this the right column to dedup on ???
-        self.rows = self.rows.sort_values(by="slug").drop_duplicates(
-            subset="slug", ignore_index=True
-        )
+    def __init__(self, json_file: Path, audio_dir: Path, sample_rate: int):
+        self.data = json.load(json_file.open())
+        self.keys = list(self.data.keys())
+        self.audio_dir = audio_dir
+        assert self.audio_dir.is_dir()
+        self.sample_rate = sample_rate
 
     def __len__(self):
-        return len(self.rows)
+        return len(self.data)
 
     def __getitem__(self, idx):
-        r = self.rows.iloc[idx]
-        return r["slug"]
+        # Load in audio here in the Dataset. When the batch size is larger than
+        # 1 then the torch dataloader can take advantage of multiprocessing.
+        audio_path = self.audio_dir.joinpath(self.keys[idx])
+        audio, sr = sf.read(audio_path, dtype=np.float32)
+        assert sr == self.sample_rate
+        return audio, self.data[self.keys[idx]]["label"], self.keys[idx]
 
 
-# High-level wrapper on the basic API that we might
-# consider sharing among all participants.
-def get_audio_embedding_numpy(
-    audio_numpy: np.ndarray,
-    model: Any,
-    task_type: str,
-) -> Tuple[Dict[int, np.ndarray], Optional[np.ndarray]]:
-    if task_type == "scene_labeling":
-        embeddings = EMBED.get_scene_embeddings(  # type: ignore
-            torch.tensor(audio_numpy, device=device),
-            model=model,
+def get_dataloader_for_embedding(
+    data_path: Path, audio_dir: Path, embedding: Embedding, batch_size: int = 64
+):
+    if embedding.type == TORCH:
+        return DataLoader(
+            AudioFileDataset(data_path, audio_dir, embedding.sample_rate),
+            batch_size=batch_size,
+            shuffle=True,
         )
-        embeddings = embeddings.detach().cpu().numpy()
-        return embeddings, None
-    elif task_type == "event_labeling":
-        embeddings, timestamps = EMBED.get_timestamp_embeddings(  # type: ignore
-            torch.tensor(audio_numpy, device=device),
-            model=model,
-        )
-        embeddings = embeddings.detach().cpu().numpy()
-        timestamps = timestamps.detach().cpu().numpy()
-        # TODO: Turn this into a validator test
-        # What we really want is embeddings.shape[:2] == (batch_size, # timestamps) AND
-        # timestamps.shape[:2] == (batch_size, # timestamps)
-        assert len(embeddings) == len(
-            timestamps
-        ), f"{len(embeddings), embeddings.shape} != {len(timestamps)}"
-        return embeddings, timestamps
+
+    elif embedding.type == TENSORFLOW:
+        raise NotImplementedError
+
     else:
-        raise ValueError(f"Unknown task_type = {task_type}")
+        raise AssertionError("Unknown embedding type")
 
 
-def task_embeddings():
-    model = EMBED.load_model(EMBEDDING_MODEL_PATH)
+def save_scene_embedding_and_label(
+    embeddings: np.ndarray, labels: Any, filename: Tuple, outdir: Path
+):
+    for i, file in enumerate(filename):
+        out_file = outdir.joinpath(f"{file}")
+        np.save(f"{out_file}.embedding.npy", embeddings[i])
+        np.save(f"{out_file}.label.npy", labels[i])
+
+
+def task_embeddings(embedding: Embedding, task_path: Path):
+
+    metadata = json.load(task_path.joinpath("task_metadata.json").open())
+    task_type = metadata["task_type"]
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
-    embeddir = os.path.join("embeddings", EMBED.__name__)  # type: ignore
-    embed_sr = model.sample_rate
+    embed_dir = Path("embeddings").joinpath(embedding.name)
 
-    # TODO: tqdm with task name
-    for task in glob.glob("tasks/*"):
-        print(f"Task {task}")
-        task_config = json.loads(open(os.path.join(task, "task_metadata.json")).read())
-        for split in ["train", "valid", "test"]:
-            print(f"Getting embeddings for {split} split:")
+    for split in metadata["splits"]:
+        print(f"Getting embeddings for split: {split['name']}")
 
-            metadata_csv = os.path.join(task, f"{split}.csv")
-            if not os.path.exists(metadata_csv):
-                continue
+        split_path = task_path.joinpath(f"{split['name']}.json")
+        assert split_path.is_file()
 
-            # TODO: We might consider skipping files that already
-            # have embeddings on disk, for speed
-            # TODO: Choose batch size based upon audio file size?
-            # Or assume that the API is smart enough to do this?
-            # How do we test for memory blow up etc?
-            # e.g. that it won't explode on 10 minute audio
-            dataloader = DataLoader(
-                AudioFileDataset(metadata_csv),
-                batch_size=1,  # batch_size=64,
-                shuffle=True,
-            )
-            outdir = os.path.join(embeddir, task, split)
-            if not os.path.exists(outdir):
-                os.makedirs(outdir)
-            for batch in tqdm(dataloader):
-                files = batch
-                audios = []
-                for f in files:
-                    x, sr = sf.read(
-                        os.path.join(task, str(embed_sr), split, f), dtype=np.float32
-                    )
-                    assert sr == embed_sr
-                    audios.append(x)
+        # Root directory for audio files for this split
+        audio_dir = task_path.joinpath(str(embedding.sample_rate), split["name"])
 
-                audios = np.vstack(audios)
-                task_type = task_config["task_type"]
-                embeddings, timestamps = get_audio_embedding_numpy(
-                    audios, model=model, task_type=task_type
-                )
-                assert len(files) == embeddings.shape[0]
-                for i, filename in enumerate(files):
-                    if timestamps is not None:
-                        assert task_type in ["event_labeling"]
-                        np.save(
-                            os.path.join(outdir, f"{filename}.embedding.npy"),
-                            (embeddings[i], timestamps[i]),
-                        )
-                    else:
-                        assert task_type in ["scene_labeling"]
-                        np.save(
-                            os.path.join(outdir, f"{filename}.embedding.npy"),
-                            embeddings[i],
-                        )
+        # TODO: We might consider skipping files that already
+        # have embeddings on disk, for speed
+        # TODO: Choose batch size based upon audio file size?
+        # Or assume that the API is smart enough to do this?
+        # How do we test for memory blow up etc?
+        # e.g. that it won't explode on 10 minute audio
+        dataloader = get_dataloader_for_embedding(split_path, audio_dir, embedding, 4)
 
+        outdir = embed_dir.joinpath(task_path.name, split["name"])
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
 
-if __name__ == "__main__":
-    task_embeddings()
+        for audio, label, filename in tqdm(dataloader):
+            if metadata["task_type"] == "scene_labeling":
+                embeddings = embedding.get_scene_embedding_as_numpy(audio)
+                save_scene_embedding_and_label(embeddings, label, filename, outdir)
+
+            elif metadata["task_type"] == "event_labeling":
+                embeddings, timestamps = embedding.get_event_embedding_as_numpy(audio)
+
+            else:
+                raise ValueError(f"Unknown task type: {metadata['task_type']}")
