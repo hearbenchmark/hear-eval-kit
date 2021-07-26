@@ -7,33 +7,20 @@ import os
 from dataclasses import dataclass
 from typing import Any, List, Union
 
-from omegaconf import DictConfig, OmegaConf
-import hydra
-from hydra.utils import get_original_cwd
-from hydra.core.config_store import ConfigStore
+import click
 
 
-@dataclass
-class EmbeddingConfig:
-    module: Any
-
-
-cs = ConfigStore.instance()
-cs.store(name="config", node=EmbeddingConfig)
-
-
-@hydra.main(config_path=None, config_name="config")
-def runner(cfg) -> None:
-
-    print(get_original_cwd())
-    if hasattr(cfg, "config"):
-        override_path = hydra.utils.to_absolute_path(cfg.config)
-        if os.path.isfile(override_path):
-            override_conf = OmegaConf.load(override_path)
-            cfg = OmegaConf.merge(cfg, override_conf)
-
-    print(OmegaConf.to_yaml(cfg))
-    print(cfg.module)
+@click.command()
+@click.argument("module", type=str)
+@click.option(
+    "--model",
+    default=None,
+    help="Location of model weights file.",
+    type=click.Path(exists=True),
+)
+def runner(module: str, model: str) -> None:
+    print(module)
+    print(type(model))
 
 
 if __name__ == "__main__":
