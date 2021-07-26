@@ -176,7 +176,8 @@ def save_scene_embedding_and_label(
     for i, file in enumerate(filename):
         out_file = outdir.joinpath(f"{file}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
-        np.save(f"{out_file}.target-label.npy", labels[i]["label"])
+        with open(f"{out_file}.target-label.json", "w") as fp:
+            json.dump(labels[i], fp, indent=True)
 
 
 def save_timestamp_embedding_and_label(
