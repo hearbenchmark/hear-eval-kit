@@ -722,7 +722,11 @@ class FinalizeCorpus(WorkTask):
         shutil.copytree(self.requires()["resample"].workdir, self.workdir)
 
         # Copy the stats
-        shutil.copytree(self.requires()["stats"].workdir, self.workdir, dirs_exist_ok=True,)
+        shutil.copytree(
+            self.requires()["stats"].workdir, 
+            self.workdir, 
+            dirs_exist_ok=True,
+        )
 
         # Copy the traintestmetadata
         shutil.copytree(
