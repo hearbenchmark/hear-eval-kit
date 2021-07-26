@@ -20,18 +20,19 @@ from heareval.embeddings.task_embeddings import Embedding, task_embeddings
 )
 @click.option(
     "--tasks-dir",
-    default=None,
+    default="tasks",
     help="Location of tasks to compute embeddings on",
-    type=click.Path(exists=True),
+    type=str,
 )
-def runner(module: str, model: str = None, tasks_dir: str = None) -> None:
+def runner(module: str, model: str = None, tasks_dir: str = "tasks") -> None:
 
     # Check for directory containing the tasks
-    tasks_dir = Path("tasks") if tasks_dir is None else Path(tasks_dir)
+    tasks_dir = Path(tasks_dir)
     if not tasks_dir.is_dir():
         raise ValueError(
             "Cannot locate directory containing tasks. "
-            f"Ensure that directory named {tasks_dir} exists."
+            f"Ensure that directory named {tasks_dir} exists or specify a folder "
+            f"containing HEAR tasks using the argument --tasks-dir"
         )
 
     # Load the embedding model
