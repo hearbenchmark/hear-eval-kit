@@ -29,7 +29,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple, Union
 
 import numpy as np
-import pandas as pd
 import soundfile as sf
 import tensorflow as tf
 import torch
