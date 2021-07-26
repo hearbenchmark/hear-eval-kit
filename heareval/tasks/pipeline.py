@@ -2,7 +2,6 @@
 Generic pipelines for datasets
 """
 
-
 import os
 import json
 import shutil
@@ -13,16 +12,16 @@ from typing import Dict, List, Union
 import luigi
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
 from slugify import slugify
+from tqdm import tqdm
 
+import heareval.tasks.util.audio as audio_util
 from heareval.tasks.util.luigi import (
     WorkTask,
     download_file,
     filename_to_int_hash,
     new_basedir,
 )
-import heareval.tasks.util.audio as audio_util
 
 
 class DownloadCorpus(WorkTask):
@@ -198,16 +197,18 @@ class ExtractMetadata(WorkTask):
     def run(self):
         process_metadata = self.get_process_metadata()
 
-        if self.data_config["task_type"] == "event_labeling":
+        if self.data_config["embedding_type"] == "event":
             assert set(
                 ["relpath", "slug", "subsample_key", "split", "label", "start", "end"]
             ).issubset(set(process_metadata.columns))
-        elif self.data_config["task_type"] == "scene_labeling":
+        elif self.data_config["embedding_type"] == "scene":
             assert set(["relpath", "slug", "subsample_key", "split", "label"]).issubset(
                 set(process_metadata.columns)
             )
         else:
-            raise ValueError("%s task_type unknown" % self.data_config["task_type"])
+            raise ValueError(
+                "%s embedding_type unknown" % self.data_config["embedding_type"]
+            )
 
         process_metadata.to_csv(
             self.workdir.joinpath(self.outfile),
@@ -265,9 +266,7 @@ class SubsampleSplit(WorkTask):
         num_files = len(metadata)
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
-            print(
-                f"{len(str(num_files))} audio files in corpus, keeping only {max_files}"
-            )
+            print(f"{num_files} audio files in corpus, keeping only {max_files}")
 
         # Sort by the subsample key and select the max_files number of samples
         metadata = metadata.sort_values(by="subsample_key").iloc[:max_files]
@@ -442,8 +441,8 @@ class SplitTrainTestMetadata(WorkTask):
                 .drop("ext", axis=1)
             )
 
-            if self.data_config["task_type"] == "scene_labeling":
-                # For scene labeling each scene should have one label
+            if self.data_config["embedding_type"] == "scene":
+                # For scene labeling each scene should have one
                 assert len(audiolabel_df) == len(audiodf)
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label"]]
@@ -451,7 +450,7 @@ class SplitTrainTestMetadata(WorkTask):
                     .to_dict("index")
                 )
 
-            elif self.data_config["task_type"] == "event_labeling":
+            elif self.data_config["embedding_type"] == "event":
                 # For event labeling each file will have a list of labels
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label", "start", "end"]]
@@ -461,7 +460,7 @@ class SplitTrainTestMetadata(WorkTask):
                     .to_dict()
                 )
             else:
-                raise ValueError("Invalid task_type in dataset config")
+                raise ValueError("Invalid embedding_type in dataset config")
 
             # Save the json used for training purpose
             json.dump(
@@ -509,7 +508,7 @@ class MetadataVocabulary(WorkTask):
 
         # Build the label idx csv and save it
         labelcsv = pd.DataFrame(
-            [(label, idx) for (idx, label) in enumerate(sorted(list(labelset)))],
+            [(idx, label) for (idx, label) in enumerate(sorted(list(labelset)))],
             columns=["idx", "label"],
         )
 
@@ -739,7 +738,7 @@ class FinalizeCorpus(WorkTask):
             dirs_exist_ok=True,
         )
         # Save the dataset config as a json file
-        config_out = self.workdir.joinpath("dataset_metadata.json")
+        config_out = self.workdir.joinpath("task_metadata.json")
         with open(config_out, "w") as fp:
             json.dump(
                 self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
