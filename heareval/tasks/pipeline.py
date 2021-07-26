@@ -196,16 +196,18 @@ class ExtractMetadata(WorkTask):
     def run(self):
         process_metadata = self.get_process_metadata()
 
-        if self.data_config["task_type"] == "event_labeling":
+        if self.data_config["embedding_type"] == "event":
             assert set(
                 ["relpath", "slug", "subsample_key", "split", "label", "start", "end"]
             ).issubset(set(process_metadata.columns))
-        elif self.data_config["task_type"] == "scene_labeling":
+        elif self.data_config["embedding_type"] == "scene":
             assert set(["relpath", "slug", "subsample_key", "split", "label"]).issubset(
                 set(process_metadata.columns)
             )
         else:
-            raise ValueError("%s task_type unknown" % self.data_config["task_type"])
+            raise ValueError(
+                "%s embedding_type unknown" % self.data_config["embedding_type"]
+            )
 
         process_metadata.to_csv(
             self.workdir.joinpath(self.outfile),
@@ -438,8 +440,8 @@ class SplitTrainTestMetadata(WorkTask):
                 .drop("ext", axis=1)
             )
 
-            if self.data_config["task_type"] == "scene_labeling":
-                # For scene labeling each scene should have one label
+            if self.data_config["embedding_type"] == "scene":
+                # For scene labeling each scene should have one
                 assert len(audiolabel_df) == len(audiodf)
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label"]]
@@ -447,7 +449,7 @@ class SplitTrainTestMetadata(WorkTask):
                     .to_dict("index")
                 )
 
-            elif self.data_config["task_type"] == "event_labeling":
+            elif self.data_config["embedding_type"] == "event":
                 # For event labeling each file will have a list of labels
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label", "start", "end"]]
@@ -457,7 +459,7 @@ class SplitTrainTestMetadata(WorkTask):
                     .to_dict()
                 )
             else:
-                raise ValueError("Invalid task_type in dataset config")
+                raise ValueError("Invalid embedding_type in dataset config")
 
             # Save the json used for training purpose
             json.dump(
