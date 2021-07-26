@@ -263,7 +263,7 @@ class SubsampleSplit(WorkTask):
         num_files = len(metadata)
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
-            print(f"{len(num_files)} audio files in corpus, keeping only {max_files}")
+            print(f"{num_files} audio files in corpus, keeping only {max_files}")
 
         # Sort by the subsample key and select the max_files number of samples
         metadata = metadata.sort_values(by="subsample_key").iloc[:max_files]
