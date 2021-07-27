@@ -3,7 +3,10 @@ Audio utility functions for evaluation task preparation
 """
 
 import os
+import json
 import subprocess
+import numpy as np
+from collections import Counter
 
 import soundfile as sf
 
@@ -73,10 +76,37 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
     assert ret == 0
 
 
-def get_audiostats(in_file: str):
+def audio_stats_wav(in_file: str):
+    """Get statistics for a single wav file"""
     audio = sf.SoundFile(in_file)
     return {
         "samples": len(audio),
         "sample_rate": audio.samplerate,
         "duration": round(len(audio) / audio.samplerate, 2),
     }
+
+
+def audio_dir_stats_wav(in_dir: str, out_file: str):
+    """Produce summary by recursively searching a directory for wav files"""
+
+    audio_paths = list(in_dir.absolute().rglob("*.wav"))
+    audio_dir_stats = list(map(audio_stats_wav, audio_paths))
+
+    durations = [stats["duration"] for stats in audio_dir_stats]
+    unique_sample_rates = dict(
+        Counter([stats["sample_rate"] for stats in audio_dir_stats])
+    )
+
+    stats = {
+        "audio_count": len(durations),
+        "audio_samplerate_count": unique_sample_rates,
+        "audio_mean_dur(sec)": np.mean(durations),
+        "audio_median_dur(sec)": np.median(durations),
+    }
+    stats.update(
+        {
+            f"{str(p)}th percentile dur(sec)": np.percentile(durations, p)
+            for p in [10, 25, 75, 90]
+        }
+    )
+    json.dump(stats, open(out_file, "w"), indent=True)
