@@ -33,11 +33,11 @@ from heareval.predictions.task_predictions import task_predictions
 def runner(
     module: str, embeddings_dir: str = "embeddings", model: Optional[str] = None
 ) -> None:
-    embeddings_dir = Path(embeddings_dir).joinpath(module)
-    if not embeddings_dir.is_dir():
+    embeddings_dir_path = Path(embeddings_dir).joinpath(module)
+    if not embeddings_dir_path.is_dir():
         raise ValueError(
             "Cannot locate directory containing embeddings. "
-            f"Ensure that directory named {embeddings_dir} exists."
+            f"Ensure that directory named {embeddings_dir_path} exists."
         )
 
     # We only load this to get the embedding sizes.
@@ -53,7 +53,7 @@ def runner(
     scene_embedding_size = model_obj.scene_embedding_size
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
-    tasks = list(embeddings_dir.iterdir())
+    tasks = list(embeddings_dir_path.iterdir())
     for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
         task_predictions(task_path, scene_embedding_size, timestamp_embedding_size)
