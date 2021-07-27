@@ -7,6 +7,7 @@ import json
 import subprocess
 import numpy as np
 from pathlib import Path
+from typing import Union
 from collections import Counter
 
 import soundfile as sf
@@ -77,7 +78,7 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
     assert ret == 0
 
 
-def audio_stats_wav(in_file: str):
+def audio_stats_wav(in_file: Union[str, Path]):
     """Get statistics for a single wav file"""
     audio = sf.SoundFile(in_file)
     return {
@@ -87,7 +88,7 @@ def audio_stats_wav(in_file: str):
     }
 
 
-def audio_dir_stats_wav(in_dir: str, out_file: str):
+def audio_dir_stats_wav(in_dir: Union[str, Path], out_file: str):
     """Produce summary by recursively searching a directory for wav files"""
 
     audio_paths = list(Path(in_dir).absolute().rglob("*.wav"))
