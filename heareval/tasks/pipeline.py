@@ -10,7 +10,6 @@ from urllib.parse import urlparse
 from typing import Dict, List, Union
 
 import luigi
-import numpy as np
 import pandas as pd
 from slugify import slugify
 from tqdm import tqdm
