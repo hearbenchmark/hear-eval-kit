@@ -10,7 +10,6 @@ from pathlib import Path
 
 import luigi
 import requests
-from tqdm import tqdm
 from tqdm.auto import tqdm
 
 

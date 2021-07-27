@@ -24,17 +24,17 @@ config = {
     "download_urls": [
         {
             "name": "train",
-            "url": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",
+            "url": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-train.jsonwav.tar.gz",  # noqa: E501
             "md5": "fde6665a93865503ba598b9fac388660",
         },
         {
             "name": "valid",
-            "url": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",
+            "url": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-valid.jsonwav.tar.gz",  # noqa: E501
             "md5": "87e94a00a19b6dbc99cf6d4c0c0cae87",
         },
         {
             "name": "test",
-            "url": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",
+            "url": "http://download.magenta.tensorflow.org/datasets/nsynth/nsynth-test.jsonwav.tar.gz",  # noqa: E501
             "md5": "5e6f8719bf7e16ad0a00d518b78af77d",
         },
     ],

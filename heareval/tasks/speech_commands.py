@@ -30,12 +30,12 @@ config = {
     "download_urls": [
         {
             "name": "train",
-            "url": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",
+            "url": "http://download.tensorflow.org/data/speech_commands_v0.02.tar.gz",  # noqa: E501
             "md5": "6b74f3901214cb2c2934e98196829835",
         },
         {
             "name": "test",
-            "url": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",
+            "url": "http://download.tensorflow.org/data/speech_commands_test_set_v0.02.tar.gz",  # noqa: E501
             "md5": "854c580ee90bff80c516491c84544e32",
         },
     ],
