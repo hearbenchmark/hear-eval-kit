@@ -76,6 +76,10 @@ class ExtractArchive(WorkTask):
         if self.outdir is not None:
             output_path = output_path.joinpath(self.outdir)
         shutil.unpack_archive(archive_path, output_path)
+        audio_util.audio_dir_stats_wav(
+            in_dir=output_path,
+            out_file=self.workdir.joinpath(f"{self.outdir}_stats.json"),
+        )
 
         self.mark_complete()
 
@@ -554,6 +558,12 @@ class ResampleSubCorpus(WorkTask):
             resampled_audiofile = new_basedir(audiofile, resample_dir)
             audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
 
+        audio_util.audio_dir_stats_wav(
+            in_dir=resample_dir,
+            out_file=self.workdir.joinpath(str(self.sr)).joinpath(
+                f"{self.split}_stats.json"
+            ),
+        )
         self.mark_complete()
 
 
