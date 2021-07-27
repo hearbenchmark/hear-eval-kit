@@ -4,11 +4,14 @@ Common Luigi classes and functions for evaluation tasks
 
 import hashlib
 import os
+import os.path
+from functools import partial
 from pathlib import Path
 
 import luigi
 import requests
 from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 class WorkTask(luigi.Task):
@@ -96,7 +99,7 @@ class WorkTask(luigi.Task):
             raise ValueError(f"Unknown requires: {self.requires()}")
 
 
-def download_file(url, local_filename):
+def download_file(url, local_filename, expected_md5):
     """
     The downside of this approach versus `wget -c` is that this
     code does not resume.
@@ -118,7 +121,7 @@ def download_file(url, local_filename):
                 f.write(chunk)
                 pbar.update(chunk_size)
             pbar.close()
-
+    assert md5sum(local_filename) == expected_md5
     return local_filename
 
 
@@ -170,3 +173,13 @@ def new_basedir(filename, basedir):
     Rewrite .../filename as basedir/filename
     """
     return os.path.join(basedir, os.path.split(filename)[1])
+
+
+def md5sum(filename):
+    with open(filename, mode="rb") as f:
+        with tqdm(total=os.path.getsize(filename)) as pbar:
+            d = hashlib.md5()
+            for buf in iter(partial(f.read, 32768), b""):
+                d.update(buf)
+                pbar.update(32768)
+    return d.hexdigest()

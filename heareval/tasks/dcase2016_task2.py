@@ -26,10 +26,18 @@ config = {
     "version": "hear2021",
     "embedding_type": "event",
     "prediction_type": "multilabel",
-    "download_urls": {
-        "train": "https://archive.org/download/dcase2016_task2_train_dev/dcase2016_task2_train_dev.zip",  # noqa: E501
-        "test": "https://archive.org/download/dcase2016_task2_test_public/dcase2016_task2_test_public.zip",  # noqa: E501
-    },
+    "download_urls": [
+        {
+            "name": "train",
+            "url": "https://archive.org/download/dcase2016_task2_train_dev/dcase2016_task2_train_dev.zip",
+            "md5": "4e1b5e8887159193e8624dec801eb9e7",
+        },
+        {
+            "name": "test",
+            "url": "https://archive.org/download/dcase2016_task2_test_public/dcase2016_task2_test_public.zip",
+            "md5": "ac98768b39a08fc0c6c2ddd15a981dd7",
+        },
+    ],
     # TODO: FIXME
     # Want different for train and test?
     "sample_duration": 120.0,
