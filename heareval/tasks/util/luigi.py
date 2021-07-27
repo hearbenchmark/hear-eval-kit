@@ -176,6 +176,9 @@ def new_basedir(filename, basedir):
 
 
 def md5sum(filename):
+    """
+    NOTE: Identical hash value as running md5sum from the command-line.
+    """
     with open(filename, mode="rb") as f:
         with tqdm(total=os.path.getsize(filename)) as pbar:
             d = hashlib.md5()
