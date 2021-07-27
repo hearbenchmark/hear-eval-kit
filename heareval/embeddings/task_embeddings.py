@@ -204,16 +204,13 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
     # A list of labels present at each timestamp
     timestamp_labels = []
 
-    # TODO: make sure we are saving the labels in the correct units.
-    #   dcase gives units in seconds whereas the timestamps from the API
-    #   are in millseconds. Make sure dataset events are specified in ms.
+    # NOTE: Make sure dataset events are specified in ms.
     assert len(labels) == len(timestamps)
     for i, label in enumerate(labels):
         tree = IntervalTree()
         # Add all events to the label tree
         for event in label:
-            # FIXME: Remove conversion to ms
-            tree.addi(1000 * event["start"], 1000 * event["end"], event["label"])
+            tree.addi(event["start"], event["end"], event["label"])
 
         labels_for_sound = []
         # Update the binary vector of labels with intervals for each timestamp
