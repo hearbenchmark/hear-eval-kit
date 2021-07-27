@@ -65,7 +65,9 @@ class SplitMemmapDataset(Dataset):
             mode="r",
             shape=self.dim,
         )
-        # self.labels = pickle.load(open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb"))
+        # self.labels = pickle.load(
+        #     open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
+        # )
         # assert len(self.labels) == dim[0]
 
     def __len__(self):
