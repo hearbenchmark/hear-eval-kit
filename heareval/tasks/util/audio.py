@@ -6,6 +6,7 @@ import os
 import json
 import subprocess
 import numpy as np
+from pathlib import Path
 from collections import Counter
 
 import soundfile as sf
@@ -63,8 +64,8 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
             "-y",
             "-i",
             in_file,
-            "-af",
-            "aresample=resampler=soxr",
+            # "-af",
+            # "aresample=resampler=soxr",
             "-ar",
             str(out_sr),
             out_file,
@@ -89,7 +90,7 @@ def audio_stats_wav(in_file: str):
 def audio_dir_stats_wav(in_dir: str, out_file: str):
     """Produce summary by recursively searching a directory for wav files"""
 
-    audio_paths = list(in_dir.absolute().rglob("*.wav"))
+    audio_paths = list(Path(in_dir).absolute().rglob("*.wav"))
     audio_dir_stats = list(map(audio_stats_wav, audio_paths))
 
     durations = [stats["duration"] for stats in audio_dir_stats]
