@@ -340,7 +340,7 @@ class MonoWavTrimCorpus(WorkTask):
     def run(self):
         # TODO: this should check to see if the audio is already a mono wav at the
         #   correct length and just create a symlink if that is this case.
-        for audiofile in tqdm(self.requires()["corpus"].workdir.iterdir()):
+        for audiofile in tqdm(list(self.requires()["corpus"].workdir.iterdir())):
             newaudiofile = self.workdir.joinpath(f"{audiofile.stem}.wav")
             audio_util.mono_wav_and_fix_duration(
                 audiofile, newaudiofile, duration=self.data_config["sample_duration"]
@@ -441,12 +441,20 @@ class SplitTrainTestMetadata(WorkTask):
             )
 
             if self.data_config["embedding_type"] == "scene":
-                # For scene labeling each scene should have one
-                assert len(audiolabel_df) == len(audiodf)
+                # For scene labeling each scene has a list of labels. For multiclass
+                # predictions, the list will contain exactly one label, for multilabel
+                # the list will can zero or more labels.
+                # TODO: not sure how we do multilabel when there are zero labels.
+                if self.data_config["prediction_type"] == "multiclass":
+                    # For multiclass there should be exactly one audio file per label
+                    assert len(audiolabel_df) == len(audiodf)
+
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label"]]
                     .set_index("slug_path")
-                    .to_dict("index")
+                    .groupby(level=0)
+                    .apply(lambda group: group.to_dict(orient="list"))
+                    .to_dict()
                 )
 
             elif self.data_config["embedding_type"] == "event":
