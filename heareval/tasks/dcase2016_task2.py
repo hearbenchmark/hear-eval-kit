@@ -72,6 +72,9 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             metadata = pd.read_csv(
                 annotation_file, sep="\t", header=None, names=["start", "end", "label"]
             )
+            # Convert start and end times to milliseconds
+            metadata["start"] *= 1000
+            metadata["end"] *= 1000
             sound_file = (
                 str(annotation_file)
                 .replace("annotation", "sound")
