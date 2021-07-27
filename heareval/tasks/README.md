@@ -42,7 +42,7 @@ filename, list of string labels
 
 For frame-based temporal multilabel (e.g. transcription and sound event detection):
 ```
-filename, float timestamp in seconds, list of string labels
+filename, float timestamp in milliseconds, list of string labels
 ```
 
 For ranking tasks:
