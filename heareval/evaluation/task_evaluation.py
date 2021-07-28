@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 Compute evaluation metrics on a set of predictions for a task.
+
+TODO: This is a start on this file. Still need to add a bunch of metrics for the tasks
+    including AUC, chroma error for NSYnth pitch, and event-based metrics for DCASE.
+    Would it make sense to move all the metric functions over to a file called metrics?
 """
 
 import json

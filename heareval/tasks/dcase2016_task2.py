@@ -37,6 +37,8 @@ config = {
         {"name": "train", "max_files": 10},
         {"name": "test", "max_files": 10},
     ],
+    # TODO: Add metrics
+    "evaluation": [],
 }
 
 
