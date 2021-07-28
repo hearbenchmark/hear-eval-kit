@@ -5,10 +5,12 @@ Audio utility functions for evaluation task preparation
 import os
 import json
 import subprocess
-import numpy as np
 from pathlib import Path
-from typing import Union
+from typing import Tuple, Union
 from collections import Counter
+
+import numpy as np
+from tqdm import tqdm
 
 import soundfile as sf
 
@@ -84,15 +86,28 @@ def audio_stats_wav(in_file: Union[str, Path]):
     return {
         "samples": len(audio),
         "sample_rate": audio.samplerate,
-        "duration": round(len(audio) / audio.samplerate, 2),
+        "duration": len(audio) / audio.samplerate,
     }
 
 
-def audio_dir_stats_wav(in_dir: Union[str, Path], out_file: str):
+def audio_dir_stats_wav(
+    in_dir: Union[str, Path], out_file: str, exts: Tuple[str] = (".wav",)
+):
     """Produce summary by recursively searching a directory for wav files"""
 
-    audio_paths = list(Path(in_dir).absolute().rglob("*.wav"))
-    audio_dir_stats = list(map(audio_stats_wav, audio_paths))
+    # Filter the files in the directory for the required extensions
+    audio_paths = list(
+        filter(
+            lambda audio_path: audio_path.suffix.lower() in exts,
+            Path(in_dir).absolute().rglob("*"),
+        )
+    )
+    audio_dir_stats = list(
+        map(
+            audio_stats_wav,
+            tqdm(audio_paths),
+        )
+    )
 
     durations = [stats["duration"] for stats in audio_dir_stats]
     unique_sample_rates = dict(
