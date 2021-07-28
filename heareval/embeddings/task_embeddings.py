@@ -23,6 +23,8 @@ TODO:
 """
 import json
 import os.path
+import pickle
+import random
 import shutil
 from importlib import import_module
 from pathlib import Path
@@ -174,16 +176,16 @@ def get_dataloader_for_embedding(
         raise AssertionError("Unknown embedding type")
 
 
-def save_scene_embedding_and_label(
+def save_scene_embedding_and_labels(
     embeddings: np.ndarray, labels: Any, filename: Tuple, outdir: Path
 ):
     for i, file in enumerate(filename):
         out_file = outdir.joinpath(f"{file}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
-        json.dump(labels[i], open(f"{out_file}.target-label.json", "w"))
+        json.dump(labels[i], open(f"{out_file}.target-labels.json", "w"))
 
 
-def save_timestamp_embedding_and_label(
+def save_timestamp_embedding_and_labels(
     embeddings: np.ndarray,
     timestamps: np.ndarray,
     labels: np.ndarray,
@@ -202,29 +204,109 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
     # A list of labels present at each timestamp
     timestamp_labels = []
 
-    # TODO: make sure we are saving the labels in the correct units.
-    #   dcase gives units in seconds whereas the timestamps from the API
-    #   are in millseconds. Make sure dataset events are specified in ms.
+    # NOTE: Make sure dataset events are specified in ms.
     assert len(labels) == len(timestamps)
     for i, label in enumerate(labels):
         tree = IntervalTree()
         # Add all events to the label tree
         for event in label:
-            # FIXME: Remove conversion to ms
-            tree.addi(1000 * event["start"], 1000 * event["end"], event["label"])
+            tree.addi(event["start"], event["end"], event["label"])
 
         labels_for_sound = []
         # Update the binary vector of labels with intervals for each timestamp
         for j, t in enumerate(timestamps[i]):
             interval_labels = [interval.data for interval in tree[t]]
-            labels_for_sound.append([float(t), interval_labels])
+            labels_for_sound.append(interval_labels)
+            # If we want to store the timestamp too
+            # labels_for_sound.append([float(t), interval_labels])
 
         timestamp_labels.append(labels_for_sound)
 
     return timestamp_labels
 
 
+def memmap_embeddings(
+    outdir: Path,
+    prng: random.Random,
+    metadata: Dict,
+    split_name: str,
+    embed_dir: Path,
+    task_name: str,
+):
+    """
+    Memmap all the embeddings to one file, and pickle all the labels.
+    (We assume labels can fit in memory.)
+    TODO: This writes things to disk double, we could clean that up after.
+    We might also be able to get away with writing to disk only once.
+    """
+    embedding_files = list(outdir.glob("*.embedding.npy"))
+    prng.shuffle(embedding_files)
+
+    # First count the number of embeddings total
+    nembeddings = 0
+    ndim = None
+    dtype = None
+    for embedding_file in tqdm(embedding_files):
+        emb = np.load(embedding_file).astype(np.float32)
+        if metadata["embedding_type"] == "scene":
+            assert emb.ndim == 1
+            nembeddings += 1
+            ndim = emb.shape[0]
+            dtype = emb.dtype
+        elif metadata["embedding_type"] == "event":
+            assert emb.ndim == 2
+            nembeddings += emb.shape[0]
+            ndim = emb.shape[1]
+            dtype = emb.dtype
+        else:
+            raise ValueError(f"Unknown embedding type: {metadata['embedding_type']}")
+
+    open(
+        embed_dir.joinpath(task_name, f"{split_name}.embedding-dimensions.json"), "wt"
+    ).write(json.dumps((nembeddings, ndim)))
+    embedding_memmap = np.memmap(
+        filename=embed_dir.joinpath(task_name, f"{split_name}.embeddings.npy"),
+        dtype=np.float32,
+        mode="w+",
+        shape=(nembeddings, ndim),
+    )
+    idx = 0
+    labels = []
+    for embedding_file in tqdm(embedding_files):
+        emb = np.load(embedding_file)
+        lbl = json.load(
+            open(str(embedding_file).replace("embedding.npy", "target-labels.json"))
+        )
+        if metadata["embedding_type"] == "scene":
+            assert emb.ndim == 1
+            embedding_memmap[idx] = emb
+            # This is janky AF. The format is inconsistent with event embeddings
+            # AND its multiclass not multilabel. Honestly this should just be a list of labels.
+            labels.append([lbl])
+            idx += 1
+        elif metadata["embedding_type"] == "event":
+            assert emb.ndim == 2
+            embedding_memmap[idx : idx + emb.shape[0]] = emb
+            assert emb.shape[0] == len(lbl)
+            labels += lbl
+            idx += emb.shape[0]
+        else:
+            raise ValueError(f"Unknown embedding type: {metadata['embedding_type']}")
+    # Write changes to disk
+    embedding_memmap.flush()
+    # TODO: Convert labels to indices?
+    pickle.dump(
+        labels,
+        open(
+            embed_dir.joinpath(task_name, f"{split_name}.target-labels.pkl"),
+            "wb",
+        ),
+    )
+
+
 def task_embeddings(embedding: Embedding, task_path: Path):
+    prng = random.Random()
+    prng.seed(0)
 
     metadata_path = task_path.joinpath("task_metadata.json")
     metadata = json.load(metadata_path.open())
@@ -272,7 +354,7 @@ def task_embeddings(embedding: Embedding, task_path: Path):
 
             if metadata["embedding_type"] == "scene":
                 embeddings = embedding.get_scene_embedding_as_numpy(audios)
-                save_scene_embedding_and_label(embeddings, labels, filenames, outdir)
+                save_scene_embedding_and_labels(embeddings, labels, filenames, outdir)
 
             elif metadata["embedding_type"] == "event":
                 embeddings, timestamps = embedding.get_timestamp_embedding_as_numpy(
@@ -281,7 +363,7 @@ def task_embeddings(embedding: Embedding, task_path: Path):
                 labels = get_labels_for_timestamps(labels, timestamps)
                 assert len(labels) == len(filenames)
                 assert len(labels[0]) == len(timestamps[0])
-                save_timestamp_embedding_and_label(
+                save_timestamp_embedding_and_labels(
                     embeddings, timestamps, labels, filenames, outdir
                 )
 
@@ -289,3 +371,7 @@ def task_embeddings(embedding: Embedding, task_path: Path):
                 raise ValueError(
                     f"Unknown embedding type: {metadata['embedding_type']}"
                 )
+
+        memmap_embeddings(
+            outdir, prng, metadata, split["name"], embed_dir, task_path.name
+        )
