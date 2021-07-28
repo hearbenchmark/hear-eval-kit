@@ -41,9 +41,11 @@ def top1_error(
 def auc(
     predictions: np.ndarray, targets: List, label_vocab: pd.DataFrame
 ) -> Dict[str, float]:
-    # Compute AUC
+    # TODO Compute AUC
     return {"auc": 0.0}
 
+
+# TODO: Add additional metrics
 
 available_metrics = {"top1_error": top1_error, "auc": auc}
 
