@@ -37,6 +37,7 @@ config = {
         {"name": "test", "max_files": 100},
         {"name": "valid", "max_files": 100},
     ],
+    "evaluation": ["top1_error", "auc"],
 }
 
 

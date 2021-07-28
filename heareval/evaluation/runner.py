@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 Performs evaluation on embedding predictions.
-
-TODO: Add CUDA device.
 """
 
 from pathlib import Path
 
 import click
 from tqdm import tqdm
+
+from heareval.evaluation.task_evaluation import task_evaluation
 
 
 @click.command()
@@ -34,6 +34,7 @@ def runner(embeddings_dir: str = "embeddings") -> None:
         tasks = list(embedding.iterdir())
         for task_path in tasks:
             print(f"  - Evaluating task: {task_path.name}")
+            task_evaluation(task_path)
 
 
 if __name__ == "__main__":
