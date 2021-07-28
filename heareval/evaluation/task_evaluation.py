@@ -14,6 +14,7 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
+import sklearn.metrics
 import torch
 
 
@@ -38,16 +39,28 @@ def top1_error(
     return {"top1_error": top1_error}
 
 
-def auc(
+def macroauc(
     predictions: np.ndarray, targets: List, label_vocab: pd.DataFrame
 ) -> Dict[str, float]:
-    # TODO Compute AUC
-    return {"auc": 0.0}
+    return {"macroauc": 0.0}
+    # The rest is broken if test set vocabulary is a strict subset of train vocabulary.
+    # TODO: This should happen in task_evaluation, not be reused everywhere
+    # Dictionary of labels and integer idx: {label -> idx}
+    label_vocab = label_vocab.set_index("label").to_dict()["idx"]
+    # TODO: This shape only works for multiclass, check that is the type
+    for rowlabels in targets:
+        assert len(rowlabels) == 1
+    y_true = np.array([label_vocab[rowlabels[0]] for rowlabels in targets])
+    import IPython
+
+    ipshell = IPython.embed
+    ipshell(banner1="ipshell")
+    return {"macroauc": sklearn.metrics.roc_auc_score(y_true, predictions)}
 
 
 # TODO: Add additional metrics
 
-available_metrics = {"top1_error": top1_error, "auc": auc}
+available_metrics = {"top1_error": top1_error, "macroauc": macroauc}
 
 
 def task_evaluation(task_path: Path):
@@ -77,6 +90,8 @@ def task_evaluation(task_path: Path):
         )
 
     targets = pickle.load(task_path.joinpath("test.target-labels.pkl").open("rb"))
+
+    # TODO: Check shape of predictions vs label_vocab
 
     # What other types could we receive as targets?
     assert isinstance(targets, list)
