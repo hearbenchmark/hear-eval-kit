@@ -75,7 +75,7 @@ class SplitMemmapDataset(Dataset):
         # return len(self.labels)
 
     def __getitem__(self, idx):
-        return self.embedding_memmap[idx]
+        return np.copy(self.embedding_memmap[idx])
         # return self.embedding_memmap[idx], self.labels[idx]
 
 
