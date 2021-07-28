@@ -82,7 +82,7 @@ def resample_wav(in_file: str, out_file: str, out_sr: int):
 
 def audio_stats_wav(in_file: Union[str, Path]):
     """Get statistics for a single wav file"""
-    audio = sf.SoundFile(in_file)
+    audio = sf.SoundFile(str(in_file))
     return {
         "samples": len(audio),
         "sample_rate": audio.samplerate,
