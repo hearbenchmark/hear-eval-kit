@@ -44,6 +44,15 @@ Options:
                          default we resample to 16000, 22050, 44100, 48000.
 ```
 
+Additionally, to check the stats of an audio directory:
+```
+python3 -m heareval.tasks.audio_dir_stats {input folder} {output json file} {ext1} {ext2} ..
+```
+Stats include: audio_count, audio_samplerate_count, 
+mean meadian and certain (10, 25, 75, 90) percentile durations.
+This is helpful in getting a quick glance of the audio files in a folder and 
+helps in decideing the preprocessing configurations.
+
 ### Computing embeddings
 
 Once a set of tasks has been generated, embeddings can be computed using any audio

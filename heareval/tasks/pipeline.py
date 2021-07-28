@@ -577,7 +577,7 @@ class ResampleSubcorpuses(WorkTask):
         subsample_splits (list(SubsampleSplit)): task subsamples each split
     """
 
-    sample_rates = luigi.Parameter()
+    sample_rates = luigi.ListParameter()
     metadata = luigi.TaskParameter()
 
     def requires(self):
