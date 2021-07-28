@@ -42,7 +42,7 @@ def top1_error(
 def macroauc(
     predictions: np.ndarray, targets: List, label_vocab: pd.DataFrame
 ) -> Dict[str, float]:
-    return {"macroauc": 0.0}
+    #    return {"macroauc": 0.0}
     # The rest is broken if test set vocabulary is a strict subset of train vocabulary.
     # TODO: This should happen in task_evaluation, not be reused everywhere
     # Dictionary of labels and integer idx: {label -> idx}
@@ -51,6 +51,11 @@ def macroauc(
     for rowlabels in targets:
         assert len(rowlabels) == 1
     y_true = np.array([label_vocab[rowlabels[0]] for rowlabels in targets])
+
+    # Convert to multilabel one-hot
+    y_true_multilabel = np.zeros(predictions.shape)
+    y_true_multilabel[np.arange(y_true.size), y_true] = 1
+
     import IPython
 
     ipshell = IPython.embed
