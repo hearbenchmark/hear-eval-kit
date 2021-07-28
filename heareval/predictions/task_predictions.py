@@ -86,6 +86,16 @@ class SplitMemmapDataset(Dataset):
 def create_events_from_prediction(
     predictions: Dict, threshold: float = 0.5
 ) -> IntervalTree:
+    """
+    Takes a set of prediction tensors keyed on timestamps and generates events.
+
+    Args:
+        predictions: A dictionary of predictions {timestamp -> prediction}
+        threshold: Threshold for determining whether to apply a label
+
+    Returns:
+        An IntervalTree object containing all the events from the predictions.
+    """
     # Make sure the timestamps are in the correct order
     timestamps = sorted(predictions.keys())
 
@@ -133,15 +143,29 @@ def create_events_from_prediction(
 def get_predictions_as_events(
     predictions: torch.Tensor, file_timestamps: List, label_vocab: pd.DataFrame
 ) -> Dict[str, List]:
+    """
+    Produces lists of events from a set of frame based label probabilities. The input
+    prediction tensor may contain frame predictions from a set of different files
+    concatenated together. We want to compute events on each of those files separately.
+
+    Args:
+        predictions: a tensor of frame based multi-label predictions.
+        file_timestamps: a list of filenames and timestamps where each entry corresponds
+            to a frame in the predictions tensor.
+        label_vocab: The set of labels and their associated int idx
+
+    Returns:
+        A dictionary of lists of events keyed on the filename slug
+    """
     # This probably could be more efficient if we make the assumption that
-    # each frame in the prediction and timestamps are in order.
+    # timestamps are in sorted order. But this makes sure of it.
     assert predictions.shape[0] == len(file_timestamps)
     event_files = {}
     for i, file_timestamp in enumerate(file_timestamps):
         filename, timestamp = file_timestamp
         slug = Path(filename).name
 
-        # Key on the slug to be consistent with the ground truth?
+        # Key on the slug to be consistent with the ground truth
         if slug not in event_files:
             event_files[slug] = {}
 
@@ -153,7 +177,7 @@ def get_predictions_as_events(
 
     # Create events for all the different files. Store all the events as a dictionary
     # with the same format as the ground truth from the luigi pipeline.
-    # { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
+    # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
     event_dict = {}
     for slug, timestamp_predictions in tqdm(event_files.items()):
         event_tree = create_events_from_prediction(timestamp_predictions)
@@ -214,19 +238,23 @@ def task_predictions(
         all_predicted_labels = torch.cat(all_predicted_labels)
 
         if metadata["embedding_type"] == "event":
+            # For event predictions we need to convert the frame-based predictions
+            # to a list of events with start and stop timestamps. These events are
+            # computed on each file independently and then saved as JSON in the same
+            # format as the ground truth events produced by the luigi pipeline.
+
+            # A list of filenames and timestamps associated with each prediction
             file_timestamps = json.load(
                 embedding_path.joinpath(
                     f"{split['name']}.filename-timestamps.json"
                 ).open()
             )
+
             print("Creating events from predictions:")
             events = get_predictions_as_events(
                 all_predicted_labels, file_timestamps, label_vocab
             )
-            annotation_dir = embedding_path.joinpath(
-                "events", f"{split['name']}-prediction"
-            )
-            annotation_dir.mkdir(parents=True, exist_ok=True)
+
             json.dump(
                 events,
                 embedding_path.joinpath(f"{split['name']}.predictions.json").open("w"),
