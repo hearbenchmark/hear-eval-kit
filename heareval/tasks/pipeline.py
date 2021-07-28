@@ -213,6 +213,7 @@ class ExtractMetadata(WorkTask):
                     "slug",
                     "subsample_key",
                     "split_key",
+                    "split",
                     "label",
                     "start",
                     "end",
@@ -220,8 +221,14 @@ class ExtractMetadata(WorkTask):
             ).issubset(set(process_metadata.columns))
         elif self.data_config["embedding_type"] == "scene":
             assert set(
-                ["relpath", "slug", "subsample_key", "split_key", "label"]
+                ["relpath", "slug", "subsample_key", "split_key", "split", "label"]
             ).issubset(set(process_metadata.columns))
+            # Multiclass predictions should only have a single label per file
+            if self.data_config["prediction_type"] == "multiclass":
+                label_count = process_metadata.groupby("slug")["label"].aggregate(
+                    lambda group: len(group)
+                )
+                assert (label_count == 1).all()
         else:
             raise ValueError(
                 "%s embedding_type unknown" % self.data_config["embedding_type"]
@@ -360,7 +367,7 @@ class MonoWavTrimCorpus(WorkTask):
     def run(self):
         # TODO: this should check to see if the audio is already a mono wav at the
         #   correct length and just create a symlink if that is this case.
-        for audiofile in tqdm(self.requires()["corpus"].workdir.iterdir()):
+        for audiofile in tqdm(list(self.requires()["corpus"].workdir.iterdir())):
             newaudiofile = self.workdir.joinpath(f"{audiofile.stem}.wav")
             audio_util.mono_wav_and_fix_duration(
                 audiofile, newaudiofile, duration=self.data_config["sample_duration"]
@@ -461,12 +468,12 @@ class SplitTrainTestMetadata(WorkTask):
             )
 
             if self.data_config["embedding_type"] == "scene":
-                # For scene labeling each scene should have one
-                assert len(audiolabel_df) == len(audiodf)
+                # Create a dictionary containing a list of labels keyed on the slug.
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label"]]
-                    .set_index("slug_path")
-                    .to_dict("index")
+                    .groupby("slug_path")["label"]
+                    .apply(list)
+                    .to_dict()
                 )
 
             elif self.data_config["embedding_type"] == "event":
