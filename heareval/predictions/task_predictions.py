@@ -14,10 +14,13 @@ TODO:
     many models simultaneously with one disk read?
 """
 
+from collections import OrderedDict
 import json
 import pickle
 from pathlib import Path
+from typing import Dict, List
 
+from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
 import torch
@@ -30,6 +33,7 @@ class RandomProjectionPrediction(torch.nn.Module):
         super().__init__()
 
         self.projection = torch.nn.Linear(nfeatures, nlabels)
+        torch.nn.init.normal_(self.projection.weight)
         if prediction_type == "multilabel":
             self.activation = torch.nn.Sigmoid()
         elif prediction_type == "multiclass":
@@ -79,6 +83,74 @@ class SplitMemmapDataset(Dataset):
         # return self.embedding_memmap[idx], self.labels[idx]
 
 
+def create_events_from_prediction(
+    predictions: Dict, threshold: float = 0.5
+) -> IntervalTree:
+    # Make sure the timestamps are in the correct order
+    timestamps = sorted(predictions.keys())
+
+    # Create a sorted tensor of frame level predictions for this file.
+    predictions = torch.stack([predictions[t] for t in timestamps])
+
+    # Apply thresholding to get the label detected at each frame.
+    # TODO: Apply median filtering for smoothing?
+    predictions = (predictions > threshold).type(torch.int8)
+
+    # Difference between each timestamp to find event boundaries
+    pred_diff = torch.diff(predictions, dim=0)
+
+    # This is slow, but for each class look through all the timestamp predictions
+    # and construct a set of events with onset and offset timestamps.
+    event_tree = IntervalTree()
+    for class_idx in range(predictions.shape[1]):
+        # Check to see if this starts with an active event
+        current_event = None
+        if predictions[0][class_idx] == 1:
+            assert pred_diff[0][class_idx] != 1
+            current_event = [timestamps[0]]
+
+        for t in range(pred_diff.shape[0]):
+            # New onset
+            if pred_diff[t][class_idx] == 1:
+                assert current_event is None
+                current_event = [timestamps[t]]
+
+            # Offset for current event
+            elif pred_diff[t][class_idx] == -1:
+                assert len(current_event) == 1
+                # TODO: filter on event length? DCASE only included events that
+                #   are 60ms long.
+                event_tree.addi(
+                    begin=current_event[0], end=timestamps[t + 1], data=class_idx
+                )
+                current_event = None
+
+    return event_tree
+
+
+def get_predictions_as_events(predictions: torch.Tensor, file_timestamps: List):
+    # This probably could be more efficient if we make the assumption that
+    # each frame in the prediction and timestamps are in order.
+    assert predictions.shape[0] == len(file_timestamps)
+    event_files = {}
+    for i, file_timestamp in enumerate(file_timestamps):
+        filename, timestamp = file_timestamp
+        slug = Path(filename).name
+
+        # Key on the slug to be consistent with the ground truth?
+        if slug not in event_files:
+            event_files[slug] = {}
+
+        # Save the predictions for the file keyed on the timestamp
+        event_files[slug][timestamp] = predictions[i]
+
+    event_trees = {}
+    for slug, timestamp_predictions in tqdm(event_files.items()):
+        event_trees[slug] = create_events_from_prediction(timestamp_predictions)
+
+    return event_trees
+
+
 def task_predictions(
     embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
 ):
@@ -121,6 +193,17 @@ def task_predictions(
             # TODO: Uses less memory to stack them one at a time
             all_predicted_labels.append(predicted_labels)
         all_predicted_labels = torch.cat(all_predicted_labels)
+
+        if metadata["embedding_type"] == "event":
+            file_timestamps = json.load(
+                embedding_path.joinpath(
+                    f"{split['name']}.filename-timestamps.json"
+                ).open()
+            )
+            events = get_predictions_as_events(all_predicted_labels, file_timestamps)
+            print(events)
+            assert False
+
         pickle.dump(
             all_predicted_labels,
             open(
