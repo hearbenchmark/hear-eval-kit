@@ -2,12 +2,12 @@
 Generic pipelines for datasets
 """
 
-import json
 import os
+import json
 import shutil
 from pathlib import Path
-from typing import Dict, List, Union
 from urllib.parse import urlparse
+from typing import Dict, List, Union
 
 import luigi
 import pandas as pd
@@ -76,6 +76,10 @@ class ExtractArchive(WorkTask):
         if self.outdir is not None:
             output_path = output_path.joinpath(self.outdir)
         shutil.unpack_archive(archive_path, output_path)
+        audio_util.audio_dir_stats_wav(
+            in_dir=output_path,
+            out_file=self.workdir.joinpath(f"{self.outdir}_stats.json"),
+        )
 
         self.mark_complete()
 
@@ -557,6 +561,50 @@ class ResampleSubCorpus(WorkTask):
             resampled_audiofile = new_basedir(audiofile, resample_dir)
             audio_util.resample_wav(audiofile, resampled_audiofile, self.sr)
 
+        audio_util.audio_dir_stats_wav(
+            in_dir=resample_dir,
+            out_file=self.workdir.joinpath(str(self.sr)).joinpath(
+                f"{self.split}_stats.json"
+            ),
+        )
+        self.mark_complete()
+
+
+class ResampleSubcorpuses(WorkTask):
+    """
+    Aggregates resampling of all the splits and sampling rates
+    into a single task as dependencies.
+
+    Parameter:
+        metadata (ExtractMetadata): task which extracts a corpus level metadata
+    Requires:
+        subsample_splits (list(SubsampleSplit)): task subsamples each split
+    """
+
+    sample_rates = luigi.ListParameter()
+    metadata = luigi.TaskParameter()
+
+    def requires(self):
+        # Perform resampling on each split and sampling rate independently
+        resample_splits = [
+            ResampleSubCorpus(
+                sr=sr,
+                split=split["name"],
+                metadata=self.metadata,
+                data_config=self.data_config,
+            )
+            for sr in self.sample_rates
+            for split in self.data_config["splits"]
+        ]
+        return resample_splits
+
+    def run(self):
+        workdir = Path(self.workdir)
+        workdir.rmdir()
+        # We need to link the workdir of the requires, they will all be the same
+        # for all the requires so just grab the first one.
+        requires_workdir = Path(self.requires()[0].workdir).absolute()
+        workdir.symlink_to(requires_workdir)
         self.mark_complete()
 
 
@@ -579,18 +627,12 @@ class FinalizeCorpus(WorkTask):
 
     def requires(self):
         # Will copy the resampled data and the traintestmeta and the vocabmeta
-        splits = [p["name"] for p in self.data_config["splits"]]
         return {
-            "resample": [
-                ResampleSubCorpus(
-                    sr=sr,
-                    split=split,
-                    metadata=self.metadata,
-                    data_config=self.data_config,
-                )
-                for sr in self.sample_rates
-                for split in splits
-            ],
+            "resample": ResampleSubcorpuses(
+                sample_rates=self.sample_rates,
+                metadata=self.metadata,
+                data_config=self.data_config,
+            ),
             "traintestmeta": SplitTrainTestMetadata(
                 metadata=self.metadata, data_config=self.data_config
             ),
@@ -610,9 +652,7 @@ class FinalizeCorpus(WorkTask):
             shutil.rmtree(self.workdir)
 
         # Copy the resampled files
-        # The workdirectory of the all the resample task is same
-        # so select the first one
-        shutil.copytree(self.requires()["resample"][0].workdir, self.workdir)
+        shutil.copytree(self.requires()["resample"].workdir, self.workdir)
 
         # Copy the traintestmetadata
         shutil.copytree(
