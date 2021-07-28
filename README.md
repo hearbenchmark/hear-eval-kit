@@ -46,7 +46,7 @@ Options:
 
 Additionally, to check the stats of an audio directory:
 ```
-python3 -m heareval.tasks.audio_dir_stats {input folder} {output json file} {ext1} {ext2} ..
+python3 -m heareval.tasks.audio_dir_stats {input folder} {output json file}
 ```
 Stats include: audio_count, audio_samplerate_count, 
 mean meadian and certain (10, 25, 75, 90) percentile durations.

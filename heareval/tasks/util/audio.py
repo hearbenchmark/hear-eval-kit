@@ -6,7 +6,7 @@ import os
 import json
 import subprocess
 from pathlib import Path
-from typing import Tuple, Union
+from typing import List, Union
 from collections import Counter
 
 import numpy as np
@@ -91,7 +91,7 @@ def audio_stats_wav(in_file: Union[str, Path]):
 
 
 def audio_dir_stats_wav(
-    in_dir: Union[str, Path], out_file: str, exts: Tuple[str] = (".wav", ".mp3", ".ogg")
+    in_dir: Union[str, Path], out_file: str, exts: List[str] = [".wav", ".mp3", ".ogg"]
 ):
     """Produce summary by recursively searching a directory for wav files"""
 
