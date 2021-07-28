@@ -14,7 +14,6 @@ TODO:
     many models simultaneously with one disk read?
 """
 
-from collections import OrderedDict
 import json
 import pickle
 from pathlib import Path
@@ -35,7 +34,7 @@ class RandomProjectionPrediction(torch.nn.Module):
         self.projection = torch.nn.Linear(nfeatures, nlabels)
         torch.nn.init.normal_(self.projection.weight)
         if prediction_type == "multilabel":
-            self.activation = torch.nn.Sigmoid()
+            self.activation: torch.nn.Module = torch.nn.Sigmoid()
         elif prediction_type == "multiclass":
             self.activation = torch.nn.Softmax()
         else:
@@ -84,7 +83,7 @@ class SplitMemmapDataset(Dataset):
 
 
 def create_events_from_prediction(
-    predictions: Dict, threshold: float = 0.5
+    prediction_dict: Dict, threshold: float = 0.5
 ) -> IntervalTree:
     """
     Takes a set of prediction tensors keyed on timestamps and generates events.
@@ -97,10 +96,10 @@ def create_events_from_prediction(
         An IntervalTree object containing all the events from the predictions.
     """
     # Make sure the timestamps are in the correct order
-    timestamps = sorted(predictions.keys())
+    timestamps = sorted(prediction_dict.keys())
 
     # Create a sorted tensor of frame level predictions for this file.
-    predictions = torch.stack([predictions[t] for t in timestamps])
+    predictions = torch.stack([prediction_dict[t] for t in timestamps])
 
     # Apply thresholding to get the label detected at each frame.
     # TODO: Apply median filtering for smoothing?
@@ -116,7 +115,7 @@ def create_events_from_prediction(
     event_tree = IntervalTree()
     for class_idx in range(predictions.shape[1]):
         # Check to see if this starts with an active event
-        current_event = None
+        current_event = []
         if predictions[0][class_idx] == 1:
             assert pred_diff[0][class_idx] != 1
             current_event = [timestamps[0]]
@@ -124,7 +123,7 @@ def create_events_from_prediction(
         for t in range(pred_diff.shape[0]):
             # New onset
             if pred_diff[t][class_idx] == 1:
-                assert current_event is None
+                assert len(current_event) == 0
                 current_event = [timestamps[t]]
 
             # Offset for current event
@@ -135,7 +134,7 @@ def create_events_from_prediction(
                 event_tree.addi(
                     begin=current_event[0], end=timestamps[t + 1], data=class_idx
                 )
-                current_event = None
+                current_event = []
 
     return event_tree
 
@@ -160,7 +159,7 @@ def get_predictions_as_events(
     # This probably could be more efficient if we make the assumption that
     # timestamps are in sorted order. But this makes sure of it.
     assert predictions.shape[0] == len(file_timestamps)
-    event_files = {}
+    event_files: Dict[str, Dict[str, torch.Tensor]] = {}
     for i, file_timestamp in enumerate(file_timestamps):
         filename, timestamp = file_timestamp
         slug = Path(filename).name
@@ -235,7 +234,7 @@ def task_predictions(
             predicted_labels = predictor(embs)
             # TODO: Uses less memory to stack them one at a time
             all_predicted_labels.append(predicted_labels)
-        all_predicted_labels = torch.cat(all_predicted_labels)
+        predicted_labels = torch.cat(all_predicted_labels)
 
         if metadata["embedding_type"] == "event":
             # For event predictions we need to convert the frame-based predictions
@@ -252,7 +251,7 @@ def task_predictions(
 
             print("Creating events from predictions:")
             events = get_predictions_as_events(
-                all_predicted_labels, file_timestamps, label_vocab
+                predicted_labels, file_timestamps, label_vocab
             )
 
             json.dump(
@@ -262,7 +261,7 @@ def task_predictions(
             )
 
         pickle.dump(
-            all_predicted_labels,
+            predicted_labels,
             open(
                 embedding_path.joinpath(f"{split['name']}.predicted-labels.pkl"), "wb"
             ),
