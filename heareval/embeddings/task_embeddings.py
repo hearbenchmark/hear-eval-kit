@@ -244,20 +244,19 @@ def memmap_embeddings(
 
     # First count the number of embeddings total
     nembeddings = 0
-    ndim = None
-    dtype = None
+    ndim: int
     for embedding_file in tqdm(embedding_files):
         emb = np.load(embedding_file).astype(np.float32)
         if metadata["embedding_type"] == "scene":
             assert emb.ndim == 1
             nembeddings += 1
             ndim = emb.shape[0]
-            dtype = emb.dtype
+            assert emb.dtype == np.float32
         elif metadata["embedding_type"] == "event":
             assert emb.ndim == 2
             nembeddings += emb.shape[0]
             ndim = emb.shape[1]
-            dtype = emb.dtype
+            assert emb.dtype == np.float32
         else:
             raise ValueError(f"Unknown embedding type: {metadata['embedding_type']}")
 
@@ -272,6 +271,7 @@ def memmap_embeddings(
     )
     idx = 0
     labels = []
+    filename_timestamps = []
     for embedding_file in tqdm(embedding_files):
         emb = np.load(embedding_file)
         lbl = json.load(
@@ -289,6 +289,17 @@ def memmap_embeddings(
             embedding_memmap[idx : idx + emb.shape[0]] = emb
             assert emb.shape[0] == len(lbl)
             labels += lbl
+
+            timestamps = json.load(
+                open(str(embedding_file).replace("embedding.npy", "timestamps.json"))
+            )
+            slug = str(embedding_file).replace(".embedding.npy", "")
+            filename_timestamps += [(slug, timestamp) for timestamp in timestamps]
+            assert emb.shape[0] == len(
+                timestamps
+            ), f"{emb.shape[0]} != {len(timestamps)}"
+            assert len(lbl) == len(timestamps), f"{len(lbl)} != {len(timestamps)}"
+
             idx += emb.shape[0]
         else:
             raise ValueError(f"Unknown embedding type: {metadata['embedding_type']}")
@@ -302,6 +313,12 @@ def memmap_embeddings(
             "wb",
         ),
     )
+    if metadata["embedding_type"] == "event":
+        assert len(labels) == len(filename_timestamps)
+        open(
+            embed_dir.joinpath(task_name, f"{split_name}.filename-timestamps.json"),
+            "wt",
+        ).write(json.dumps(filename_timestamps, indent=4))
 
 
 def task_embeddings(embedding: Embedding, task_path: Path):
