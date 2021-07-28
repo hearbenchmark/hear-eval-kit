@@ -3,6 +3,7 @@
 Performs evaluation on embedding predictions.
 """
 
+import json
 from pathlib import Path
 
 import click
@@ -28,13 +29,20 @@ def runner(embeddings_dir: str = "embeddings") -> None:
 
     embeddings = list(embeddings_dir_path.iterdir())
 
+    results = {}
     for embedding in tqdm(embeddings):
         print(f"Evaluating model: {embedding.name}", flush=True)
 
         tasks = list(embedding.iterdir())
+        embedding_results = {}
         for task_path in tasks:
             print(f"  - Evaluating task: {task_path.name}")
-            task_evaluation(task_path)
+            embedding_results[task_path.name] = task_evaluation(task_path)
+
+        results[embedding.name] = embedding_results
+
+    # Save all the results to json
+    json.dump(results, Path("evaluation_results.json").open("w"), indent=4)
 
 
 if __name__ == "__main__":

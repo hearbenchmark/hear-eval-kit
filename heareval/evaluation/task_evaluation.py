@@ -85,4 +85,4 @@ def task_evaluation(task_path: Path):
         new_results = available_metrics[metric](predictions, targets, label_vocab)
         results.update(new_results)
 
-    print(results)
+    return results
