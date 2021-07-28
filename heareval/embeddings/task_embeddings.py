@@ -277,12 +277,23 @@ def memmap_embeddings(
         lbl = json.load(
             open(str(embedding_file).replace("embedding.npy", "target-labels.json"))
         )
+
         if metadata["embedding_type"] == "scene":
             assert emb.ndim == 1
             embedding_memmap[idx] = emb
-            # This is janky AF. The format is inconsistent with event embeddings
-            # AND its multiclass not multilabel. Honestly this should just be a list of labels.
-            labels.append([lbl])
+            # lbl will be a list of labels, make sure that it has exactly one label
+            # for multiclass problems. Will be a list of zero or more for multilabel.
+            if metadata["prediction_type"] == "multiclass":
+                assert len(lbl) == 1
+            elif metadata["prediction_type"] == "multilabel":
+                assert isinstance(lbl, list)
+            else:
+                NotImplementedError(
+                    "Only multiclass and multilabel prediction types"
+                    f"implemented for scene embeddings. Received {metadata['prediction_type']}"
+                )
+
+            labels.append(lbl)
             idx += 1
         elif metadata["embedding_type"] == "event":
             assert emb.ndim == 2
