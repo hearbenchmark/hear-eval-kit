@@ -204,6 +204,12 @@ class ExtractMetadata(WorkTask):
             assert set(["relpath", "slug", "subsample_key", "split", "label"]).issubset(
                 set(process_metadata.columns)
             )
+            # Multiclass predictions should only have a single label per file
+            if self.data_config["prediction_type"] == "multiclass":
+                label_count = process_metadata.groupby("slug")["label"].aggregate(
+                    lambda group: len(group)
+                )
+                assert (label_count == 1).all()
         else:
             raise ValueError(
                 "%s embedding_type unknown" % self.data_config["embedding_type"]
@@ -441,14 +447,6 @@ class SplitTrainTestMetadata(WorkTask):
             )
 
             if self.data_config["embedding_type"] == "scene":
-                # For scene labeling each scene has a list of labels. For multiclass
-                # predictions, the list will contain exactly one label, for multilabel
-                # the list will can zero or more labels.
-                # TODO: not sure how we do multilabel when there are zero labels.
-                if self.data_config["prediction_type"] == "multiclass":
-                    # For multiclass there should be exactly one audio file per label
-                    assert len(audiolabel_df) == len(audiodf)
-
                 # Create a dictionary containing a list of labels keyed on the slug.
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label"]]
