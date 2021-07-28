@@ -31,9 +31,10 @@ class DownloadCorpus(WorkTask):
 
     url = luigi.Parameter()
     outfile = luigi.Parameter()
+    expected_md5 = luigi.Parameter()
 
     def run(self):
-        download_file(self.url, self.workdir.joinpath(self.outfile))
+        download_file(self.url, self.workdir.joinpath(self.outfile), self.expected_md5)
         self.mark_complete()
 
     @property
@@ -86,10 +87,13 @@ def get_download_and_extract_tasks(config: Dict):
     """
 
     tasks = {}
-    for name, url in config["download_urls"].items():
+    for urlobj in config["download_urls"]:
+        name, url, md5 = urlobj["name"], urlobj["url"], urlobj["md5"]
         filename = os.path.basename(urlparse(url).path)
         task = ExtractArchive(
-            download=DownloadCorpus(url=url, outfile=filename, data_config=config),
+            download=DownloadCorpus(
+                url=url, outfile=filename, expected_md5=md5, data_config=config
+            ),
             infile=filename,
             outdir=name,
             data_config=config,
