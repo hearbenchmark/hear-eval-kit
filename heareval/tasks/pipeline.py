@@ -449,11 +449,11 @@ class SplitTrainTestMetadata(WorkTask):
                     # For multiclass there should be exactly one audio file per label
                     assert len(audiolabel_df) == len(audiodf)
 
+                # Create a dictionary containing a list of labels keyed on the slug.
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label"]]
-                    .set_index("slug_path")
-                    .groupby(level=0)
-                    .apply(lambda group: group.to_dict(orient="list"))
+                    .groupby("slug_path")["label"]
+                    .apply(list)
                     .to_dict()
                 )
 
