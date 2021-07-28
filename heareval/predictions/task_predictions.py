@@ -94,6 +94,8 @@ def create_events_from_prediction(
 
     # Apply thresholding to get the label detected at each frame.
     # TODO: Apply median filtering for smoothing?
+    #   Additionally, DCASE limits the number of active classes at a single
+    #   time to 6. We could do that here as well.
     predictions = (predictions > threshold).type(torch.int8)
 
     # Difference between each timestamp to find event boundaries
@@ -128,7 +130,9 @@ def create_events_from_prediction(
     return event_tree
 
 
-def get_predictions_as_events(predictions: torch.Tensor, file_timestamps: List):
+def get_predictions_as_events(
+    predictions: torch.Tensor, file_timestamps: List, label_vocab: pd.DataFrame
+) -> Dict[str, List]:
     # This probably could be more efficient if we make the assumption that
     # each frame in the prediction and timestamps are in order.
     assert predictions.shape[0] == len(file_timestamps)
@@ -144,11 +148,26 @@ def get_predictions_as_events(predictions: torch.Tensor, file_timestamps: List):
         # Save the predictions for the file keyed on the timestamp
         event_files[slug][timestamp] = predictions[i]
 
-    event_trees = {}
-    for slug, timestamp_predictions in tqdm(event_files.items()):
-        event_trees[slug] = create_events_from_prediction(timestamp_predictions)
+    # Dictionary of labels: {idx -> label}
+    label_dict = label_vocab.set_index("idx").to_dict()["label"]
 
-    return event_trees
+    # Create events for all the different files. Store all the events as a dictionary
+    # with the same format as the ground truth from the luigi pipeline.
+    # { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
+    event_dict = {}
+    for slug, timestamp_predictions in tqdm(event_files.items()):
+        event_tree = create_events_from_prediction(timestamp_predictions)
+        events = []
+        for interval in sorted(event_tree):
+            label = label_dict[interval.data]
+            # TODO: start and end? Let's use begin and end like interval tree?
+            events.append(
+                {"label": label, "start": interval.begin, "end": interval.end}
+            )
+
+        event_dict[slug] = events
+
+    return event_dict
 
 
 def task_predictions(
@@ -200,9 +219,19 @@ def task_predictions(
                     f"{split['name']}.filename-timestamps.json"
                 ).open()
             )
-            events = get_predictions_as_events(all_predicted_labels, file_timestamps)
-            print(events)
-            assert False
+            print("Creating events from predictions:")
+            events = get_predictions_as_events(
+                all_predicted_labels, file_timestamps, label_vocab
+            )
+            annotation_dir = embedding_path.joinpath(
+                "events", f"{split['name']}-prediction"
+            )
+            annotation_dir.mkdir(parents=True, exist_ok=True)
+            json.dump(
+                events,
+                embedding_path.joinpath(f"{split['name']}.predictions.json").open("w"),
+                indent=4,
+            )
 
         pickle.dump(
             all_predicted_labels,
