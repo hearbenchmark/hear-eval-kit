@@ -11,7 +11,7 @@ from functools import partial
 import json
 from pathlib import Path
 import pickle
-from typing import Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple
 
 from dcase_util.containers import MetaDataContainer
 import numpy as np
@@ -148,7 +148,7 @@ def segment_based_metrics(
 
 # TODO: Add additional metrics
 
-available_metrics = {
+available_metrics: Dict[str, Callable] = {
     "top1_error": top1_error,
     "macroauc": macroauc,
     "event_based": event_based_metrics,
