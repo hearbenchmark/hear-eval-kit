@@ -79,7 +79,7 @@ class MacroAUC(MetricFunction):
     def __call__(
         self, predictions: np.ndarray, targets: List, **kwargs
     ) -> Dict[str, float]:
-        return {"auc": None}
+        # return {"auc": None}
         # Dictionary of labels and integer idx: {label -> idx}
         label_vocab = self.label_vocab_as_dict(key="label")
 
