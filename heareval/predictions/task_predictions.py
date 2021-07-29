@@ -84,7 +84,7 @@ class SplitMemmapDataset(Dataset):
 
 
 def create_events_from_prediction(
-    prediction_dict: Dict[str, torch.Tensor],
+    prediction_dict: Dict[float, torch.Tensor],
     threshold: float = 0.5,
     median_filter_ms=90.0,
     min_duration=60.0,
@@ -93,8 +93,9 @@ def create_events_from_prediction(
     Takes a set of prediction tensors keyed on timestamps and generates events.
 
     Args:
-        prediction_dict: A dictionary of predictions {timestamp -> prediction}. The
-            prediction is a tensor of probabilities for each label.
+        prediction_dict: A dictionary of predictions keyed on timestamp
+            {timestamp -> prediction}. The prediction is a tensor of label
+            probabilities.
         threshold: Threshold for determining whether to apply a label
         median_filter_ms: target length of median filter in ms to use to smooth the
             frame based predictions before converting to events.
@@ -175,7 +176,7 @@ def get_predictions_as_events(
     # This probably could be more efficient if we make the assumption that
     # timestamps are in sorted order. But this makes sure of it.
     assert predictions.shape[0] == len(file_timestamps)
-    event_files: Dict[str, Dict[str, torch.Tensor]] = {}
+    event_files: Dict[str, Dict[float, torch.Tensor]] = {}
     for i, file_timestamp in enumerate(file_timestamps):
         filename, timestamp = file_timestamp
         slug = Path(filename).name
@@ -185,7 +186,7 @@ def get_predictions_as_events(
             event_files[slug] = {}
 
         # Save the predictions for the file keyed on the timestamp
-        event_files[slug][timestamp] = predictions[i]
+        event_files[slug][float(timestamp)] = predictions[i]
 
     # Dictionary of labels: {idx -> label}
     label_dict = label_vocab.set_index("idx").to_dict()["label"]
