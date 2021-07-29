@@ -17,7 +17,9 @@ TODO:
 import json
 import pickle
 from pathlib import Path
+from typing import Dict, List
 
+from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
 import torch
@@ -30,8 +32,9 @@ class RandomProjectionPrediction(torch.nn.Module):
         super().__init__()
 
         self.projection = torch.nn.Linear(nfeatures, nlabels)
+        torch.nn.init.normal_(self.projection.weight)
         if prediction_type == "multilabel":
-            self.activation = torch.nn.Sigmoid()
+            self.activation: torch.nn.Module = torch.nn.Sigmoid()
         elif prediction_type == "multiclass":
             self.activation = torch.nn.Softmax()
         else:
@@ -79,6 +82,139 @@ class SplitMemmapDataset(Dataset):
         # return self.embedding_memmap[idx], self.labels[idx]
 
 
+def create_events_from_prediction(
+    prediction_dict: Dict[float, torch.Tensor],
+    threshold: float = 0.5,
+    min_duration=60.0,
+) -> IntervalTree:
+    """
+    Takes a set of prediction tensors keyed on timestamps and generates events. This
+    converts the prediction tensor to a binary label based on the threshold value. Any
+    events occurring at adjacent timestamps are considered to be part of the same event.
+    This loops through and creates events for each label class. Disregards events that
+    are less than the min_duration.
+
+    Args:
+        prediction_dict: A dictionary of predictions keyed on timestamp
+            {timestamp -> prediction}. The prediction is a tensor of label
+            probabilities.
+        threshold: Threshold for determining whether to apply a label
+        min_duration: the minimum duration requirement for an event to be included.
+
+    Returns:
+        An IntervalTree object containing all the events from the predictions.
+    """
+    # Make sure the timestamps are in the correct order
+    timestamps = np.array(sorted(prediction_dict.keys()))
+
+    # Create a sorted numpy matrix of frame level predictions for this file. We convert
+    # to a numpy array here before applying a median filter.
+    predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
+
+    # We can apply a median filter here to smooth out events, but b/c participants
+    # can select their own timestamp interval, selecting the filter window becomes
+    # challenging and could give an unfair advantage -- so we leave out for now.
+    # This could look something like this:
+    # ts_diff = timestamps[1] - timestamps[0]
+    # filter_width = int(round(median_filter_ms / ts_diff))
+    # predictions = median_filter(predictions, size=(filter_width, 1))
+
+    # Convert probabilities to binary vectors based on threshold
+    predictions = (predictions > threshold).astype(np.int8)
+
+    # Difference between each timestamp to find event boundaries
+    pred_diff = np.diff(predictions, axis=0)
+
+    # This is slow, but for each class look through all the timestamp predictions
+    # and construct a set of events with onset and offset timestamps.
+    event_tree = IntervalTree()
+    for class_idx in range(predictions.shape[1]):
+        # Check to see if this starts with an active event
+        current_event = []
+        if predictions[0][class_idx] == 1:
+            assert pred_diff[0][class_idx] != 1
+            current_event = [timestamps[0]]
+
+        for t in range(pred_diff.shape[0]):
+            # New onset
+            if pred_diff[t][class_idx] == 1:
+                assert len(current_event) == 0
+                current_event = [timestamps[t]]
+
+            # Offset for current event
+            elif pred_diff[t][class_idx] == -1:
+                assert len(current_event) == 1
+                current_event.append(timestamps[t + 1])
+                event_duration = current_event[1] - current_event[0]
+
+                # Add event if greater than the minimum duration threshold
+                if event_duration >= min_duration:
+                    event_tree.addi(
+                        begin=current_event[0], end=current_event[1], data=class_idx
+                    )
+                current_event = []
+
+    return event_tree
+
+
+def get_events_for_all_files(
+    predictions: torch.Tensor, file_timestamps: List, label_vocab: pd.DataFrame
+) -> Dict[str, List]:
+    """
+    Produces lists of events from a set of frame based label probabilities.
+    The input prediction tensor may contain frame predictions from a set of different
+    files concatenated together. file_timestamps has a list of filenames and
+    timestamps for each frame in the predictions tensor.
+
+    We split the predictions into separate tensors based on the filename and compute
+    events based on those individually.
+
+    Args:
+        predictions: a tensor of frame based multi-label predictions.
+        file_timestamps: a list of filenames and timestamps where each entry corresponds
+            to a frame in the predictions tensor.
+        label_vocab: The set of labels and their associated int idx
+
+    Returns:
+        A dictionary of lists of events keyed on the filename slug
+    """
+    # This probably could be more efficient if we make the assumption that
+    # timestamps are in sorted order. But this makes sure of it.
+    assert predictions.shape[0] == len(file_timestamps)
+    event_files: Dict[str, Dict[float, torch.Tensor]] = {}
+    for i, file_timestamp in enumerate(file_timestamps):
+        filename, timestamp = file_timestamp
+        slug = Path(filename).name
+
+        # Key on the slug to be consistent with the ground truth
+        if slug not in event_files:
+            event_files[slug] = {}
+
+        # Save the predictions for the file keyed on the timestamp
+        event_files[slug][float(timestamp)] = predictions[i]
+
+    # Dictionary of labels: {idx -> label}
+    label_dict = label_vocab.set_index("idx").to_dict()["label"]
+
+    # Create events for all the different files. Store all the events as a dictionary
+    # with the same format as the ground truth from the luigi pipeline.
+    # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
+    event_dict = {}
+    for slug, timestamp_predictions in tqdm(event_files.items()):
+        event_tree = create_events_from_prediction(timestamp_predictions)
+        events = []
+        for interval in sorted(event_tree):
+            label = label_dict[interval.data]
+            # TODO: start and end? Let's use begin and end like interval tree?
+            events.append(
+                {"label": label, "start": interval.begin, "end": interval.end}
+            )
+
+        event_dict[slug] = events
+
+    return event_dict
+
+
 def task_predictions(
     embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
 ):
@@ -120,9 +256,34 @@ def task_predictions(
             predicted_labels = predictor(embs)
             # TODO: Uses less memory to stack them one at a time
             all_predicted_labels.append(predicted_labels)
-        all_predicted_labels = torch.cat(all_predicted_labels)
+        predicted_labels = torch.cat(all_predicted_labels)
+
+        if metadata["embedding_type"] == "event":
+            # For event predictions we need to convert the frame-based predictions
+            # to a list of events with start and stop timestamps. These events are
+            # computed on each file independently and then saved as JSON in the same
+            # format as the ground truth events produced by the luigi pipeline.
+
+            # A list of filenames and timestamps associated with each prediction
+            file_timestamps = json.load(
+                embedding_path.joinpath(
+                    f"{split['name']}.filename-timestamps.json"
+                ).open()
+            )
+
+            print("Creating events from predictions:")
+            events = get_events_for_all_files(
+                predicted_labels, file_timestamps, label_vocab
+            )
+
+            json.dump(
+                events,
+                embedding_path.joinpath(f"{split['name']}.predictions.json").open("w"),
+                indent=4,
+            )
+
         pickle.dump(
-            all_predicted_labels,
+            predicted_labels,
             open(
                 embedding_path.joinpath(f"{split['name']}.predicted-labels.pkl"), "wb"
             ),
