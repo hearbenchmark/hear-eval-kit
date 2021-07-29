@@ -11,7 +11,7 @@ from functools import partial
 import json
 from pathlib import Path
 import pickle
-from typing import Any, Dict, List, Tuple
+from typing import Any, Callable, Collection, Dict, List, Tuple
 
 
 from dcase_util.containers import MetaDataContainer
@@ -134,7 +134,7 @@ class SoundEventMetric(MetricFunction):
     """
 
     # Metric class must be defined in inheriting classes
-    metric_class = None
+    metric_class: sed_eval.sound_event.SoundEventMetrics = None
 
     def __init__(
         self, task_metadata: Dict, label_vocab: pd.DataFrame, params: Dict = None
@@ -143,7 +143,7 @@ class SoundEventMetric(MetricFunction):
         self.params = params if params is not None else {}
         assert self.metric_class is not None
 
-    def __call__(self, predictions: Dict, targets: Dict):
+    def __call__(self, predictions: Dict, targets: Dict, **kwargs):
         # Containers of events for sed_eval
         reference_event_list = self.sed_eval_event_container(targets)
         estimated_event_list = self.sed_eval_event_container(predictions)
@@ -206,7 +206,7 @@ class EventBasedMetric(SoundEventMetric):
     metric_class = sed_eval.sound_event.EventBasedMetrics
 
 
-available_metrics = {
+available_metrics: Dict[str, Callable] = {
     "top1_error": Top1Error,
     "macroauc": MacroAUC,
     "chroma_error": ChromaError,
@@ -266,6 +266,8 @@ def task_evaluation(task_path: Path):
         return
 
     embedding_type = metadata["embedding_type"]
+    predictions: Collection = []
+    targets: Collection = []
     if embedding_type == "scene":
         predictions, targets = get_scene_based_prediction_files(task_path)
     elif embedding_type == "event":
