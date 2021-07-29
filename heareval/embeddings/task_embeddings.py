@@ -362,6 +362,9 @@ def task_embeddings(embedding: Embedding, task_path: Path):
         split_path = task_path.joinpath(f"{split['name']}.json")
         assert split_path.is_file()
 
+        # Copy over the ground truth labels as they may be needed for evaluation
+        shutil.copy(split_path, embed_task_dir)
+
         # Root directory for audio files for this split
         audio_dir = task_path.joinpath(str(embedding.sample_rate), split["name"])
 

@@ -11,6 +11,7 @@ from typing import Dict, List, Union
 
 import luigi
 import pandas as pd
+from pandas import DataFrame, Series
 from slugify import slugify
 from tqdm import tqdm
 
@@ -154,34 +155,35 @@ class ExtractMetadata(WorkTask):
         return f"{slugify(str(Path(relative_path).stem))}"
 
     @staticmethod
-    def get_subsample_key(slug: str):
+    def get_split_key(df: DataFrame) -> Series:
+        """
+        Gets the split key.
+
+        This can be the hash of a data specific split like instrument generating
+        the file or person recording the sound.
+        For subsampling, the data is subsampled in chunks of split.
+        By default this is the hash of the filename, but can be overridden if the
+        data needs to split into certain groups while subsampling
+        i.e leave out some groups and select others based on this key.
+        """
+        assert "relpath" in df, "relpath column not found in the dataframe"
+        file_names = df["relpath"].apply(lambda path: Path(path).name)
+        return file_names.apply(filename_to_int_hash)
+
+    @staticmethod
+    def get_subsample_key(df: DataFrame) -> Series:
         """
         Gets the subsample key.
-        Subsample key is a unique hash at a file level used for subsampling.
+        Subsample key is a unique hash at a audio file level used for subsampling.
+        This is a hash of the relpath. This is not recommended to be
+        overridden.
 
-        This hash can be composed of multiple hashes as a tuple or can be a
-        single hash
-        For example - (hash1, hash2, ...). In this case the subsampling is done by
-        considering successive hashes in priority.
-        This ensures two things -
-            1. Priority wise subsampling.
-                The fate of files with same hash1 is decided in a group. Either
-                they are subsampled or they are not.
-            2. Stable sampling
-                Each row, either a tuple or not uniquely identifies the data point.
-                This ensures that the sampling is unique everytime the pipeline
-                runs
-
-        The base method makes the hash of the slug. This can be overridden
-        to return a tuple as well
+        The data is first split by the split key and the subsample key is
+        used to ensure stable sampling for groups which are incompletely
+        sampled(the last group to be part of the subsample output)
         """
-        # Filename hash is a unique hash at a file level.
-        filename_hash = filename_to_int_hash(slug)
-        # This way the sampling will be at file level
-        # To make some grouped subsampling please consider overriding this
-        # and returning a tuple (see speech_command.py for example)
-        subsample_key = filename_hash
-        return subsample_key
+        assert "relpath" in df, "relpath column not found in the dataframe"
+        return df["relpath"].apply(str).apply(filename_to_int_hash)
 
     def get_process_metadata(self) -> pd.DataFrame:
         """
@@ -206,12 +208,21 @@ class ExtractMetadata(WorkTask):
 
         if self.data_config["embedding_type"] == "event":
             assert set(
-                ["relpath", "slug", "subsample_key", "split", "label", "start", "end"]
+                [
+                    "relpath",
+                    "slug",
+                    "subsample_key",
+                    "split_key",
+                    "split",
+                    "label",
+                    "start",
+                    "end",
+                ]
             ).issubset(set(process_metadata.columns))
         elif self.data_config["embedding_type"] == "scene":
-            assert set(["relpath", "slug", "subsample_key", "split", "label"]).issubset(
-                set(process_metadata.columns)
-            )
+            assert set(
+                ["relpath", "slug", "subsample_key", "split_key", "split", "label"]
+            ).issubset(set(process_metadata.columns))
             # Multiclass predictions should only have a single label per file
             if self.data_config["prediction_type"] == "multiclass":
                 label_count = process_metadata.groupby("slug")["label"].aggregate(
@@ -260,7 +271,7 @@ class SubsampleSplit(WorkTask):
             self.requires()["metadata"].workdir.joinpath(
                 self.requires()["metadata"].outfile
             )
-        )[["subsample_key", "slug", "relpath", "split"]]
+        )[["subsample_key", "split_key", "slug", "relpath", "split"]]
 
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
@@ -282,7 +293,9 @@ class SubsampleSplit(WorkTask):
             print(f"{num_files} audio files in corpus, keeping only {max_files}")
 
         # Sort by the subsample key and select the max_files number of samples
-        metadata = metadata.sort_values(by="subsample_key").iloc[:max_files]
+        metadata = metadata.sort_values(
+            by=["split_key", "subsample_key"], ascending=[True, True]
+        ).iloc[:max_files]
 
         for _, audio in metadata.iterrows():
             audiofile = Path(audio["relpath"])
