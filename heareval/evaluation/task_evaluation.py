@@ -11,7 +11,8 @@ from functools import partial
 import json
 from pathlib import Path
 import pickle
-from typing import Callable, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
+
 
 from dcase_util.containers import MetaDataContainer
 import numpy as np
@@ -21,139 +22,197 @@ import sklearn.metrics
 import torch
 
 
-def top1_error(
-    predictions: np.ndarray, targets: List, label_vocab: pd.DataFrame
-) -> Dict[str, float]:
-
-    # Dictionary of labels and integer idx: {label -> idx}
-    label_vocab = label_vocab.set_index("label").to_dict()["idx"]
-
-    # Compute the number of correct predictions
-    correct = 0
-    for i, prediction in enumerate(predictions):
-        predicted_class = np.argmax(prediction)
-        assert len(targets[i]) == 1
-        target_class = label_vocab[targets[i][0]]
-
-        if predicted_class == target_class:
-            correct += 1
-
-    top1_error = correct / len(targets)
-    return {"top1_error": top1_error}
-
-
-def macroauc(
-    predictions: np.ndarray, targets: List, label_vocab: pd.DataFrame
-) -> Dict[str, float]:
-    #    return {"macroauc": 0.0}
-    # The rest is broken if test set vocabulary is a strict subset of train vocabulary.
-    # TODO: This should happen in task_evaluation, not be reused everywhere
-    # Dictionary of labels and integer idx: {label -> idx}
-    label_vocab = label_vocab.set_index("label").to_dict()["idx"]
-    # TODO: This shape only works for multiclass, check that is the type
-    for rowlabels in targets:
-        assert len(rowlabels) == 1
-    y_true = np.array([label_vocab[rowlabels[0]] for rowlabels in targets])
-
-    # Convert to multilabel one-hot
-    y_true_multilabel = np.zeros(predictions.shape)
-    y_true_multilabel[np.arange(y_true.size), y_true] = 1
-
-    import IPython
-
-    ipshell = IPython.embed
-    ipshell(banner1="ipshell")
-    return {"macroauc": sklearn.metrics.roc_auc_score(y_true, predictions)}
-
-
-def sed_eval_event_container(x: Dict) -> MetaDataContainer:
-    # Reformat event list for sed_eval
-    reference_events = []
-    for filename, event_list in x.items():
-        for event in event_list:
-            reference_events.append(
-                {
-                    # Convert from ms to seconds for sed_eval
-                    "event_label": event["label"],
-                    "event_onset": event["start"] / 1000.0,
-                    "event_offset": event["end"] / 1000.0,
-                    "file": filename,
-                }
-            )
-    return MetaDataContainer(reference_events)
-
-
-def event_based_metrics(
-    predictions,
-    targets: Dict,
-    label_vocab=pd.DataFrame,
-    tolerance=0.200,
-    onset=True,
-    offset=True,
-):
+class MetricFunction:
     """
-    event-based metrics - the ground truth and system output are compared at
-    event instance level;
-    https://tut-arg.github.io/sed_eval/sound_event.html#sound-event-detection
+    A simple abstract base class for metric functions
     """
-    # Containers of events for sed_eval
-    reference_event_list = sed_eval_event_container(targets)
-    estimated_event_list = sed_eval_event_container(predictions)
 
-    metrics = sed_eval.sound_event.EventBasedMetrics(
-        event_label_list=list(label_vocab["label"]),
-        t_collar=tolerance,
-        evaluate_onset=onset,
-        evaluate_offset=offset,
-    )
+    def __init__(self, task_metadata: Dict, label_vocab: pd.DataFrame):
+        self.task_metadata = task_metadata
+        assert "idx" in label_vocab.columns, "label_vocab missing idx column"
+        assert "label" in label_vocab, "label_vocab missing label column"
+        self.label_vocab = label_vocab
 
-    for filename in predictions:
-        metrics.evaluate(
-            reference_event_list=reference_event_list.filter(filename=filename),
-            estimated_event_list=estimated_event_list.filter(filename=filename),
+    def label_vocab_as_dict(self, key: str) -> Dict:
+        """
+        Returns a dictionary of the label vocabulary mapping the label column to
+        the idx column. key sets whether the label or idx is the key in the dict. The
+        other column will the the value.
+        """
+        if key == "label":
+            value = "idx"
+        else:
+            assert key == "idx", "key argument must be either 'label' or 'idx'"
+            value = "label"
+        return self.label_vocab.set_index(key).to_dict()[value]
+
+    def __call__(self, predictions: Any, targets: Any, **kwargs) -> Dict:
+        """
+        Compute the metric based on the predictions and targets. Return a dictionary
+        of the results.
+        """
+        raise NotImplementedError("Inheriting classes must implement this function")
+
+
+class Top1Error(MetricFunction):
+    def __call__(
+        self, predictions: np.ndarray, targets: List, **kwargs
+    ) -> Dict[str, float]:
+        # Dictionary of labels and integer idx: {label -> idx}
+        label_vocab = self.label_vocab_as_dict(key="label")
+
+        # Compute the number of correct predictions
+        correct = 0
+        for i, prediction in enumerate(predictions):
+            predicted_class = np.argmax(prediction)
+            assert len(targets[i]) == 1
+            target_class = label_vocab[targets[i][0]]
+
+            if predicted_class == target_class:
+                correct += 1
+
+        error = correct / len(targets)
+        return {"top1_error": error}
+
+
+class MacroAUC(MetricFunction):
+    def __call__(
+        self, predictions: np.ndarray, targets: List, **kwargs
+    ) -> Dict[str, float]:
+        # Dictionary of labels and integer idx: {label -> idx}
+        label_vocab = self.label_vocab_as_dict(key="label")
+
+        # TODO: This shape only works for multiclass, check that is the type
+        if self.task_metadata["prediction_type"] == "multiclass":
+            for rowlabels in targets:
+                assert len(rowlabels) == 1
+
+        y_true = np.array([label_vocab[rowlabels[0]] for rowlabels in targets])
+
+        # Convert to multilabel one-hot
+        y_true_multilabel = np.zeros(predictions.shape)
+        y_true_multilabel[np.arange(y_true.size), y_true] = 1
+
+        import IPython
+
+        ipshell = IPython.embed
+        ipshell(banner1="ipshell")
+        return {"macroauc": sklearn.metrics.roc_auc_score(y_true, predictions)}
+
+
+class ChromaError(MetricFunction):
+    """
+    Metric specifically for pitch detection -- converts all pitches to chroma first.
+    This metric ignores octave errors in pitch classification.
+    """
+
+    def __call__(
+        self, predictions: np.ndarray, targets: List, **kwargs
+    ) -> Dict[str, float]:
+        # Dictionary of labels and integer idx: {label -> idx}
+        label_vocab = self.label_vocab_as_dict(key="label")
+
+        # Compute the number of correct predictions
+        correct = 0
+        for i, prediction in enumerate(predictions):
+            predicted_class = np.argmax(prediction)
+            assert len(targets[i]) == 1
+            target_class = label_vocab[targets[i][0]]
+            # Ignore octave errors by converting the predicted class to chroma before
+            # checking for correctness.
+            if predicted_class % 12 == target_class % 12:
+                correct += 1
+
+        error = correct / len(targets)
+        return {"chroma_error": error}
+
+
+class SoundEventMetric(MetricFunction):
+    """
+    Metrics for sound event detection tasks using sed_eval
+    """
+
+    # Metric class must be defined in inheriting classes
+    metric_class = None
+
+    def __init__(
+        self, task_metadata: Dict, label_vocab: pd.DataFrame, params: Dict = None
+    ):
+        super().__init__(task_metadata=task_metadata, label_vocab=label_vocab)
+        self.params = params if params is not None else {}
+        assert self.metric_class is not None
+
+    def __call__(self, predictions: Dict, targets: Dict):
+        # Containers of events for sed_eval
+        reference_event_list = self.sed_eval_event_container(targets)
+        estimated_event_list = self.sed_eval_event_container(predictions)
+
+        metrics = self.metric_class(
+            event_label_list=list(self.label_vocab["label"]), **self.params
         )
 
-    # This (and segment_based_metrics) return a pretty large selection of metrics. We
-    # might want to add a task_metadata option to filter these for the specific
-    # metric that we are going to use to evaluate the task.
-    overall_metrics = metrics.results_overall_metrics()
-    return overall_metrics
+        for filename in predictions:
+            metrics.evaluate(
+                reference_event_list=reference_event_list.filter(filename=filename),
+                estimated_event_list=estimated_event_list.filter(filename=filename),
+            )
+
+        # This (and segment_based_metrics) return a pretty large selection of metrics.
+        # We might want to add a task_metadata option to filter these for the specific
+        # metric that we are going to use to evaluate the task.
+        overall_metrics = metrics.results_overall_metrics()
+        return overall_metrics
+
+    @staticmethod
+    def sed_eval_event_container(x: Dict) -> MetaDataContainer:
+        # Reformat event list for sed_eval
+        reference_events = []
+        for filename, event_list in x.items():
+            for event in event_list:
+                reference_events.append(
+                    {
+                        # Convert from ms to seconds for sed_eval
+                        "event_label": event["label"],
+                        "event_onset": event["start"] / 1000.0,
+                        "event_offset": event["end"] / 1000.0,
+                        "file": filename,
+                    }
+                )
+        return MetaDataContainer(reference_events)
 
 
-def segment_based_metrics(
-    predictions, targets: Dict, label_vocab=pd.DataFrame, time_resolution=1.0
-):
+class SegmentBasedMetric(SoundEventMetric):
     """
     segment-based metrics - the ground truth and system output are compared in a
     fixed time grid; sound events are marked as active or inactive in each segment;
-    https://tut-arg.github.io/sed_eval/sound_event.html#sound-event-detection
+
+    See https://tut-arg.github.io/sed_eval/sound_event.html#sed_eval.sound_event.SegmentBasedMetrics # noqa: E501
+    for params.
     """
-    # Containers of events for sed_eval
-    reference_event_list = sed_eval_event_container(targets)
-    estimated_event_list = sed_eval_event_container(predictions)
 
-    metrics = sed_eval.sound_event.SegmentBasedMetrics(
-        event_label_list=list(label_vocab["label"]), time_resolution=time_resolution
-    )
-
-    for filename in predictions:
-        metrics.evaluate(
-            reference_event_list=reference_event_list.filter(filename=filename),
-            estimated_event_list=estimated_event_list.filter(filename=filename),
-        )
-
-    overall_metrics = metrics.results_overall_metrics()
-    return overall_metrics
+    metric_class = sed_eval.sound_event.SegmentBasedMetrics
 
 
-# TODO: Add additional metrics
+class EventBasedMetric(SoundEventMetric):
+    """
+    event-based metrics - the ground truth and system output are compared at
+    event instance level;
 
-available_metrics: Dict[str, Callable] = {
-    "top1_error": top1_error,
-    "macroauc": macroauc,
-    "event_based": event_based_metrics,
-    "onset_only_event_based": partial(event_based_metrics, offset=False),
-    "segment_based": segment_based_metrics,
+    See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedMetrics.html # noqa: E501
+    for params.
+    """
+
+    metric_class = sed_eval.sound_event.EventBasedMetrics
+
+
+available_metrics = {
+    "top1_error": Top1Error,
+    "macroauc": MacroAUC,
+    "chroma_error": ChromaError,
+    "onset_only_event_based": partial(
+        EventBasedMetric, params={"evaluate_offset": False, "t_collar": 0.2}
+    ),
+    "segment_based": SegmentBasedMetric,
 }
 
 
@@ -201,12 +260,11 @@ def task_evaluation(task_path: Path):
     metadata = json.load(task_path.joinpath("task_metadata.json").open())
     label_vocab = pd.read_csv(task_path.joinpath("labelvocabulary.csv"))
 
-    embedding_type = metadata["embedding_type"]
-
     if "evaluation" not in metadata:
         print(f"Task {task_path.name} has no evaluation config.")
         return
 
+    embedding_type = metadata["embedding_type"]
     if embedding_type == "scene":
         predictions, targets = get_scene_based_prediction_files(task_path)
     elif embedding_type == "event":
@@ -218,7 +276,8 @@ def task_evaluation(task_path: Path):
     results = {}
     for metric in metrics:
         print("  -", metric)
-        new_results = available_metrics[metric](predictions, targets, label_vocab)
-        results.update({metric: new_results})
+        metric_function = available_metrics[metric](metadata, label_vocab)
+        new_results = metric_function(predictions, targets)
+        results.update(new_results)
 
     return results
