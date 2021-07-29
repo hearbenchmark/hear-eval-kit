@@ -22,7 +22,6 @@ from typing import Dict, List
 from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
-from scipy.ndimage import median_filter
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm.auto import tqdm
@@ -86,19 +85,20 @@ class SplitMemmapDataset(Dataset):
 def create_events_from_prediction(
     prediction_dict: Dict[float, torch.Tensor],
     threshold: float = 0.5,
-    median_filter_ms=90.0,
     min_duration=60.0,
 ) -> IntervalTree:
     """
-    Takes a set of prediction tensors keyed on timestamps and generates events.
+    Takes a set of prediction tensors keyed on timestamps and generates events. This
+    converts the prediction tensor to a binary label based on the threshold value. Any
+    events occurring at adjacent timestamps are considered to be part of the same event.
+    This loops through and creates events for each label class. Disregards events that
+    are less than the min_duration.
 
     Args:
         prediction_dict: A dictionary of predictions keyed on timestamp
             {timestamp -> prediction}. The prediction is a tensor of label
             probabilities.
         threshold: Threshold for determining whether to apply a label
-        median_filter_ms: target length of median filter in ms to use to smooth the
-            frame based predictions before converting to events.
         min_duration: the minimum duration requirement for an event to be included.
 
     Returns:
@@ -111,14 +111,15 @@ def create_events_from_prediction(
     # to a numpy array here before applying a median filter.
     predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
 
-    # Apply median filtering and then thresholding to get the
-    # label detected at each frame.
-    # TODO: DCASE limit the number of concurrent events to 5 - should we?
-    ts_diff = timestamps[1] - timestamps[0]
-    filter_width = int(round(median_filter_ms / ts_diff))
+    # We can apply a median filter here to smooth out events, but b/c participants
+    # can select their own timestamp interval, selecting the filter window becomes
+    # challenging and could give an unfair advantage -- so we leave out for now.
+    # This could look something like this:
+    # ts_diff = timestamps[1] - timestamps[0]
+    # filter_width = int(round(median_filter_ms / ts_diff))
+    # predictions = median_filter(predictions, size=(filter_width, 1))
 
-    # Apply filter along the frames for each class to smooth out the labels
-    predictions = median_filter(predictions, size=(filter_width, 1))
+    # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
 
     # Difference between each timestamp to find event boundaries
@@ -156,13 +157,17 @@ def create_events_from_prediction(
     return event_tree
 
 
-def get_predictions_as_events(
+def get_events_for_all_files(
     predictions: torch.Tensor, file_timestamps: List, label_vocab: pd.DataFrame
 ) -> Dict[str, List]:
     """
-    Produces lists of events from a set of frame based label probabilities. The input
-    prediction tensor may contain frame predictions from a set of different files
-    concatenated together. We want to compute events on each of those files separately.
+    Produces lists of events from a set of frame based label probabilities.
+    The input prediction tensor may contain frame predictions from a set of different
+    files concatenated together. file_timestamps has a list of filenames and
+    timestamps for each frame in the predictions tensor.
+
+    We split the predictions into separate tensors based on the filename and compute
+    events based on those individually.
 
     Args:
         predictions: a tensor of frame based multi-label predictions.
@@ -267,7 +272,7 @@ def task_predictions(
             )
 
             print("Creating events from predictions:")
-            events = get_predictions_as_events(
+            events = get_events_for_all_files(
                 predicted_labels, file_timestamps, label_vocab
             )
 
