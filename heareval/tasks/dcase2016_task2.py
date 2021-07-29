@@ -45,8 +45,9 @@ config = {
         {"name": "train", "max_files": 10},
         {"name": "test", "max_files": 10},
     ],
-    # TODO: Add metrics
-    "evaluation": [],
+    # DCASE2016 task 2 used the segment-based total error rate as their main metric
+    # and then the onset only event based F1 as their secondary metric.
+    "evaluation": ["segment_based", "onset_only_event_based"],
 }
 
 
