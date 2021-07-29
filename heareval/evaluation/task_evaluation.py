@@ -79,6 +79,7 @@ class MacroAUC(MetricFunction):
     def __call__(
         self, predictions: np.ndarray, targets: List, **kwargs
     ) -> Dict[str, float]:
+        return {"auc": None}
         # Dictionary of labels and integer idx: {label -> idx}
         label_vocab = self.label_vocab_as_dict(key="label")
 
@@ -278,6 +279,6 @@ def task_evaluation(task_path: Path):
         print("  -", metric)
         metric_function = available_metrics[metric](metadata, label_vocab)
         new_results = metric_function(predictions, targets)
-        results.update(new_results)
+        results.update({metric: new_results})
 
     return results
