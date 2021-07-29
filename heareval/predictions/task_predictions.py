@@ -22,6 +22,7 @@ from typing import Dict, List
 from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
+from scipy.ndimage import median_filter
 import torch
 from torch.utils.data import Dataset, DataLoader
 from tqdm.auto import tqdm
@@ -83,7 +84,10 @@ class SplitMemmapDataset(Dataset):
 
 
 def create_events_from_prediction(
-    prediction_dict: Dict, threshold: float = 0.5
+    prediction_dict: Dict[str, torch.Tensor],
+    threshold: float = 0.5,
+    median_filter_ms=90.0,
+    min_duration=60.0,
 ) -> IntervalTree:
     """
     Takes a set of prediction tensors keyed on timestamps and generates events.
@@ -91,24 +95,32 @@ def create_events_from_prediction(
     Args:
         predictions: A dictionary of predictions {timestamp -> prediction}
         threshold: Threshold for determining whether to apply a label
+        median_filter_ms: target length of median filter in ms to use to smooth the
+            frame based predictions before converting to events.
+        min_duration: the minimum duration requirement for an event to be included.
 
     Returns:
         An IntervalTree object containing all the events from the predictions.
     """
     # Make sure the timestamps are in the correct order
-    timestamps = sorted(prediction_dict.keys())
+    timestamps = np.array(sorted(prediction_dict.keys()))
 
-    # Create a sorted tensor of frame level predictions for this file.
-    predictions = torch.stack([prediction_dict[t] for t in timestamps])
+    # Create a sorted numpy matrix of frame level predictions for this file. We convert
+    # to a numpy array here before applying a median filter.
+    predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
 
-    # Apply thresholding to get the label detected at each frame.
-    # TODO: Apply median filtering for smoothing?
-    #   Additionally, DCASE limits the number of active classes at a single
-    #   time to 6. We could do that here as well.
-    predictions = (predictions > threshold).type(torch.int8)
+    # Apply median filtering and then thresholding to get the
+    # label detected at each frame.
+    # TODO: DCASE limit the number of concurrent events to 5 - should we?
+    ts_diff = timestamps[1] - timestamps[0]
+    filter_width = int(round(median_filter_ms / ts_diff))
+
+    # Apply filter along the frames for each class to smooth out the labels
+    predictions = median_filter(predictions, size=(filter_width, 1))
+    predictions = (predictions > threshold).astype(np.int8)
 
     # Difference between each timestamp to find event boundaries
-    pred_diff = torch.diff(predictions, dim=0)
+    pred_diff = np.diff(predictions, axis=0)
 
     # This is slow, but for each class look through all the timestamp predictions
     # and construct a set of events with onset and offset timestamps.
@@ -129,11 +141,14 @@ def create_events_from_prediction(
             # Offset for current event
             elif pred_diff[t][class_idx] == -1:
                 assert len(current_event) == 1
-                # TODO: filter on event length? DCASE only included events that
-                #   are 60ms long.
-                event_tree.addi(
-                    begin=current_event[0], end=timestamps[t + 1], data=class_idx
-                )
+                current_event.append(timestamps[t + 1])
+                event_duration = current_event[1] - current_event[0]
+
+                # Add event if greater than the minimum duration threshold
+                if event_duration >= min_duration:
+                    event_tree.addi(
+                        begin=current_event[0], end=current_event[1], data=class_idx
+                    )
                 current_event = []
 
     return event_tree
