@@ -93,7 +93,8 @@ def create_events_from_prediction(
     Takes a set of prediction tensors keyed on timestamps and generates events.
 
     Args:
-        predictions: A dictionary of predictions {timestamp -> prediction}
+        prediction_dict: A dictionary of predictions {timestamp -> prediction}. The
+            prediction is a tensor of probabilities for each label.
         threshold: Threshold for determining whether to apply a label
         median_filter_ms: target length of median filter in ms to use to smooth the
             frame based predictions before converting to events.
