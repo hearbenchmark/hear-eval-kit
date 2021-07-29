@@ -35,8 +35,8 @@ def top1_error(
         if predicted_class == target_class:
             correct += 1
 
-    top1_error = correct / len(targets)
-    return {"top1_error": top1_error}
+    error = correct / len(targets)
+    return {"top1_error": error}
 
 
 def macroauc(
@@ -63,9 +63,39 @@ def macroauc(
     return {"macroauc": sklearn.metrics.roc_auc_score(y_true, predictions)}
 
 
+def chroma_error(
+    predictions: np.ndarray, targets: List, label_vocab: pd.DataFrame
+) -> Dict[str, float]:
+    """
+    Metric specifically for pitch detection -- converts all pitches to chroma first.
+    This metric ignores octave errors in pitch classification.
+    """
+
+    # Dictionary of labels and integer idx: {label -> idx}
+    label_vocab = label_vocab.set_index("label").to_dict()["idx"]
+
+    # Compute the number of correct predictions
+    correct = 0
+    for i, prediction in enumerate(predictions):
+        predicted_class = np.argmax(prediction)
+        assert len(targets[i]) == 1
+        target_class = label_vocab[targets[i][0]]
+        # Ignore octave errors by converting the predicted class to chroma before
+        # checking for correctness.
+        if predicted_class % 12 == target_class % 12:
+            correct += 1
+
+    error = correct / len(targets)
+    return {"chroma_error": error}
+
+
 # TODO: Add additional metrics
 
-available_metrics = {"top1_error": top1_error, "macroauc": macroauc}
+available_metrics = {
+    "top1_error": top1_error,
+    "macroauc": macroauc,
+    "chroma_error": chroma_error,
+}
 
 
 def task_evaluation(task_path: Path):
