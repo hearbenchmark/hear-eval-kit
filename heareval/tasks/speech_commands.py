@@ -41,15 +41,10 @@ config = {
         },
     ],
     "sample_duration": 1.0,
-    # One label had only 668 sample, taking 100 as sample size
-    # would eliminate this label, due to small sample fraction of this
-    # label type(100/total sample size) and hence trigerring of the assert
-    # statement in the subsample task.
-    # Changed it to 500 to get enough samples for stratification to work
     "splits": [
-        {"name": "train", "max_files": 500},
-        {"name": "test", "max_files": 500},
-        {"name": "valid", "max_files": 500},
+        {"name": "train", "max_files": 100},
+        {"name": "test", "max_files": 100},
+        {"name": "valid", "max_files": 100},
     ],
 }
 
