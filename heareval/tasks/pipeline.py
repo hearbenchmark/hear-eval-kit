@@ -230,7 +230,8 @@ class ExtractMetadata(WorkTask):
                     "slug",
                     "stratify_key",
                     "split_key",
-                    "subsample_key" "split",
+                    "subsample_key",
+                    "split",
                     "label",
                     "start",
                     "end",
@@ -329,9 +330,11 @@ class SubsampleSplit(WorkTask):
         assert set(sampled_metadata["stratify_key"].unique()) == set(
             metadata["stratify_key"].unique()
         ), "All stratify groups are not in the sampled metadata."
-        assert (
-            len(sampled_metadata) <= max_files
-        ), "Sampled metadata is more than the allowed max files"
+        # Add the num of groups here for handling addition in case of highly
+        # imbalanced subsampling
+        assert len(sampled_metadata) <= max_files + len(
+            grp_count
+        ), "Sampled metadata is more than the allowed max files + unique groups"
 
         print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
         return sampled_metadata
@@ -360,7 +363,7 @@ class SubsampleSplit(WorkTask):
             newaudiofile.unlink(missing_ok=True)
             newaudiofile.symlink_to(audiofile.resolve())
 
-        # self.mark_complete()
+        self.mark_complete()
 
 
 class SubsampleSplits(WorkTask):
