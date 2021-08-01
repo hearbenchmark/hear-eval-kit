@@ -169,7 +169,7 @@ class ExtractMetadata(WorkTask):
         By default, the label is used for stratification
         """
         assert "label" in df, "label column not found in the dataframe"
-        return df["label"].apply(str).apply(filename_to_int_hash)
+        return df["label"]
 
     @staticmethod
     def get_split_key(df: DataFrame) -> Series:
@@ -265,6 +265,7 @@ class ExtractMetadata(WorkTask):
             index=False,
         )
 
+        # Save the label count for each split
         for split, split_df in process_metadata.groupby("split"):
             json.dump(
                 split_df["label"].value_counts().to_dict(),
@@ -318,7 +319,15 @@ class SubsampleSplit(WorkTask):
         return metadata
 
     def subsample_metadata(self, metadata, max_files):
+        """
+        Returns the sampled metadata
 
+        1. Get the count required for each group.
+        2. Sort the metadata by the split_key and the subsample_key
+        3. For each group select the count required and concatenate.
+        In case the group had too few data points,
+        just select one datapoint for the group
+        """
         # Get group count for each group
         grp_count = metadata["stratify_key"].value_counts() * max_files / len(metadata)
         # Sort by the split key and the subsample key
@@ -329,22 +338,25 @@ class SubsampleSplit(WorkTask):
         sampled_metadata = pd.concat(
             [
                 # Ensure at least 1 sample is selected for each group
-                stratify_grp.head(1 if grp_count[grp] < 1 else int(grp_count[grp]))
+                stratify_grp.head(max(1, int(grp_count[grp])))
                 for grp, stratify_grp in metadata.groupby("stratify_key")
             ]
         )
-        # Do some assertions
+        # Assertions
+        # if all the labels are there in the metadata after subsampling
         assert set(sampled_metadata["stratify_key"].unique()) == set(
             metadata["stratify_key"].unique()
         ), "All stratify groups are not in the sampled metadata."
-        # Add the num of groups here for handling addition in case of highly
-        # imbalanced subsampling
+
+        # If the subsampled data points are more than the max_subsample +
+        # len(grp_count). The length of group count is here since some groups
+        # might be too small and we might need to take one sample for the group.
         assert len(sampled_metadata) <= max_files + len(
             grp_count
         ), "Sampled metadata is more than the allowed max files + unique groups"
 
         print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
-        return sampled_metadata
+        return sampled_metadata.sort_values("subsample_key")
 
     def run(self):
 
@@ -356,12 +368,14 @@ class SubsampleSplit(WorkTask):
                 f"{num_files} audio files in corpus."
                 "Max files to subsample: {max_files}"
             )
-            metadata = self.subsample_metadata(metadata, max_files)
-            assert self.subsample_metadata(metadata, max_files).equals(
-                metadata
+            sampled_metadata = self.subsample_metadata(metadata, max_files)
+            assert self.subsample_metadata(metadata.sample(frac=1), max_files).equals(
+                sampled_metadata
             ), "The subsampling is not stable"
+        else:
+            sampled_metadata = metadata
 
-        for _, audio in metadata.iterrows():
+        for _, audio in sampled_metadata.iterrows():
             audiofile = Path(audio["relpath"])
             # Add the original extension to the slug
             newaudiofile = Path(
