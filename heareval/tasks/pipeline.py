@@ -316,7 +316,8 @@ class SubsampleSplit(WorkTask):
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
             print(
-                f"{num_files} audio files in corpus. Max files to subsample: {max_files}"
+                f"{num_files} audio files in corpus."
+                "Max files to subsample: {max_files}"
             )
             # Get the fraction of datapoints to subsample
             # For each stratify key, that subsample_fraction of the data points
@@ -338,7 +339,6 @@ class SubsampleSplit(WorkTask):
                 # Make a stratified subsample key
                 stratified_subsample_key=lambda df: df["in_grp_rank"] / df["grp_size"],
             )
-            metadata.to_csv("metadata.csv")
             # Select the datapoints which are within the subsample fraction for each
             # group
             sampled_metadata = metadata.loc[
@@ -346,7 +346,8 @@ class SubsampleSplit(WorkTask):
             ]
             assert set(sampled_metadata["stratify_key"].unique()) == set(
                 metadata["stratify_key"].unique()
-            ), "All stratify groups are not in the sampled metadata"
+            ), "All stratify groups are not in the sampled metadata."
+            "Please consider increasing the sample size"
             # Since this is selected for each stratify key, this might lead
             # to less number of samples selected
             assert (
