@@ -155,6 +155,23 @@ class ExtractMetadata(WorkTask):
         return f"{slugify(str(Path(relative_path).stem))}"
 
     @staticmethod
+    def get_stratify_key(df: DataFrame) -> Series:
+        """
+        Get the stratify key
+
+        Subsampling is stratified based on this key.
+        Since hashing is only required for ordering the samples
+        for subsampling, the stratify key should not necessarily be a hash,
+        as it is only used to group the data points before subsampling.
+        The actual subsampling is done by the split key and
+        the subsample key.
+
+        By default, the label is used for stratification
+        """
+        assert "label" in df, "label column not found in the dataframe"
+        return df["label"].apply(str).apply(filename_to_int_hash)
+
+    @staticmethod
     def get_split_key(df: DataFrame) -> Series:
         """
         Gets the split key.
@@ -211,9 +228,9 @@ class ExtractMetadata(WorkTask):
                 [
                     "relpath",
                     "slug",
-                    "subsample_key",
+                    "stratify_key",
                     "split_key",
-                    "split",
+                    "subsample_key" "split",
                     "label",
                     "start",
                     "end",
@@ -221,7 +238,15 @@ class ExtractMetadata(WorkTask):
             ).issubset(set(process_metadata.columns))
         elif self.data_config["embedding_type"] == "scene":
             assert set(
-                ["relpath", "slug", "subsample_key", "split_key", "split", "label"]
+                [
+                    "relpath",
+                    "slug",
+                    "stratify_key",
+                    "split_key",
+                    "subsample_key",
+                    "split",
+                    "label",
+                ]
             ).issubset(set(process_metadata.columns))
             # Multiclass predictions should only have a single label per file
             if self.data_config["prediction_type"] == "multiclass":
@@ -271,7 +296,7 @@ class SubsampleSplit(WorkTask):
             self.requires()["metadata"].workdir.joinpath(
                 self.requires()["metadata"].outfile
             )
-        )[["subsample_key", "split_key", "slug", "relpath", "split"]]
+        )[["split", "stratify_key", "split_key", "subsample_key", "slug", "relpath"]]
 
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
