@@ -238,7 +238,7 @@ class ExtractMetadata(WorkTask):
             self.workdir.joinpath(self.outfile),
             index=False,
         )
-        #Save label count for data in each split
+        # Save label count for data in each split
         for split, split_df in process_metadata.groupby("split"):
             json.dump(
                 split_df["label"].value_counts().to_dict(),
@@ -537,7 +537,7 @@ class MetadataVocabulary(WorkTask):
             self.requires()["traintestmeta"].workdir.glob("*.csv")
         ):
             labeldf = pd.read_csv(split_metadata)
-            #Save the label count for the datapoints in the split.
+            # Save the label count for the datapoints in the split.
             json.dump(
                 labeldf["label"].value_counts().to_dict(),
                 self.workdir.joinpath(f"labelcount_{split_metadata.stem}.json").open(
