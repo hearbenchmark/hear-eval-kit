@@ -315,14 +315,46 @@ class SubsampleSplit(WorkTask):
         num_files = len(metadata)
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
-            print(f"{num_files} audio files in corpus, keeping only {max_files}")
+            print(
+                f"{num_files} audio files in corpus. Max files to subsample: {max_files}"
+            )
+            # Get the fraction of datapoints to subsample
+            # For each stratify key, that subsample_fraction of the data points
+            # will be selected
+            subsample_fraction = max_files / len(metadata)
+            metadata = metadata.assign(
+                # Get the size of each stratified group
+                grp_size=lambda df: df.groupby("stratify_key")["slug"].transform(len),
+                # Get cumulative count of each data point in the group
+                # sorted by the split key followed by the subsample key.
+                # Groupby after sort is stable
+                in_grp_rank=lambda df: df.sort_values(
+                    by=["split_key", "subsample_key"], ascending=[True, True]
+                )
+                .groupby("stratify_key")["slug"]
+                .cumcount(ascending=True)
+                # Add one as the cumcount starts from 0
+                .add(1),
+                # Make a stratified subsample key
+                stratified_subsample_key=lambda df: df["in_grp_rank"] / df["grp_size"],
+            )
+            metadata.to_csv("metadata.csv")
+            # Select the datapoints which are within the subsample fraction for each
+            # group
+            sampled_metadata = metadata.loc[
+                lambda df: df["stratified_subsample_key"] <= subsample_fraction
+            ]
+            assert set(sampled_metadata["stratify_key"].unique()) == set(
+                metadata["stratify_key"].unique()
+            ), "All stratify groups are not in the sampled metadata"
+            # Since this is selected for each stratify key, this might lead
+            # to less number of samples selected
+            assert (
+                len(sampled_metadata) <= max_files
+            ), "Sampled metadata is more than the allowed max files"
+            print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
 
-        # Sort by the subsample key and select the max_files number of samples
-        metadata = metadata.sort_values(
-            by=["split_key", "subsample_key"], ascending=[True, True]
-        ).iloc[:max_files]
-
-        for _, audio in metadata.iterrows():
+        for _, audio in sampled_metadata.iterrows():
             audiofile = Path(audio["relpath"])
             # Add the original extension to the slug
             newaudiofile = Path(
