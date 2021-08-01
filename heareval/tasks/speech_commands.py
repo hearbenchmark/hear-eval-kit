@@ -41,10 +41,15 @@ config = {
         },
     ],
     "sample_duration": 1.0,
+    # One label had only 668 sample, taking 100 as sample size
+    # would eliminate this label, due to small sample fraction of this
+    # label type(100/total sample size) and hence trigerring of the assert
+    # statement in the subsample task.
+    # Changed it to 500 to get enough samples for stratification to work
     "splits": [
-        {"name": "train", "max_files": 100},
-        {"name": "test", "max_files": 100},
-        {"name": "valid", "max_files": 100},
+        {"name": "train", "max_files": 500},
+        {"name": "test", "max_files": 500},
+        {"name": "valid", "max_files": 500},
     ],
 }
 
@@ -198,10 +203,11 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     def get_process_metadata(self) -> pd.DataFrame:
         process_metadata = self.get_split_paths()
         process_metadata = process_metadata.assign(
+            label=lambda df: df["relpath"].apply(self.apply_label),
             slug=lambda df: df["relpath"].apply(self.slugify_file_name),
             split_key=lambda df: self.get_split_key(df),
             subsample_key=lambda df: self.get_subsample_key(df),
-            label=lambda df: df["relpath"].apply(self.apply_label),
+            stratify_key=lambda df: self.get_stratify_key(df),
         )
         return process_metadata
 
