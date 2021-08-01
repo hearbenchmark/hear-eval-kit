@@ -309,6 +309,33 @@ class SubsampleSplit(WorkTask):
         )
         return metadata
 
+    def subsample_metadata(self, metadata, max_files):
+
+        # Get group count for each group
+        grp_count = metadata["stratify_key"].value_counts() * max_files / len(metadata)
+        # Sort by the split key and the subsample key
+        metadata = metadata.sort_values(
+            by=["split_key", "subsample_key"], ascending=[True, True]
+        )
+        # Groupby and select the required sample from each group
+        sampled_metadata = pd.concat(
+            [
+                # Ensure at least 1 sample is selected for each group
+                stratify_grp.head(1 if grp_count[grp] < 1 else int(grp_count[grp]))
+                for grp, stratify_grp in metadata.groupby("stratify_key")
+            ]
+        )
+        # Do some assertions
+        assert set(sampled_metadata["stratify_key"].unique()) == set(
+            metadata["stratify_key"].unique()
+        ), "All stratify groups are not in the sampled metadata."
+        assert (
+            len(sampled_metadata) <= max_files
+        ), "Sampled metadata is more than the allowed max files"
+
+        print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
+        return sampled_metadata
+
     def run(self):
 
         metadata = self.get_metadata()
@@ -319,43 +346,12 @@ class SubsampleSplit(WorkTask):
                 f"{num_files} audio files in corpus."
                 "Max files to subsample: {max_files}"
             )
-            # Get the fraction of datapoints to subsample
-            # For each stratify key, that subsample_fraction of the data points
-            # will be selected
-            subsample_fraction = max_files / len(metadata)
-            metadata = metadata.assign(
-                # Get the size of each stratified group
-                grp_size=lambda df: df.groupby("stratify_key")["slug"].transform(len),
-                # Get cumulative count of each data point in the group
-                # sorted by the split key followed by the subsample key.
-                # Groupby after sort is stable
-                in_grp_rank=lambda df: df.sort_values(
-                    by=["split_key", "subsample_key"], ascending=[True, True]
-                )
-                .groupby("stratify_key")["slug"]
-                .cumcount(ascending=True)
-                # Add one as the cumcount starts from 0
-                .add(1),
-                # Make a stratified subsample key
-                stratified_subsample_key=lambda df: df["in_grp_rank"] / df["grp_size"],
-            )
-            # Select the datapoints which are within the subsample fraction for each
-            # group
-            sampled_metadata = metadata.loc[
-                lambda df: df["stratified_subsample_key"] <= subsample_fraction
-            ]
-            assert set(sampled_metadata["stratify_key"].unique()) == set(
-                metadata["stratify_key"].unique()
-            ), "All stratify groups are not in the sampled metadata."
-            "Please consider increasing the sample size"
-            # Since this is selected for each stratify key, this might lead
-            # to less number of samples selected
-            assert (
-                len(sampled_metadata) <= max_files
-            ), "Sampled metadata is more than the allowed max files"
-            print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
+            metadata = self.subsample_metadata(metadata, max_files)
+            assert self.subsample_metadata(metadata, max_files).equals(
+                metadata
+            ), "The subsampling is not stable"
 
-        for _, audio in sampled_metadata.iterrows():
+        for _, audio in metadata.iterrows():
             audiofile = Path(audio["relpath"])
             # Add the original extension to the slug
             newaudiofile = Path(
@@ -364,7 +360,7 @@ class SubsampleSplit(WorkTask):
             newaudiofile.unlink(missing_ok=True)
             newaudiofile.symlink_to(audiofile.resolve())
 
-        self.mark_complete()
+        # self.mark_complete()
 
 
 class SubsampleSplits(WorkTask):
