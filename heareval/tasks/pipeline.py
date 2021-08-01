@@ -238,6 +238,12 @@ class ExtractMetadata(WorkTask):
             self.workdir.joinpath(self.outfile),
             index=False,
         )
+        for split, split_df in process_metadata.groupby("split"):
+            json.dump(
+                split_df["label"].value_counts().to_dict(),
+                self.workdir.joinpath(f"labelcount_{split}.json").open("w"),
+                indent=True,
+            )
 
         self.mark_complete()
 
@@ -530,6 +536,13 @@ class MetadataVocabulary(WorkTask):
             self.requires()["traintestmeta"].workdir.glob("*.csv")
         ):
             labeldf = pd.read_csv(split_metadata)
+            json.dump(
+                labeldf["label"].value_counts().to_dict(),
+                self.workdir.joinpath(f"labelcount_{split_metadata.stem}.json").open(
+                    "w"
+                ),
+                indent=True,
+            )
             labelset = labelset | set(labeldf["label"].unique().tolist())
 
         # Build the label idx csv and save it
@@ -539,7 +552,7 @@ class MetadataVocabulary(WorkTask):
         )
 
         labelcsv.to_csv(
-            os.path.join(self.workdir, "labelvocabulary.csv"),
+            self.workdir.joinpath("labelvocabulary.csv"),
             columns=["idx", "label"],
             index=False,
         )
