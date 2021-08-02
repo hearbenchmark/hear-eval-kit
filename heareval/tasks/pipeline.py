@@ -21,6 +21,7 @@ from heareval.tasks.util.luigi import (
     download_file,
     filename_to_int_hash,
     new_basedir,
+    subsample_metadata,
 )
 
 
@@ -318,46 +319,6 @@ class SubsampleSplit(WorkTask):
         )
         return metadata
 
-    def subsample_metadata(self, metadata, max_files):
-        """
-        Returns the sampled metadata
-
-        1. Get the count required for each group.
-        2. Sort the metadata by the split_key and the subsample_key
-        3. For each group select the count required and concatenate.
-        In case the group had too few data points,
-        just select one datapoint for the group
-        """
-        # Get group count for each group
-        grp_count = metadata["stratify_key"].value_counts() * max_files / len(metadata)
-        # Sort by the split key and the subsample key
-        metadata = metadata.sort_values(
-            by=["split_key", "subsample_key"], ascending=[True, True]
-        )
-        # Groupby and select the required sample from each group
-        sampled_metadata = pd.concat(
-            [
-                # Ensure at least 1 sample is selected for each group
-                stratify_grp.head(max(1, int(grp_count[grp])))
-                for grp, stratify_grp in metadata.groupby("stratify_key")
-            ]
-        )
-        # Assertions
-        # if all the labels are there in the metadata after subsampling
-        assert set(sampled_metadata["stratify_key"].unique()) == set(
-            metadata["stratify_key"].unique()
-        ), "All stratify groups are not in the sampled metadata."
-
-        # If the subsampled data points are more than the max_subsample +
-        # len(grp_count). The length of group count is here since some groups
-        # might be too small and we might need to take one sample for the group.
-        assert len(sampled_metadata) <= max_files + len(
-            grp_count
-        ), "Sampled metadata is more than the allowed max files + unique groups"
-
-        print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
-        return sampled_metadata.sort_values("subsample_key")
-
     def run(self):
 
         metadata = self.get_metadata()
@@ -368,8 +329,9 @@ class SubsampleSplit(WorkTask):
                 f"{num_files} audio files in corpus."
                 "Max files to subsample: {max_files}"
             )
-            sampled_metadata = self.subsample_metadata(metadata, max_files)
-            assert self.subsample_metadata(metadata.sample(frac=1), max_files).equals(
+            sampled_metadata = subsample_metadata(metadata, max_files)
+            print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
+            assert subsample_metadata(metadata.sample(frac=1), max_files).equals(
                 sampled_metadata
             ), "The subsampling is not stable"
         else:
