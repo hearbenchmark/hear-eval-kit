@@ -10,6 +10,7 @@ from pathlib import Path
 
 import luigi
 import requests
+import pandas as pd
 from tqdm.auto import tqdm
 
 
@@ -185,3 +186,46 @@ def md5sum(filename):
                 d.update(buf)
                 pbar.update(32768)
     return d.hexdigest()
+
+
+def subsample_metadata(metadata: pd.DataFrame, max_files: int) -> pd.DataFrame:
+    """
+    Returns the sampled metadata
+
+    1. Get the count required for each group.
+    2. Sort the metadata by the split_key and the subsample_key
+    3. For each group select the count required(calculated in 1) and concatenate.
+    In case the group had too few data points,
+    just select one datapoint for the group
+    """
+    assert set(["stratify_key", "split_key", "subsample_key"]).issubset(
+        metadata.columns
+    ), "All columns not found in input metadata"
+    # Get group count for each group
+    grp_count = metadata["stratify_key"].value_counts() * max_files / len(metadata)
+    # Sort by the split key and the subsample key
+    metadata = metadata.sort_values(
+        by=["split_key", "subsample_key"], ascending=[True, True]
+    )
+    # Groupby and select the required sample from each group
+    sampled_metadata = pd.concat(
+        [
+            # Ensure at least 1 sample is selected for each group
+            stratify_grp.head(max(1, int(grp_count[grp])))
+            for grp, stratify_grp in metadata.groupby("stratify_key")
+        ]
+    )
+    # Assertions
+    # if all the labels are there in the metadata after subsampling
+    assert set(sampled_metadata["stratify_key"].unique()) == set(
+        metadata["stratify_key"].unique()
+    ), "All stratify groups are not in the sampled metadata."
+
+    # If the subsampled data points are more than the max_subsample +
+    # len(grp_count). The length of group count is here since some groups
+    # might be too small and we might need to take one sample for the group.
+    assert len(sampled_metadata) <= max_files + len(
+        grp_count
+    ), "Sampled metadata is more than the allowed max files + unique groups"
+
+    return sampled_metadata.sort_values("subsample_key")
