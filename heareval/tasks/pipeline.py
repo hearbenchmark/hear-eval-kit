@@ -21,6 +21,7 @@ from heareval.tasks.util.luigi import (
     download_file,
     filename_to_int_hash,
     new_basedir,
+    subsample_metadata,
 )
 
 
@@ -155,6 +156,23 @@ class ExtractMetadata(WorkTask):
         return f"{slugify(str(Path(relative_path).stem))}"
 
     @staticmethod
+    def get_stratify_key(df: DataFrame) -> Series:
+        """
+        Get the stratify key
+
+        Subsampling is stratified based on this key.
+        Since hashing is only required for ordering the samples
+        for subsampling, the stratify key should not necessarily be a hash,
+        as it is only used to group the data points before subsampling.
+        The actual subsampling is done by the split key and
+        the subsample key.
+
+        By default, the label is used for stratification
+        """
+        assert "label" in df, "label column not found in the dataframe"
+        return df["label"]
+
+    @staticmethod
     def get_split_key(df: DataFrame) -> Series:
         """
         Gets the split key.
@@ -211,8 +229,9 @@ class ExtractMetadata(WorkTask):
                 [
                     "relpath",
                     "slug",
-                    "subsample_key",
+                    "stratify_key",
                     "split_key",
+                    "subsample_key",
                     "split",
                     "label",
                     "start",
@@ -221,7 +240,15 @@ class ExtractMetadata(WorkTask):
             ).issubset(set(process_metadata.columns))
         elif self.data_config["embedding_type"] == "scene":
             assert set(
-                ["relpath", "slug", "subsample_key", "split_key", "split", "label"]
+                [
+                    "relpath",
+                    "slug",
+                    "stratify_key",
+                    "split_key",
+                    "subsample_key",
+                    "split",
+                    "label",
+                ]
             ).issubset(set(process_metadata.columns))
             # Multiclass predictions should only have a single label per file
             if self.data_config["prediction_type"] == "multiclass":
@@ -238,6 +265,14 @@ class ExtractMetadata(WorkTask):
             self.workdir.joinpath(self.outfile),
             index=False,
         )
+
+        # Save the label count for each split
+        for split, split_df in process_metadata.groupby("split"):
+            json.dump(
+                split_df["label"].value_counts().to_dict(),
+                self.workdir.joinpath(f"labelcount_{split}.json").open("w"),
+                indent=True,
+            )
 
         self.mark_complete()
 
@@ -271,7 +306,7 @@ class SubsampleSplit(WorkTask):
             self.requires()["metadata"].workdir.joinpath(
                 self.requires()["metadata"].outfile
             )
-        )[["subsample_key", "split_key", "slug", "relpath", "split"]]
+        )[["split", "stratify_key", "split_key", "subsample_key", "slug", "relpath"]]
 
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
@@ -290,14 +325,19 @@ class SubsampleSplit(WorkTask):
         num_files = len(metadata)
         max_files = num_files if self.max_files is None else self.max_files
         if num_files > max_files:
-            print(f"{num_files} audio files in corpus, keeping only {max_files}")
+            print(
+                f"{num_files} audio files in corpus."
+                "Max files to subsample: {max_files}"
+            )
+            sampled_metadata = subsample_metadata(metadata, max_files)
+            print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
+            assert subsample_metadata(metadata.sample(frac=1), max_files).equals(
+                sampled_metadata
+            ), "The subsampling is not stable"
+        else:
+            sampled_metadata = metadata
 
-        # Sort by the subsample key and select the max_files number of samples
-        metadata = metadata.sort_values(
-            by=["split_key", "subsample_key"], ascending=[True, True]
-        ).iloc[:max_files]
-
-        for _, audio in metadata.iterrows():
+        for _, audio in sampled_metadata.iterrows():
             audiofile = Path(audio["relpath"])
             # Add the original extension to the slug
             newaudiofile = Path(
@@ -530,6 +570,13 @@ class MetadataVocabulary(WorkTask):
             self.requires()["traintestmeta"].workdir.glob("*.csv")
         ):
             labeldf = pd.read_csv(split_metadata)
+            json.dump(
+                labeldf["label"].value_counts().to_dict(),
+                self.workdir.joinpath(f"labelcount_{split_metadata.stem}.json").open(
+                    "w"
+                ),
+                indent=True,
+            )
             labelset = labelset | set(labeldf["label"].unique().tolist())
 
         # Build the label idx csv and save it

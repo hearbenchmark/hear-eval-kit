@@ -95,6 +95,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 split=lambda df: split,
                 subsample_key=lambda df: self.get_subsample_key(df),
                 split_key=lambda df: self.get_split_key(df),
+                stratify_key=lambda df: self.get_stratify_key(df),
             )
 
             metadatas.append(metadata)

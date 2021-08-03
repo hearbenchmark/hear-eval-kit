@@ -198,10 +198,11 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     def get_process_metadata(self) -> pd.DataFrame:
         process_metadata = self.get_split_paths()
         process_metadata = process_metadata.assign(
+            label=lambda df: df["relpath"].apply(self.apply_label),
             slug=lambda df: df["relpath"].apply(self.slugify_file_name),
             split_key=lambda df: self.get_split_key(df),
             subsample_key=lambda df: self.get_subsample_key(df),
-            label=lambda df: df["relpath"].apply(self.apply_label),
+            stratify_key=lambda df: self.get_stratify_key(df),
         )
         return process_metadata
 
