@@ -100,3 +100,28 @@ class RandomSubsampleOriginalDataset(luigi_util.WorkTask):
                     src=file, dst=copy_to.joinpath(file.relative_to(copy_from))
                 )
             shutil.make_archive(copy_to, "zip", copy_to)
+
+
+@click.command()
+@click.argument("task")
+@click.option(
+    "--num-workers",
+    default=None,
+    help="Number of CPU workers to use when running. "
+    "If not provided all CPUs are used.",
+    type=int,
+)
+def main(task: str, num_workers: Optional[int] = None):
+    if num_workers is None:
+        num_workers = multiprocessing.cpu_count()
+    logger.info(f"Using {num_workers} workers")
+    config = configs[task]
+    sampler = RandomSubsampleOriginalDataset(
+        data_config=config["task_config"],
+        audio_sample_size=config["audio_sample_size"],
+        necessary_keys=config["necessary_keys"],
+    )
+    pipeline.run(sampler, num_workers=num_workers)
+
+if __name__ == "__main__":
+    main()
