@@ -1,0 +1,102 @@
+from pathlib import Path
+from typing import Optional
+import multiprocessing
+import random
+import logging
+
+import luigi
+from tqdm import tqdm
+from urllib.parse import urlparse
+import shutil
+import click
+
+import heareval.tasks.pipeline as pipeline
+import heareval.tasks.util.luigi as luigi_util
+from heareval.tasks.speech_commands import config as speech_command_config
+from heareval.tasks.dcase2016_task2 import config as dcase2016_task2_config
+from heareval.tasks.nsynth_pitch import config as nsynth_pitch_config
+
+logger = logging.getLogger("luigi-interface")
+
+METADATAFORMATS = [".csv", ".json", ".txt"]
+AUDIOFORMATS = [".mp3", ".wav", ".ogg"]
+
+
+configs = {
+    "nsynth_pitch": {
+        "task_config": nsynth_pitch_config,
+        "audio_sample_size": 100,
+        "necessary_keys": [],
+    },
+    "speech_command": {
+        "task_config": speech_command_config,
+        "audio_sample_size": 100,
+        "necessary_keys": [],
+    },
+    "dcase2016_task2": {
+        "task_config": dcase2016_task2_config,
+        "audio_sample_size": 10,
+        # Add any keys in the file format that we compulsorily need to copy
+        "necessary_keys": [],
+    },
+}
+
+
+class RandomSubsampleOriginalDataset(luigi_util.WorkTask):
+    necessary_keys = luigi.ListParameter()
+    audio_sample_size = luigi.Parameter()
+
+    def requires(self):
+        return pipeline.get_download_and_extract_tasks(self.data_config)
+
+    @staticmethod
+    def safecopy(dst, src):
+        # Make sure the parent exists
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src, dst)
+
+    def sample(self, all_files):
+        # All metadata files will be copied without any sampling
+        metadata_files = list(
+            filter(lambda file: file.suffix in METADATAFORMATS, all_files)
+        )
+        # If the file name has a necessary key
+        necessary_files = list(
+            filter(
+                lambda file: any(key in file for key in self.necessary_keys),
+                all_files,
+            )
+        )
+        # Audio files (leaving out the necessary files will be sampled)
+        random.seed(43)
+        audio_files = random.sample(
+            list(
+                filter(
+                    lambda file: file.suffix.lower() in map(str.lower, AUDIOFORMATS),
+                    [file for file in all_files if file not in necessary_files],
+                )
+            ),
+            # Sample size of the audio files is decided on a task basis
+            self.audio_sample_size,
+        )
+        return metadata_files + necessary_files + audio_files
+
+    def run(self):
+        for download_extract_task in self.data_config["download_urls"]:
+            zip_download_name = Path(
+                urlparse(download_extract_task["url"]).path
+            ).name.split(".")[0]
+            zip_extract_name = download_extract_task["name"]
+            copy_to = self.workdir.joinpath(zip_download_name)
+            # Remove the sampled folder if it already exists
+            if copy_to.exists():
+                shutil.rmtree(copy_to)
+            copy_from = self.requires()[zip_extract_name].workdir.joinpath(
+                zip_extract_name
+            )
+            copy_files = self.sample(list(copy_from.rglob("*")))
+            for file in tqdm(copy_files):
+                self.safecopy(
+                    src=file, dst=copy_to.joinpath(file.relative_to(copy_from))
+                )
+            shutil.make_archive(copy_to, "zip", copy_to)
