@@ -2,9 +2,9 @@
 """
 Runs a sampler to sample the downloaded dataset.
 
-Uses the same download and extract tasks to make sure 
+Uses the same download and extract tasks to make sure
 the same downloaded files can be used for sampling
-Also uses the configs defined in the task files for making 
+Also uses the configs defined in the task files for making
 it simple to scale across multiple dataset
 """
 
