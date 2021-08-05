@@ -10,6 +10,11 @@ See [ROADMAP](ROADMAP.md).
 pip install heareval
 ```
 
+You will need `ffmpeg>=4.2` installed (possibly from conda-forge).
+You will need `soxr` support, which might require package
+libsox-fmt-ffmpeg or [installing from
+source](https://github.com/neuralaudio/hear-eval-kit/issues/156#issuecomment-893151305).
+
 ### Evaluation Tasks
 
 These Luigi pipelines are used to preprocess the evaluation tasks

@@ -32,6 +32,7 @@ setup(
     install_requires=[
         "boto3",
         "click",
+        "intervaltree",
         "librosa",
         "luigi",
         "numpy",

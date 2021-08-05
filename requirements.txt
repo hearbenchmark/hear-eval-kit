@@ -1,5 +1,6 @@
 black
 boto3
+intervaltree
 librosa
 luigi
 numpy
