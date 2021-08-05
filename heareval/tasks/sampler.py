@@ -42,7 +42,7 @@ configs = {
 }
 
 
-class RandomSubsampleOriginalDataset(luigi_util.WorkTask):
+class RandomSampleOriginalDataset(luigi_util.WorkTask):
     necessary_keys = luigi.ListParameter()
     audio_sample_size = luigi.Parameter()
 
@@ -116,12 +116,13 @@ def main(task: str, num_workers: Optional[int] = None):
         num_workers = multiprocessing.cpu_count()
     logger.info(f"Using {num_workers} workers")
     config = configs[task]
-    sampler = RandomSubsampleOriginalDataset(
+    sampler = RandomSampleOriginalDataset(
         data_config=config["task_config"],
         audio_sample_size=config["audio_sample_size"],
         necessary_keys=config["necessary_keys"],
     )
     pipeline.run(sampler, num_workers=num_workers)
+
 
 if __name__ == "__main__":
     main()
