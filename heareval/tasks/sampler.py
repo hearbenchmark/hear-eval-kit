@@ -103,7 +103,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
         audio_files = luigi_util.subsample_metadata(
             metadata, self.audio_sample_size
         ).audio_path.to_list()
-        
+
         return metadata_files + necessary_files + audio_files
 
     def run(self):
