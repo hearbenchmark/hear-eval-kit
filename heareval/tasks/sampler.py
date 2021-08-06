@@ -11,7 +11,6 @@ it simple to scale across multiple dataset
 from pathlib import Path
 from typing import Optional
 import multiprocessing
-import random
 import logging
 
 import luigi
@@ -19,6 +18,7 @@ from tqdm import tqdm
 from urllib.parse import urlparse
 import shutil
 import click
+import pandas as pd
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
@@ -38,7 +38,7 @@ configs = {
         "audio_sample_size": 100,
         "necessary_keys": [],
     },
-    "speech_command": {
+    "speech_commands": {
         "task_config": speech_command_config,
         "audio_sample_size": 100,
         "necessary_keys": [],
@@ -78,17 +78,32 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
             )
         )
         # Audio files (leaving out the necessary files will be sampled)
-        random.seed(43)
-        audio_files = random.sample(
+        # Also stratify on the basis of base folder to make sure a better
+        # snapshot is captured. For example in dcase the train and dev
+        # are in same folder and the dev size is too small. Randomly
+        # sampling without stratifying makes no dev folder which disrupts
+        # the original folder structure. Using the subsample metadata functions
+        # from luiti_utils solves this issue.
+        metadata = pd.DataFrame(
             list(
                 filter(
                     lambda file: file.suffix.lower() in map(str.lower, AUDIOFORMATS),
                     [file for file in all_files if file not in necessary_files],
                 )
             ),
-            # Sample size of the audio files is decided on a task basis
-            self.audio_sample_size,
+            columns=["audio_path"],
         )
+        metadata = metadata.assign(
+            stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
+            split_key=lambda df: df.audio_path.apply(
+                lambda path: luigi_util.filename_to_int_hash(str(path))
+            ),
+            subsample_key=lambda df: df.split_key,
+        )
+        audio_files = luigi_util.subsample_metadata(
+            metadata, self.audio_sample_size
+        ).audio_path.to_list()
+        
         return metadata_files + necessary_files + audio_files
 
     def run(self):
