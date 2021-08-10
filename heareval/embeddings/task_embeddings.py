@@ -71,7 +71,7 @@ class Embedding:
             self.model.to(self.device)
         elif isinstance(self.model, tf.Module):
             self.type = TENSORFLOW
-            raise NotImplementedError("TensorFlow embeddings not supported yet.")
+            self.device = 'cpu'
         else:
             raise TypeError(f"Unsupported model type received: {type(self.model)}")
 
@@ -101,7 +101,12 @@ class Embedding:
                 )
 
         elif self.type == TENSORFLOW:
-            NotImplementedError("TensorFlow not implemented yet")
+            # Load array as tensor onto device
+            
+            if not isinstance(x, np.ndarray):
+                x = x.numpy()
+            #x = torch.tensor(x, device=self.device)
+            x = tf.convert_to_tensor(x)
         else:
             raise AssertionError("Unknown type")
 
@@ -116,8 +121,13 @@ class Embedding:
                 audio, self.model
             )
             return embeddings.detach().cpu().numpy()
+        elif self.type == TENSORFLOW:
+            embeddings = self.module.get_scene_embeddings(  # type: ignore
+                audio, self.model
+            )
+            return embeddings.numpy()
         else:
-            raise NotImplementedError("Not implemented for TF")
+            raise NotImplementedError("Not implemented")
 
     def get_timestamp_embedding_as_numpy(
         self, audio: Union[np.ndarray, torch.Tensor]
@@ -132,8 +142,17 @@ class Embedding:
             embeddings = embeddings.detach().cpu().numpy()
             timestamps = timestamps.detach().cpu().numpy()
             return embeddings, timestamps
+        elif self.type == TENSORFLOW:
+            # flake8: noqa
+            embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
+                audio,
+                self.model,
+            )
+            embeddings = embeddings.numpy()
+            timestamps = timestamps.numpy()
+            return embeddings, timestamps
         else:
-            raise NotImplementedError("Not implemented for TF")
+            raise NotImplementedError("Not implemented")
 
 
 class AudioFileDataset(Dataset):
@@ -162,15 +181,12 @@ class AudioFileDataset(Dataset):
 def get_dataloader_for_embedding(
     data: Dict, audio_dir: Path, embedding: Embedding, batch_size: int = 64
 ):
-    if embedding.type == TORCH:
+    if embedding.type == TORCH or embedding.type == TENSORFLOW:
         return DataLoader(
             AudioFileDataset(data, audio_dir, embedding.sample_rate),
             batch_size=batch_size,
             shuffle=True,
         )
-
-    elif embedding.type == TENSORFLOW:
-        raise NotImplementedError
 
     else:
         raise AssertionError("Unknown embedding type")
