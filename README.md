@@ -58,6 +58,13 @@ mean meadian and certain (10, 25, 75, 90) percentile durations.
 This is helpful in getting a quick glance of the audio files in a folder and 
 helps in decideing the preprocessing configurations.
 
+For development, there is a sampler which could be used to generate small corpuses for testing of each task
+```
+python -m heareval.tasks.sampler <taskname>
+```
+Supported task name are speech_commands, nsynth_pitch and dcase2016_task2
+Sampled small version of the tasks can be found here: [Downsampled HEAR Open Tasks](https://github.com/turian/hear2021-open-tasks-downsampled)
+
 ### Computing embeddings
 
 Once a set of tasks has been generated, embeddings can be computed using any audio

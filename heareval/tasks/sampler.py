@@ -124,7 +124,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
                 self.safecopy(
                     src=file, dst=copy_to.joinpath(file.relative_to(copy_from))
                 )
-            shutil.make_archive(copy_to, "zip", copy_to)
+            shutil.make_archive(f"{copy_to}-small", "zip", copy_to)
 
 
 @click.command()
