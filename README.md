@@ -47,6 +47,8 @@ Options:
 
   --sample-rate INTEGER  Perform resampling only to this sample rate. By
                          default we resample to 16000, 22050, 44100, 48000.
+  
+  --small BOOL If True, the task will run on a small [Version](https://github.com/turian/hear2021-open-tasks-downsampled) of the data
 ```
 
 Additionally, to check the stats of an audio directory:
