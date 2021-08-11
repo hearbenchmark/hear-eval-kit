@@ -286,6 +286,18 @@ class ExtractMetadata(WorkTask):
                 "%s embedding_type unknown" % self.data_config["embedding_type"]
             )
 
+        # Remove files from the process metadata which donot exist in the dataset.
+        exists = process_metadata["relpath"].apply(
+            lambda relpath: Path(relpath).exists()
+        )
+        if sum(exists) < len(process_metadata):
+            print(
+                "All Files in metadata doesnot exist in the dataset. "
+                f"Removing {len(process_metadata) - sum(exists)} entries in the "
+                "metadata"
+            )
+            process_metadata = process_metadata.loc[exists]
+
         process_metadata.to_csv(
             self.workdir.joinpath(self.outfile),
             index=False,
