@@ -61,9 +61,9 @@ def run(
     else:
         sample_rates = [sample_rate]
 
-    tasks[task].main( # type: ignore
+    tasks[task].main(  # type: ignore
         num_workers=num_workers, sample_rates=sample_rates, small=small
-    )  
+    )
 
 
 if __name__ == "__main__":
