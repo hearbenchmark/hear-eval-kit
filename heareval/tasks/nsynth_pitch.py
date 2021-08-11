@@ -97,7 +97,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
             )
         )
 
-        return metadata[["relpath", "slug", "subsample_key", "split", "label"]]
+        return metadata
 
 
 def main(num_workers: int, sample_rates: List[int]):
