@@ -45,7 +45,7 @@ configs = {
     },
     "dcase2016_task2": {
         "task_config": dcase2016_task2_config,
-        "audio_sample_size": 10,
+        "audio_sample_size": 4,
         # Add any keys in the file format that we compulsorily need to copy
         "necessary_keys": [],
     },
