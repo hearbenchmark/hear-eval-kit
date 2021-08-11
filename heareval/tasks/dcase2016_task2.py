@@ -88,7 +88,9 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 .replace("annotation", "sound")
                 .replace(".txt", ".wav")
             )
-            assert os.path.exists(sound_file)
+            # Remove the assert statement as this file might not exist.
+            # This is anyways ensured in the Base ExtractMetadata task.
+            # assert os.path.exists(sound_file)
             metadata = metadata.assign(
                 relpath=sound_file,
                 slug=lambda df: df.relpath.apply(self.slugify_file_name),
@@ -103,7 +105,9 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         return pd.concat(metadatas)
 
 
-def main(num_workers: int, sample_rates: List[int]):
+def main(num_workers: int, sample_rates: List[int], small: bool = False):
+    if small:
+        pipeline.get_small_config(config)
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)

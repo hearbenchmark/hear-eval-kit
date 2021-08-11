@@ -100,7 +100,9 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         return metadata
 
 
-def main(num_workers: int, sample_rates: List[int]):
+def main(num_workers: int, sample_rates: List[int], small: bool = False):
+    if small:
+        pipeline.get_small_config(config)
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)

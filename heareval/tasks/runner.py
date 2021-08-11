@@ -38,8 +38,18 @@ tasks = {
     "By default we resample to 16000, 22050, 44100, 48000.",
     type=int,
 )
+@click.option(
+    "--small",
+    default=False,
+    help="Run Pipeline on a small version of the dataset"
+    "By default this is set to false",
+    type=bool,
+)
 def run(
-    task: str, num_workers: Optional[int] = None, sample_rate: Optional[int] = None
+    task: str,
+    num_workers: Optional[int] = None,
+    sample_rate: Optional[int] = None,
+    small: bool = False,
 ):
 
     if num_workers is None:
@@ -51,7 +61,7 @@ def run(
     else:
         sample_rates = [sample_rate]
 
-    tasks[task].main(num_workers=num_workers, sample_rates=sample_rates)  # type: ignore
+    tasks[task].main(num_workers=num_workers, sample_rates=sample_rates, small=small)  # type: ignore
 
 
 if __name__ == "__main__":
