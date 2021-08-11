@@ -9,7 +9,6 @@ We also allow training data outside this task.
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import List
 

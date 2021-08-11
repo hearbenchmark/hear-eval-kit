@@ -103,8 +103,8 @@ def get_small_config(config: Dict):
                 root=OPEN_SMALL_DATASET_ROOT,
                 zip_download_name=Path(urlparse(urlobj["url"]).path).name.split(".")[0],
             ),
-            #Set the md5 to zero so that the md5 is not checked
-            "md5": 0,
+            # Set the md5 to empty string so that the md5 is not checked
+            "md5": "",
         }
         for urlobj in config["download_urls"]
     ]
