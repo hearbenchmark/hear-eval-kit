@@ -71,7 +71,7 @@ class Embedding:
             self.model.to(self.device)
         elif isinstance(self.model, tf.Module):
             self.type = TENSORFLOW
-            self.device = 'cpu'
+            self.device = None # Tensorflow automatically manages data transfers to device 
         else:
             raise TypeError(f"Unsupported model type received: {type(self.model)}")
 
@@ -105,7 +105,6 @@ class Embedding:
             
             if not isinstance(x, np.ndarray):
                 x = x.numpy()
-            #x = torch.tensor(x, device=self.device)
             x = tf.convert_to_tensor(x)
         else:
             raise AssertionError("Unknown type")
@@ -127,7 +126,7 @@ class Embedding:
             )
             return embeddings.numpy()
         else:
-            raise NotImplementedError("Not implemented")
+            raise NotImplementedError("Unknown type")
 
     def get_timestamp_embedding_as_numpy(
         self, audio: Union[np.ndarray, torch.Tensor]
@@ -152,7 +151,7 @@ class Embedding:
             timestamps = timestamps.numpy()
             return embeddings, timestamps
         else:
-            raise NotImplementedError("Not implemented")
+            raise NotImplementedError("Unknown type")
 
 
 class AudioFileDataset(Dataset):
