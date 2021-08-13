@@ -112,7 +112,7 @@ class PredictionModel(pl.LightningModule):
 
 class SplitMemmapDataset(Dataset):
     """
-    Embeddings are memmap'ed. (We don't use the labels yet, but will add them later.)
+    Embeddings are memmap'ed.
 
     WARNING: Don't shuffle this or access will be SLOW.
     """
