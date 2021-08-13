@@ -46,8 +46,7 @@ config = {
     ],
     "pitch_range_min": 21,
     "pitch_range_max": 108,
-    # TODO: Call this pitch error and add chroma error
-    "evaluation": ["top1_error", "chroma_error"],
+    "evaluation": ["pitch_err", "chroma_err"],
 }
 
 

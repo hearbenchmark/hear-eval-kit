@@ -47,7 +47,7 @@ config = {
     ],
     # DCASE2016 task 2 used the segment-based total error rate as their main metric
     # and then the onset only event based F1 as their secondary metric.
-    "evaluation": ["segment_based", "onset_only_event_based"],
+    "evaluation": ["onset_only_event_based", "segment_based"],
 }
 
 

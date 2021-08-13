@@ -100,12 +100,11 @@ class PredictionModel(pl.LightningModule):
         x, y = batch
         y_hat = self.predictor.forward_logit(x)
         loss = self.predictor.logit_loss(y_hat, y)
+        y_pr = self.predictor(x)
         # Logging to TensorBoard by default
         self.log("val_loss", loss, prog_bar=True)
         for score in self.scores:
-            self.log(f"val_{score}", score(y_hat, y), prog_bar=True)
-        # TODO: Use the actual evaluation criterion?
-        return loss
+            self.log(f"val_{score}", score(y_pr, y), prog_bar=True)
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -370,10 +369,13 @@ def task_predictions_test(
     embedding_path: Path,
     embedding_size: int,
     metadata: Dict[str, Any],
+    label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
 ):
-    dataloader = dataloader_from_split_name("test", embedding_path, nlabels)
+    dataloader = dataloader_from_split_name(
+        "test", embedding_path, label_to_idx, nlabels
+    )
 
     all_predicted_labels = []
     for embs, target_labels in tqdm(dataloader):
@@ -421,7 +423,7 @@ def task_predictions(
     elif metadata["embedding_type"] == "event":
         embedding_size = timestamp_embedding_size
     else:
-        raise ValueError(f"Uknown embedding type {metadata['embedding_type']}")
+        raise ValueError(f"Unknown embedding type {metadata['embedding_type']}")
 
     label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
     scores = [
@@ -438,9 +440,11 @@ def task_predictions(
         scores=scores,
     )
     task_predictions_test(
+        predictor=predictor,
         embedding_path=embedding_path,
         embedding_size=embedding_size,
         metadata=metadata,
+        label_to_idx=label_to_idx,
         nlabels=nlabels,
         scores=scores,
     )

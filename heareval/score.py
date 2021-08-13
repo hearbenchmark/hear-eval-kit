@@ -40,18 +40,15 @@ class ScoreFunction:
         self.task_metadata = task_metadata
         self.label_to_idx = label_to_idx
 
-    def __call__(self, predictions: Any, targets: Any, **kwargs) -> Dict:
+    def __call__(self, predictions: Any, targets: Any, **kwargs) -> float:
         """
-        Compute the score based on the predictions and targets. Return a dictionary
-        of the results.
+        Compute the score based on the predictions and targets. Returns the score.
         """
         raise NotImplementedError("Inheriting classes must implement this function")
 
 
 class Top1Error(ScoreFunction):
-    def __call__(
-        self, predictions: np.ndarray, targets: np.ndarray, **kwargs
-    ) -> Dict[str, float]:
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # Compute the number of correct predictions
@@ -65,33 +62,10 @@ class Top1Error(ScoreFunction):
             if predicted_class == target_class:
                 correct += 1
 
-        acc = correct / len(targets)
-        return {str(self): acc}
+        return correct / len(targets)
 
     def __str__(self) -> str:
-        return "top1err"
-
-
-class MacroAUC(ScoreFunction):
-    def __call__(
-        self, predictions: np.ndarray, targets: np.ndarray, **kwargs
-    ) -> Dict[str, float]:
-        # return {"auc": None}
-
-        # TODO: This shape only works for multiclass, check that is the type
-        if self.task_metadata["prediction_type"] == "multiclass":
-            for rowlabels in targets:
-                assert np.sum(rowlabels) == 1
-
-        # Gross, macro
-        return {
-            str(self): sklearn.metrics.roc_auc_score(
-                targets, predictions, multi_class="ovr", average="macro"
-            )
-        }
-
-    def __str__(self) -> str:
-        return "macroauc"
+        return "top1_err"
 
 
 class ChromaError(ScoreFunction):
@@ -100,11 +74,7 @@ class ChromaError(ScoreFunction):
     This score ignores octave errors in pitch classification.
     """
 
-    def __call__(
-        self, predictions: np.ndarray, targets: List, **kwargs
-    ) -> Dict[str, float]:
-        # Dictionary of labels and integer idx: {label -> idx}
-
+    def __call__(self, predictions: np.ndarray, targets: List, **kwargs) -> float:
         # Compute the number of correct predictions
         correct = 0
         for i, prediction in enumerate(predictions):
@@ -116,11 +86,10 @@ class ChromaError(ScoreFunction):
             if predicted_class % 12 == target_class % 12:
                 correct += 1
 
-        error = correct / len(targets)
-        return {str(self): error}
+        return correct / len(targets)
 
     def __str__(self) -> str:
-        return "chromaerr"
+        return "chroma_err"
 
 
 class SoundEventScore(ScoreFunction):
@@ -204,9 +173,9 @@ class EventBasedScore(SoundEventScore):
 
 
 available_scores: Dict[str, Callable] = {
-    "top1_error": Top1Error,
-    "macroauc": MacroAUC,
-    "chroma_error": ChromaError,
+    "top1_err": Top1Error,
+    "pitch_err": Top1Error,
+    "chroma_err": ChromaError,
     "onset_only_event_based": partial(
         EventBasedScore, params={"evaluate_offset": False, "t_collar": 0.2}
     ),
