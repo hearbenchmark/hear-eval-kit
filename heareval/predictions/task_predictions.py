@@ -24,6 +24,8 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 from intervaltree import IntervalTree
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
@@ -350,9 +352,17 @@ def task_predictions_train(
         embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
     )
 
+    # First score is the target
+    target_score = f"val_{str(scores[0])}"
+
+    checkpoint_callback = ModelCheckpoint(monitor=target_score, mode="max")
+    early_stop_callback = EarlyStopping(
+        monitor=target_score, min_delta=0.00, patience=10, verbose=False, mode="max"
+    )
+
     # train on CPU
     # TODO: FIXME
-    trainer = pl.Trainer()
+    trainer = pl.Trainer(callbacks=[checkpoint_callback, early_stop_callback])
     train_dataloader = dataloader_from_split_name(
         "train", embedding_path, label_to_idx, nlabels
     )
