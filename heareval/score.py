@@ -5,7 +5,7 @@ from functools import partial
 import json
 from pathlib import Path
 import pickle
-from typing import Any, Callable, Collection, Dict, List, Tuple
+from typing import Any, Callable, Collection, Dict, List, Tuple, Optional
 
 
 from dcase_util.containers import MetaDataContainer
@@ -23,6 +23,8 @@ def label_vocab_as_dict(df: pd.DataFrame, key: str, value: str) -> Dict:
     other column will be the value.
     """
     if key == "label":
+        # Make sure the key is a string
+        df["label"] = df["label"].astype(str)
         value = "idx"
     else:
         assert key == "idx", "key argument must be either 'label' or 'idx'"
@@ -36,9 +38,16 @@ class ScoreFunction:
     """
 
     # TODO: Remove task_metadata since we don't use it much
-    def __init__(self, task_metadata: Dict, label_to_idx: Dict[str, int]):
+    def __init__(
+        self,
+        task_metadata: Dict,
+        label_to_idx: Dict[str, int],
+        name: Optional[str] = None,
+    ):
         self.task_metadata = task_metadata
         self.label_to_idx = label_to_idx
+        if name:
+            self.name = name
 
     def __call__(self, predictions: Any, targets: Any, **kwargs) -> float:
         """
@@ -46,8 +55,13 @@ class ScoreFunction:
         """
         raise NotImplementedError("Inheriting classes must implement this function")
 
+    def __str__(self):
+        return self.name
+
 
 class Top1Error(ScoreFunction):
+    name = "top1_err"
+
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
@@ -64,9 +78,6 @@ class Top1Error(ScoreFunction):
 
         return correct / len(targets)
 
-    def __str__(self) -> str:
-        return "top1_err"
-
 
 class ChromaError(ScoreFunction):
     """
@@ -74,22 +85,23 @@ class ChromaError(ScoreFunction):
     This score ignores octave errors in pitch classification.
     """
 
+    name = "chroma_err"
+
     def __call__(self, predictions: np.ndarray, targets: List, **kwargs) -> float:
         # Compute the number of correct predictions
         correct = 0
-        for i, prediction in enumerate(predictions):
+        for target, prediction in zip(targets, predictions):
+            assert prediction.ndim == 1
+            assert target.ndim == 1
             predicted_class = np.argmax(prediction)
-            assert len(targets[i]) == 1
-            target_class = self.label_to_idx[targets[i][0]]
+            target_class = np.argmax(target)
+
             # Ignore octave errors by converting the predicted class to chroma before
             # checking for correctness.
             if predicted_class % 12 == target_class % 12:
                 correct += 1
 
         return correct / len(targets)
-
-    def __str__(self) -> str:
-        return "chroma_err"
 
 
 class SoundEventScore(ScoreFunction):
@@ -174,7 +186,7 @@ class EventBasedScore(SoundEventScore):
 
 available_scores: Dict[str, Callable] = {
     "top1_err": Top1Error,
-    "pitch_err": Top1Error,
+    "pitch_err": partial(Top1Error, name="pitch_err"),
     "chroma_err": ChromaError,
     "onset_only_event_based": partial(
         EventBasedScore, params={"evaluate_offset": False, "t_collar": 0.2}
