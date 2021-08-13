@@ -32,6 +32,7 @@ setup(
     install_requires=[
         "boto3",
         "click",
+        "dcase_util",
         "intervaltree",
         "librosa",
         "luigi",
@@ -40,6 +41,7 @@ setup(
         "pytorch-lightning",
         "python-slugify",
         "requests",
+        "sed_eval",
         "soundfile",
         "torch",
         "tqdm",

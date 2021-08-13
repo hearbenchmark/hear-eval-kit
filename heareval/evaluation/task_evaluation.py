@@ -18,7 +18,7 @@ from dcase_util.containers import MetaDataContainer
 import numpy as np
 import pandas as pd
 import sed_eval
-import sklearn.scores
+import sklearn.metrics
 import torch
 
 
@@ -27,6 +27,7 @@ class ScoreFunction:
     A simple abstract base class for score functions
     """
 
+    # TODO: Remove task_metadata since we don't use it much
     def __init__(self, task_metadata: Dict, label_vocab: pd.DataFrame):
         self.task_metadata = task_metadata
         assert "idx" in label_vocab.columns, "label_vocab missing idx column"
@@ -98,7 +99,7 @@ class MacroAUC(ScoreFunction):
 
         ipshell = IPython.embed
         ipshell(banner1="ipshell")
-        return {"macroauc": sklearn.scores.roc_auc_score(y_true, predictions)}
+        return {"macroauc": sklearn.metrics.roc_auc_score(y_true, predictions)}
 
 
 class ChromaError(ScoreFunction):
@@ -134,7 +135,7 @@ class SoundEventScore(ScoreFunction):
     """
 
     # Score class must be defined in inheriting classes
-    score_class: sed_eval.sound_event.SoundEventScores = None
+    score_class: sed_eval.sound_event.SoundEventMetrics = None
 
     def __init__(
         self, task_metadata: Dict, label_vocab: pd.DataFrame, params: Dict = None
@@ -187,11 +188,11 @@ class SegmentBasedScore(SoundEventScore):
     segment-based scores - the ground truth and system output are compared in a
     fixed time grid; sound events are marked as active or inactive in each segment;
 
-    See https://tut-arg.github.io/sed_eval/sound_event.html#sed_eval.sound_event.SegmentBasedScores # noqa: E501
+    See https://tut-arg.github.io/sed_eval/sound_event.html#sed_eval.sound_event.SegmentBasedMetrics # noqa: E501
     for params.
     """
 
-    score_class = sed_eval.sound_event.SegmentBasedScores
+    score_class = sed_eval.sound_event.SegmentBasedMetrics
 
 
 class EventBasedScore(SoundEventScore):
@@ -203,7 +204,7 @@ class EventBasedScore(SoundEventScore):
     for params.
     """
 
-    score_class = sed_eval.sound_event.EventBasedScores
+    score_class = sed_eval.sound_event.EventBasedMetrics
 
 
 available_scores: Dict[str, Callable] = {

@@ -18,7 +18,7 @@ import csv
 import json
 import pickle
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import numpy as np
 import pandas as pd
@@ -28,7 +28,7 @@ from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from heareval.evaluation.task_evaluation import available_scores
+from heareval.evaluation.task_evaluation import available_scores, ScoreFunction
 
 
 class OneHotToCrossEntropyLoss(torch.nn.Module):
@@ -324,9 +324,6 @@ def dataloader_from_split_name(
 def task_predictions_train(
     embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
 ) -> torch.nn.Module:
-    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
-    label_vocal, nlabels = label_vocab_nlabels(embedding_path)
-
     if metadata["embedding_type"] == "scene":
         predictor = PredictionModel(
             scene_embedding_size, nlabels, metadata["prediction_type"]
@@ -351,10 +348,11 @@ def task_predictions_test(
     embedding_path: Path,
     scene_embedding_size: int,
     timestamp_embedding_size: int,
+    metadata: Dict[str, Any],
+    label_vocab: Dict[str, int],
+    nlabels: int,
+    scores: List[ScoreFunction],
 ):
-    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
-    label_vocab, nlabels = label_vocab_nlabels(embedding_path)
-
     if metadata["embedding_type"] == "scene":
         predictor = RandomProjectionPrediction(
             scene_embedding_size, nlabels, metadata["prediction_type"]
@@ -409,9 +407,27 @@ def task_predictions_test(
 def task_predictions(
     embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
 ):
+    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    label_vocab, nlabels = label_vocab_nlabels(embedding_path)
+
+    scores = [available_scores[score] for score in metadata["evaluation"]]
+
     predictor = task_predictions_train(
-        embedding_path, scene_embedding_size, timestamp_embedding_size
+        embedding_path,
+        scene_embedding_size,
+        timestamp_embedding_size,
+        metadata,
+        label_vocab,
+        nlabels,
+        scores,
     )
     task_predictions_test(
-        predictor, embedding_path, scene_embedding_size, timestamp_embedding_size
+        predictor,
+        embedding_path,
+        scene_embedding_size,
+        timestamp_embedding_size,
+        metadata,
+        label_vocab,
+        nlabels,
+        scores,
     )
