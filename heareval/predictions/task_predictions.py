@@ -28,7 +28,7 @@ from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from heareval.evaluation.task_evaluation import available_scores, ScoreFunction
+from heareval.score import available_scores, ScoreFunction, label_vocab_as_dict
 
 
 class OneHotToCrossEntropyLoss(torch.nn.Module):
@@ -69,10 +69,19 @@ class RandomProjectionPrediction(torch.nn.Module):
 
 
 class PredictionModel(pl.LightningModule):
-    def __init__(self, nfeatures: int, nlabels: int, prediction_type: str):
+    def __init__(
+        self,
+        nfeatures: int,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        prediction_type: str,
+        scores: List[ScoreFunction],
+    ):
         super().__init__()
 
         self.predictor = RandomProjectionPrediction(nfeatures, nlabels, prediction_type)
+        self.label_to_idx = label_to_idx
+        self.scores = scores
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.predictor(x)
@@ -92,7 +101,9 @@ class PredictionModel(pl.LightningModule):
         y_hat = self.predictor.forward_logit(x)
         loss = self.predictor.logit_loss(y_hat, y)
         # Logging to TensorBoard by default
-        self.log("val_loss", loss)
+        self.log("val_loss", loss, prog_bar=True)
+        for score in self.scores:
+            self.log(f"val_{score}", score(y_hat, y), prog_bar=True)
         # TODO: Use the actual evaluation criterion?
         return loss
 
@@ -108,18 +119,17 @@ class SplitMemmapDataset(Dataset):
     WARNING: Don't shuffle this or access will be SLOW.
     """
 
-    def __init__(self, embedding_path: Path, nlabels: int, split_name: str):
+    def __init__(
+        self,
+        embedding_path: Path,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        split_name: str,
+    ):
         self.embedding_path = embedding_path
+        self.label_to_idx = label_to_idx
         self.nlabels = nlabels
         self.split_name = split_name
-
-        self.label_to_idx = {
-            label: int(idx)
-            for idx, label in csv.reader(
-                embedding_path.joinpath("labelvocabulary.csv").open()
-            )
-            if (idx, label) != ("idx", "label")
-        }
 
         self.dim = tuple(
             json.load(
@@ -307,12 +317,21 @@ def label_vocab_nlabels(embedding_path: Path) -> Tuple[pd.DataFrame, int]:
 
 
 def dataloader_from_split_name(
-    embedding_path: Path, nlabels: int, split_name: str, batch_size: int = 64
+    split_name: str,
+    embedding_path: Path,
+    label_to_idx: Dict[str, int],
+    nlabels: int,
+    batch_size: int = 64,
 ) -> DataLoader:
     print(f"Getting embeddings for split: {split_name}")
 
     return DataLoader(
-        SplitMemmapDataset(embedding_path, nlabels, split_name),
+        SplitMemmapDataset(
+            embedding_path=embedding_path,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            split_name=split_name,
+        ),
         batch_size=batch_size,
         # We don't shuffle because it's slow.
         # Also we want predicted labels in the same order as
@@ -322,23 +341,26 @@ def dataloader_from_split_name(
 
 
 def task_predictions_train(
-    embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
+    embedding_path: Path,
+    embedding_size: int,
+    metadata: Dict[str, Any],
+    label_to_idx: Dict[str, int],
+    nlabels: int,
+    scores: List[ScoreFunction],
 ) -> torch.nn.Module:
-    if metadata["embedding_type"] == "scene":
-        predictor = PredictionModel(
-            scene_embedding_size, nlabels, metadata["prediction_type"]
-        )
-    elif metadata["embedding_type"] == "event":
-        predictor = PredictionModel(
-            timestamp_embedding_size, nlabels, metadata["prediction_type"]
-        )
-    else:
-        raise ValueError(f"embedding_type {metadata['embedding_type']} unknown.")
+    predictor = PredictionModel(
+        embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
+    )
+
     # train on CPU
     # TODO: FIXME
     trainer = pl.Trainer()
-    train_dataloader = dataloader_from_split_name(embedding_path, nlabels, "train")
-    valid_dataloader = dataloader_from_split_name(embedding_path, nlabels, "valid")
+    train_dataloader = dataloader_from_split_name(
+        "train", embedding_path, label_to_idx, nlabels
+    )
+    valid_dataloader = dataloader_from_split_name(
+        "valid", embedding_path, label_to_idx, nlabels
+    )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     return predictor
 
@@ -346,62 +368,46 @@ def task_predictions_train(
 def task_predictions_test(
     predictor: torch.nn.Module,
     embedding_path: Path,
-    scene_embedding_size: int,
-    timestamp_embedding_size: int,
+    embedding_size: int,
     metadata: Dict[str, Any],
-    label_vocab: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
 ):
-    if metadata["embedding_type"] == "scene":
-        predictor = RandomProjectionPrediction(
-            scene_embedding_size, nlabels, metadata["prediction_type"]
+    dataloader = dataloader_from_split_name("test", embedding_path, nlabels)
+
+    all_predicted_labels = []
+    for embs, target_labels in tqdm(dataloader):
+        predicted_labels = predictor(embs)
+        # TODO: Uses less memory to stack them one at a time
+        all_predicted_labels.append(predicted_labels)
+    predicted_labels = torch.cat(all_predicted_labels)
+
+    if metadata["embedding_type"] == "event":
+        # For event predictions we need to convert the frame-based predictions
+        # to a list of events with start and stop timestamps. These events are
+        # computed on each file independently and then saved as JSON in the same
+        # format as the ground truth events produced by the luigi pipeline.
+
+        # A list of filenames and timestamps associated with each prediction
+        file_timestamps = json.load(
+            embedding_path.joinpath(f"{split['name']}.filename-timestamps.json").open()
         )
-    elif metadata["embedding_type"] == "event":
-        predictor = RandomProjectionPrediction(
-            timestamp_embedding_size, nlabels, metadata["prediction_type"]
+
+        print("Creating events from predictions:")
+        events = get_events_for_all_files(
+            predicted_labels, file_timestamps, label_vocab
         )
 
-    for split in [{"name": "test"}]:
-        dataloader = dataloader_from_split_name(embedding_path, nlabels, split["name"])
-
-        all_predicted_labels = []
-        for embs, target_labels in tqdm(dataloader):
-            predicted_labels = predictor(embs)
-            # TODO: Uses less memory to stack them one at a time
-            all_predicted_labels.append(predicted_labels)
-        predicted_labels = torch.cat(all_predicted_labels)
-
-        if metadata["embedding_type"] == "event":
-            # For event predictions we need to convert the frame-based predictions
-            # to a list of events with start and stop timestamps. These events are
-            # computed on each file independently and then saved as JSON in the same
-            # format as the ground truth events produced by the luigi pipeline.
-
-            # A list of filenames and timestamps associated with each prediction
-            file_timestamps = json.load(
-                embedding_path.joinpath(
-                    f"{split['name']}.filename-timestamps.json"
-                ).open()
-            )
-
-            print("Creating events from predictions:")
-            events = get_events_for_all_files(
-                predicted_labels, file_timestamps, label_vocab
-            )
-
-            json.dump(
-                events,
-                embedding_path.joinpath(f"{split['name']}.predictions.json").open("w"),
-                indent=4,
-            )
-
-        pickle.dump(
-            predicted_labels,
-            open(
-                embedding_path.joinpath(f"{split['name']}.predicted-labels.pkl"), "wb"
-            ),
+        json.dump(
+            events,
+            embedding_path.joinpath(f"test.predictions.json").open("w"),
+            indent=4,
         )
+
+    pickle.dump(
+        predicted_labels,
+        open(embedding_path.joinpath(f"test.predicted-labels.pkl"), "wb"),
+    )
 
 
 def task_predictions(
@@ -410,24 +416,31 @@ def task_predictions(
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
-    scores = [available_scores[score] for score in metadata["evaluation"]]
+    if metadata["embedding_type"] == "scene":
+        embedding_size = scene_embedding_size
+    elif metadata["embedding_type"] == "event":
+        embedding_size = timestamp_embedding_size
+    else:
+        raise ValueError(f"Uknown embedding type {metadata['embedding_type']}")
+
+    label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
+    scores = [
+        available_scores[score](metadata, label_to_idx)
+        for score in metadata["evaluation"]
+    ]
 
     predictor = task_predictions_train(
-        embedding_path,
-        scene_embedding_size,
-        timestamp_embedding_size,
-        metadata,
-        label_vocab,
-        nlabels,
-        scores,
+        embedding_path=embedding_path,
+        embedding_size=embedding_size,
+        metadata=metadata,
+        label_to_idx=label_to_idx,
+        nlabels=nlabels,
+        scores=scores,
     )
     task_predictions_test(
-        predictor,
-        embedding_path,
-        scene_embedding_size,
-        timestamp_embedding_size,
-        metadata,
-        label_vocab,
-        nlabels,
-        scores,
+        embedding_path=embedding_path,
+        embedding_size=embedding_size,
+        metadata=metadata,
+        nlabels=nlabels,
+        scores=scores,
     )
