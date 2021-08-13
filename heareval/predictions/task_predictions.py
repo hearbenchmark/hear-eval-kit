@@ -112,7 +112,7 @@ class SplitMemmapDataset(Dataset):
             assert len(y) == 1
             return x, y[0]
         else:
-            raise ValueError(f"Unknown prediction_type {prediction_type}")
+            raise ValueError(f"Unknown prediction_type {self.prediction_type}")
 
 
 def create_events_from_prediction(
