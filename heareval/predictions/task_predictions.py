@@ -28,6 +28,8 @@ from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
+from heareval.evaluation.task_evaluation import available_scores
+
 
 class OneHotToCrossEntropyLoss(torch.nn.Module):
     def __init__(self):
