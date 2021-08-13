@@ -7,21 +7,17 @@ Would it make sense to move all the score functions over to a file called scores
 TODO: Fix AUC
 """
 
-from functools import partial
 import json
 from pathlib import Path
 import pickle
-from typing import Any, Callable, Collection, Dict, List, Tuple
+from typing import Collection, Dict, List, Tuple
 
 
-from dcase_util.containers import MetaDataContainer
 import numpy as np
 import pandas as pd
-import sed_eval
-import sklearn.metrics
 import torch
 
-from heareval.score import available_scores, ScoreFunction, label_vocab_as_dict
+from heareval.score import available_scores, label_vocab_as_dict
 
 
 def get_scene_based_prediction_files(task_path: Path) -> Tuple[np.ndarray, List]:

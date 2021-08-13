@@ -3,8 +3,8 @@
 Map embeddings to predictions for every downstream task and store
 test predictions to disk.
 
-NOTE: Right now this is just a random projection. Later we should
-do shallow learning, and model selection, as described in our doc.
+NOTE: Shallow learning, later model selection, as described in our
+doc.
 
 TODO:
     * Profiling should occur here (both embedding time AFTER loading
@@ -14,7 +14,6 @@ TODO:
     many models simultaneously with one disk read?
 """
 
-import csv
 import json
 import pickle
 from pathlib import Path
@@ -367,11 +366,9 @@ def task_predictions_train(
 def task_predictions_test(
     predictor: torch.nn.Module,
     embedding_path: Path,
-    embedding_size: int,
     metadata: Dict[str, Any],
     label_to_idx: Dict[str, int],
     nlabels: int,
-    scores: List[ScoreFunction],
 ):
     dataloader = dataloader_from_split_name(
         "test", embedding_path, label_to_idx, nlabels
@@ -442,9 +439,7 @@ def task_predictions(
     task_predictions_test(
         predictor=predictor,
         embedding_path=embedding_path,
-        embedding_size=embedding_size,
         metadata=metadata,
         label_to_idx=label_to_idx,
         nlabels=nlabels,
-        scores=scores,
     )
