@@ -14,10 +14,11 @@ TODO:
     many models simultaneously with one disk read?
 """
 
+import csv
 import json
 import pickle
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from intervaltree import IntervalTree
 import numpy as np
@@ -41,6 +42,7 @@ class RandomProjectionPrediction(torch.nn.Module):
             raise ValueError(f"Unknown prediction_type {prediction_type}")
 
     def forward(self, x: torch.Tensor):
+        x, y = x
         x = self.projection(x)
         x = self.activation(x)
         return x
@@ -53,9 +55,21 @@ class SplitMemmapDataset(Dataset):
     WARNING: Don't shuffle this or access will be SLOW.
     """
 
-    def __init__(self, embedding_path: Path, split_name: str):
+    def __init__(
+        self, embedding_path: Path, prediction_type: str, nlabels: int, split_name: str
+    ):
         self.embedding_path = embedding_path
+        self.prediction_type = prediction_type
+        self.nlabels = nlabels
         self.split_name = split_name
+
+        self.label_to_idx = {
+            label: int(idx)
+            for idx, label in csv.reader(
+                embedding_path.joinpath("labelvocabulary.csv").open()
+            )
+            if (idx, label) != ("idx", "label")
+        }
 
         self.dim = tuple(
             json.load(
@@ -68,18 +82,37 @@ class SplitMemmapDataset(Dataset):
             mode="r",
             shape=self.dim,
         )
-        # self.labels = pickle.load(
-        #     open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
-        # )
-        # assert len(self.labels) == dim[0]
+        self.labels = pickle.load(
+            open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
+        )
+        assert len(self.labels) == self.dim[0]
+        assert (
+            self.embedding_memmap[0].shape[0] == self.dim[1]
+        ), f"{self.embedding_memmap[0].shape[0]}, {self.dim[1]}"
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.dim[0]
-        # return len(self.labels)
 
-    def __getitem__(self, idx):
-        return self.embedding_memmap[idx]
-        # return self.embedding_memmap[idx], self.labels[idx]
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
+        x = self.embedding_memmap[idx]
+        y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+        if self.prediction_type == "multilabel":
+            # Lame special case
+            if not y:
+                return x, torch.zeros((self.nlabels,), dtype=torch.int64)
+            return (
+                x,
+                torch.nn.functional.one_hot(
+                    torch.LongTensor(y), num_classes=self.nlabels
+                )
+                .max(axis=0)
+                .values,
+            )
+        elif self.prediction_type == "multiclass":
+            assert len(y) == 1
+            return x, y[0]
+        else:
+            raise ValueError(f"Unknown prediction_type {prediction_type}")
 
 
 def create_events_from_prediction(
@@ -92,14 +125,15 @@ def create_events_from_prediction(
     converts the prediction tensor to a binary label based on the threshold value. Any
     events occurring at adjacent timestamps are considered to be part of the same event.
     This loops through and creates events for each label class. Disregards events that
-    are less than the min_duration.
+    are less than the min_duration milliseconds.
 
     Args:
         prediction_dict: A dictionary of predictions keyed on timestamp
             {timestamp -> prediction}. The prediction is a tensor of label
             probabilities.
         threshold: Threshold for determining whether to apply a label
-        min_duration: the minimum duration requirement for an event to be included.
+        min_duration: the minimum duration in milliseconds for an
+                event to be included.
 
     Returns:
         An IntervalTree object containing all the events from the predictions.
@@ -215,15 +249,19 @@ def get_events_for_all_files(
     return event_dict
 
 
-def task_predictions(
-    embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
-):
-    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
-
+def label_vocab_nlabels(embedding_path: Path) -> Tuple[pd.DataFrame, int]:
     label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
 
     nlabels = len(label_vocab)
     assert nlabels == label_vocab["idx"].max() + 1
+    return (label_vocab, nlabels)
+
+
+def task_predictions_train(
+    embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
+) -> torch.nn.Module:
+    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    label_vocal, nlabels = label_vocab_nlabels(embedding_path)
 
     if metadata["embedding_type"] == "scene":
         predictor = RandomProjectionPrediction(
@@ -235,14 +273,35 @@ def task_predictions(
         )
     else:
         raise ValueError(f"embedding_type {metadata['embedding_type']} unknown.")
+    return predictor
+
+
+def task_predictions_test(
+    predictor: torch.nn.Module,
+    embedding_path: Path,
+    scene_embedding_size: int,
+    timestamp_embedding_size: int,
+):
+    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    label_vocab, nlabels = label_vocab_nlabels(embedding_path)
+
+    if metadata["embedding_type"] == "scene":
+        predictor = RandomProjectionPrediction(
+            scene_embedding_size, nlabels, metadata["prediction_type"]
+        )
+    elif metadata["embedding_type"] == "event":
+        predictor = RandomProjectionPrediction(
+            timestamp_embedding_size, nlabels, metadata["prediction_type"]
+        )
 
     # for split in metadata["splits"]:
-    # Only do test for now, for the unlearned random predictor
     for split in [{"name": "test"}]:
         print(f"Getting embeddings for split: {split['name']}")
 
         dataloader = DataLoader(
-            SplitMemmapDataset(embedding_path, split["name"]),
+            SplitMemmapDataset(
+                embedding_path, metadata["prediction_type"], nlabels, split["name"]
+            ),
             batch_size=64,
             # We don't shuffle because it's slow.
             # Also we want predicted labels in the same order as
@@ -288,3 +347,14 @@ def task_predictions(
                 embedding_path.joinpath(f"{split['name']}.predicted-labels.pkl"), "wb"
             ),
         )
+
+
+def task_predictions(
+    embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
+):
+    predictor = task_predictions_train(
+        embedding_path, scene_embedding_size, timestamp_embedding_size
+    )
+    task_predictions_test(
+        predictor, embedding_path, scene_embedding_size, timestamp_embedding_size
+    )
