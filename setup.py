@@ -37,6 +37,7 @@ setup(
         "luigi",
         "numpy",
         "pandas",
+        "pytorch-lightning",
         "python-slugify",
         "requests",
         "soundfile",
