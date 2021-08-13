@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Contains a set of various evaluation metrics. Runs evaluation on the test predictions
+Contains a set of various evaluation scores. Runs evaluation on the test predictions
 for predictions on a HEAR task.
 Would it make sense to move all the score functions over to a file called scores?
 
@@ -18,13 +18,13 @@ from dcase_util.containers import MetaDataContainer
 import numpy as np
 import pandas as pd
 import sed_eval
-import sklearn.metrics
+import sklearn.scores
 import torch
 
 
-class MetricFunction:
+class ScoreFunction:
     """
-    A simple abstract base class for metric functions
+    A simple abstract base class for score functions
     """
 
     def __init__(self, task_metadata: Dict, label_vocab: pd.DataFrame):
@@ -48,13 +48,13 @@ class MetricFunction:
 
     def __call__(self, predictions: Any, targets: Any, **kwargs) -> Dict:
         """
-        Compute the metric based on the predictions and targets. Return a dictionary
+        Compute the score based on the predictions and targets. Return a dictionary
         of the results.
         """
         raise NotImplementedError("Inheriting classes must implement this function")
 
 
-class Top1Error(MetricFunction):
+class Top1Error(ScoreFunction):
     def __call__(
         self, predictions: np.ndarray, targets: List, **kwargs
     ) -> Dict[str, float]:
@@ -75,7 +75,7 @@ class Top1Error(MetricFunction):
         return {"top1_error": error}
 
 
-class MacroAUC(MetricFunction):
+class MacroAUC(ScoreFunction):
     def __call__(
         self, predictions: np.ndarray, targets: List, **kwargs
     ) -> Dict[str, float]:
@@ -98,13 +98,13 @@ class MacroAUC(MetricFunction):
 
         ipshell = IPython.embed
         ipshell(banner1="ipshell")
-        return {"macroauc": sklearn.metrics.roc_auc_score(y_true, predictions)}
+        return {"macroauc": sklearn.scores.roc_auc_score(y_true, predictions)}
 
 
-class ChromaError(MetricFunction):
+class ChromaError(ScoreFunction):
     """
-    Metric specifically for pitch detection -- converts all pitches to chroma first.
-    This metric ignores octave errors in pitch classification.
+    Score specifically for pitch detection -- converts all pitches to chroma first.
+    This score ignores octave errors in pitch classification.
     """
 
     def __call__(
@@ -128,41 +128,41 @@ class ChromaError(MetricFunction):
         return {"chroma_error": error}
 
 
-class SoundEventMetric(MetricFunction):
+class SoundEventScore(ScoreFunction):
     """
-    Metrics for sound event detection tasks using sed_eval
+    Scores for sound event detection tasks using sed_eval
     """
 
-    # Metric class must be defined in inheriting classes
-    metric_class: sed_eval.sound_event.SoundEventMetrics = None
+    # Score class must be defined in inheriting classes
+    score_class: sed_eval.sound_event.SoundEventScores = None
 
     def __init__(
         self, task_metadata: Dict, label_vocab: pd.DataFrame, params: Dict = None
     ):
         super().__init__(task_metadata=task_metadata, label_vocab=label_vocab)
         self.params = params if params is not None else {}
-        assert self.metric_class is not None
+        assert self.score_class is not None
 
     def __call__(self, predictions: Dict, targets: Dict, **kwargs):
         # Containers of events for sed_eval
         reference_event_list = self.sed_eval_event_container(targets)
         estimated_event_list = self.sed_eval_event_container(predictions)
 
-        metrics = self.metric_class(
+        scores = self.score_class(
             event_label_list=list(self.label_vocab["label"]), **self.params
         )
 
         for filename in predictions:
-            metrics.evaluate(
+            scores.evaluate(
                 reference_event_list=reference_event_list.filter(filename=filename),
                 estimated_event_list=estimated_event_list.filter(filename=filename),
             )
 
-        # This (and segment_based_metrics) return a pretty large selection of metrics.
+        # This (and segment_based_scores) return a pretty large selection of scores.
         # We might want to add a task_metadata option to filter these for the specific
-        # metric that we are going to use to evaluate the task.
-        overall_metrics = metrics.results_overall_metrics()
-        return overall_metrics
+        # score that we are going to use to evaluate the task.
+        overall_scores = scores.results_overall_scores()
+        return overall_scores
 
     @staticmethod
     def sed_eval_event_container(x: Dict) -> MetaDataContainer:
@@ -182,38 +182,38 @@ class SoundEventMetric(MetricFunction):
         return MetaDataContainer(reference_events)
 
 
-class SegmentBasedMetric(SoundEventMetric):
+class SegmentBasedScore(SoundEventScore):
     """
-    segment-based metrics - the ground truth and system output are compared in a
+    segment-based scores - the ground truth and system output are compared in a
     fixed time grid; sound events are marked as active or inactive in each segment;
 
-    See https://tut-arg.github.io/sed_eval/sound_event.html#sed_eval.sound_event.SegmentBasedMetrics # noqa: E501
+    See https://tut-arg.github.io/sed_eval/sound_event.html#sed_eval.sound_event.SegmentBasedScores # noqa: E501
     for params.
     """
 
-    metric_class = sed_eval.sound_event.SegmentBasedMetrics
+    score_class = sed_eval.sound_event.SegmentBasedScores
 
 
-class EventBasedMetric(SoundEventMetric):
+class EventBasedScore(SoundEventScore):
     """
-    event-based metrics - the ground truth and system output are compared at
+    event-based scores - the ground truth and system output are compared at
     event instance level;
 
-    See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedMetrics.html # noqa: E501
+    See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedScores.html # noqa: E501
     for params.
     """
 
-    metric_class = sed_eval.sound_event.EventBasedMetrics
+    score_class = sed_eval.sound_event.EventBasedScores
 
 
-available_metrics: Dict[str, Callable] = {
+available_scores: Dict[str, Callable] = {
     "top1_error": Top1Error,
     "macroauc": MacroAUC,
     "chroma_error": ChromaError,
     "onset_only_event_based": partial(
-        EventBasedMetric, params={"evaluate_offset": False, "t_collar": 0.2}
+        EventBasedScore, params={"evaluate_offset": False, "t_collar": 0.2}
     ),
-    "segment_based": SegmentBasedMetric,
+    "segment_based": SegmentBasedScore,
 }
 
 
@@ -275,12 +275,12 @@ def task_evaluation(task_path: Path):
     else:
         raise ValueError(f"Unknown embedding type received: {embedding_type}")
 
-    metrics = metadata["evaluation"]
+    scores = metadata["evaluation"]
     results = {}
-    for metric in metrics:
-        print("  -", metric)
-        metric_function = available_metrics[metric](metadata, label_vocab)
-        new_results = metric_function(predictions, targets)
-        results.update({metric: new_results})
+    for score in scores:
+        print("  -", score)
+        score_function = available_scores[score](metadata, label_vocab)
+        new_results = score_function(predictions, targets)
+        results.update({score: new_results})
 
     return results
