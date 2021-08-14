@@ -123,9 +123,9 @@ def download_file(url, local_filename, expected_md5):
                 f.write(chunk)
                 pbar.update(chunk_size)
             pbar.close()
-    # If expected_md5 is 0, the check is not done
-    if expected_md5:
-        assert md5sum(local_filename) == expected_md5
+    assert (
+        md5sum(local_filename) == expected_md5
+    ), f"Md5sum for url: {url} is: {md5sum(local_filename)}"
     return local_filename
 
 
