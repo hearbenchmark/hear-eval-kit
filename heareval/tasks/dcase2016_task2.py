@@ -20,7 +20,7 @@ import heareval.tasks.util.luigi as luigi_utils
 
 logger = logging.getLogger("luigi-interface")
 
-# This percentage should not be change as this decides 
+# This percentage should not be change as this decides
 # the data in the split and hence is not a part of the config
 VALIDATION_PERCENTAGE = 0.3
 TESTING_PERCENTAGE = 0
@@ -50,6 +50,27 @@ config = {
         {"name": "test", "max_files": 10},
         {"name": "valid", "max_files": 10},
     ],
+    "small": {
+        "download_urls": [
+            {
+                "name": "train",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_train_dev-small.zip",  # noqa: E501
+                "md5": "3adca7e1860aedf7d1b0c06358f1b867",
+            },
+            {
+                "name": "test",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_test_public-small.zip",  # noqa: E501
+                "md5": "73446e2156cb5f1d44a1de1e70e536a5",
+            },
+        ],
+        "small_flag": True,
+        "version": "hear2021-small",
+        "splits": [
+            {"name": "train", "max_files": 100},
+            {"name": "test", "max_files": 100},
+            {"name": "valid", "max_files": 100},
+        ],
+    },
 }
 
 
@@ -72,7 +93,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     }
 
     def get_split_metadata(self, split: str) -> pd.DataFrame:
-        #Since the valid is part of the train
+        # Since the valid is part of the train
         if split not in ["train", "test"]:
             return pd.DataFrame()
         logger.info(f"Preparing metadata for {split}")
@@ -103,8 +124,8 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 relpath=sound_file,
                 slug=lambda df: df.relpath.apply(self.slugify_file_name),
                 subsample_key=lambda df: self.get_subsample_key(df),
-                #For train the split is decided by the which set function.
-                #which takes in validation and testing percentage
+                # For train the split is decided by the which set function.
+                # which takes in validation and testing percentage
                 split=lambda df: split
                 if split == "test"
                 else df["subsample_key"].apply(
@@ -121,9 +142,16 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         return pd.concat(metadatas)
 
 
-def main(num_workers: int, sample_rates: List[int], small: bool = False):
+def main(
+    num_workers: int,
+    sample_rates: List[int],
+    luigi_dir: str,
+    tasks_dir: str,
+    small: bool = False,
+):
     if small:
-        pipeline.get_small_config(config)
+        config.update(config["small"])
+    config.update({"luigi_dir": luigi_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)
@@ -132,7 +160,10 @@ def main(num_workers: int, sample_rates: List[int], small: bool = False):
         outfile="process_metadata.csv", data_config=config, **download_tasks
     )
     final = pipeline.FinalizeCorpus(
-        sample_rates=sample_rates, metadata=configure_metadata, data_config=config
+        sample_rates=sample_rates,
+        tasks_dir=tasks_dir,
+        metadata=configure_metadata,
+        data_config=config,
     )
 
     pipeline.run(final, num_workers=num_workers)

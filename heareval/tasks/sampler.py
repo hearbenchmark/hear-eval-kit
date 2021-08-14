@@ -44,9 +44,14 @@ configs = {
     "dcase2016_task2": {
         "task_config": dcase2016_task2.config,
         "audio_sample_size": 4,
-        # dev-1-ebr-6-nec-2-poly-0 -> 1 train file in train split
-        # dev-1-ebr-6-nec-4-poly-1 -> 1 train file in valid split
-        "necessary_keys": ["dev_1_ebr_6_nec_2_poly_0.wav", "dev_1_ebr_6_nec_4_poly_1"],
+        # Put two files from the dev and train split so that those splits are
+        # made
+        # dev_1_ebr_6_nec_2_poly_0.wav -> 1 train file in train split
+        # dev_1_ebr_6_nec_3_poly_0.wav -> 1 train file in valid split
+        "necessary_keys": [
+            "dev_1_ebr_6_nec_2_poly_0.wav",
+            "dev_1_ebr_6_nec_3_poly_0.wav",
+        ],
     },
 }
 
