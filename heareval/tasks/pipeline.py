@@ -2,12 +2,12 @@
 Generic pipelines for datasets
 """
 
-import os
 import json
+import os
 import shutil
 from pathlib import Path
-from urllib.parse import urlparse
 from typing import Dict, List, Union
+from urllib.parse import urlparse
 
 import luigi
 import pandas as pd

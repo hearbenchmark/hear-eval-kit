@@ -24,12 +24,12 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 from intervaltree import IntervalTree
-from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from heareval.score import available_scores, ScoreFunction, label_vocab_as_dict
+from heareval.score import ScoreFunction, available_scores, label_vocab_as_dict
 
 
 class OneHotToCrossEntropyLoss(torch.nn.Module):

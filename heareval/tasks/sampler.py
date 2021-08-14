@@ -8,23 +8,23 @@ Also uses the configs defined in the task files for making
 it simple to scale across multiple dataset
 """
 
+import logging
+import multiprocessing
+import shutil
 from pathlib import Path
 from typing import Optional
-import multiprocessing
-import logging
-
-import luigi
-from tqdm import tqdm
 from urllib.parse import urlparse
-import shutil
+
 import click
+import luigi
 import pandas as pd
+from tqdm import tqdm
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
-from heareval.tasks.speech_commands import config as speech_command_config
 from heareval.tasks.dcase2016_task2 import config as dcase2016_task2_config
 from heareval.tasks.nsynth_pitch import config as nsynth_pitch_config
+from heareval.tasks.speech_commands import config as speech_command_config
 
 logger = logging.getLogger("luigi-interface")
 

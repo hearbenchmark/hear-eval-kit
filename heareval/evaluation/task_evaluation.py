@@ -8,10 +8,9 @@ TODO: Fix AUC
 """
 
 import json
-from pathlib import Path
 import pickle
+from pathlib import Path
 from typing import Collection, Dict, List, Tuple
-
 
 import numpy as np
 import pandas as pd
