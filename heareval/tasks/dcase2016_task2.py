@@ -20,7 +20,7 @@ import heareval.tasks.util.luigi as luigi_utils
 
 logger = logging.getLogger("luigi-interface")
 
-# This percentage should not be change as this decides 
+# This percentage should not be change as this decides
 # the data in the split and hence is not a part of the config
 VALIDATION_PERCENTAGE = 0.3
 TESTING_PERCENTAGE = 0
@@ -72,7 +72,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     }
 
     def get_split_metadata(self, split: str) -> pd.DataFrame:
-        #Since the valid is part of the train
+        # Since the valid is part of the train
         if split not in ["train", "test"]:
             return pd.DataFrame()
         logger.info(f"Preparing metadata for {split}")
@@ -100,8 +100,8 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 relpath=sound_file,
                 slug=lambda df: df.relpath.apply(self.slugify_file_name),
                 subsample_key=lambda df: self.get_subsample_key(df),
-                #For train the split is decided by the which set function.
-                #which takes in validation and testing percentage
+                # For train the split is decided by the which set function.
+                # which takes in validation and testing percentage
                 split=lambda df: split
                 if split == "test"
                 else df["subsample_key"].apply(
