@@ -46,6 +46,32 @@ config = {
     ],
     "pitch_range_min": 21,
     "pitch_range_max": 108,
+    "small": {
+        "download_urls": [
+            {
+                "name": "train",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-train-small.zip",  # noqa: E501
+                "md5": "1222321b8694e64706370175bb19f7bc",
+            },
+            {
+                "name": "valid",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-valid-small.zip",  # noqa: E501
+                "md5": "17653ba28da0eb6cb96f70f3600c08f3",
+            },
+            {
+                "name": "test",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-test-small.zip",  # noqa: E501
+                "md5": "da3a6b20b5b00a60037abc9355add3f9",
+            },
+        ],
+        "small_flag": True,
+        "version": "v2.2.3-small",
+        "splits": [
+            {"name": "train", "max_files": 100},
+            {"name": "test", "max_files": 100},
+            {"name": "valid", "max_files": 100},
+        ],
+    },
 }
 
 
@@ -100,9 +126,16 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         return metadata
 
 
-def main(num_workers: int, sample_rates: List[int], small: bool = False):
+def main(
+    num_workers: int,
+    sample_rates: List[int],
+    luigi_dir: str,
+    tasks_dir: str,
+    small: bool = False,
+):
     if small:
-        pipeline.get_small_config(config)
+        config.update(config["small"])
+    config.update({"luigi_dir": luigi_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)
@@ -111,7 +144,10 @@ def main(num_workers: int, sample_rates: List[int], small: bool = False):
         outfile="process_metadata.csv", data_config=config, **download_tasks
     )
     final = pipeline.FinalizeCorpus(
-        sample_rates=sample_rates, metadata=configure_metadata, data_config=config
+        sample_rates=sample_rates,
+        tasks_dir=tasks_dir,
+        metadata=configure_metadata,
+        data_config=config,
     )
 
     pipeline.run(final, num_workers=num_workers)
