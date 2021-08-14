@@ -193,15 +193,15 @@ class ExtractMetadata(WorkTask):
         """
         Gets the subsample key.
         Subsample key is a unique hash at a audio file level used for subsampling.
-        This is a hash of the relpath. This is not recommended to be
+        This is a hash of the slug. This is not recommended to be
         overridden.
 
         The data is first split by the split key and the subsample key is
         used to ensure stable sampling for groups which are incompletely
         sampled(the last group to be part of the subsample output)
         """
-        assert "relpath" in df, "relpath column not found in the dataframe"
-        return df["relpath"].apply(str).apply(filename_to_int_hash)
+        assert "slug" in df, "relpath column not found in the dataframe"
+        return df["slug"].apply(str).apply(filename_to_int_hash)
 
     def get_process_metadata(self) -> pd.DataFrame:
         """
