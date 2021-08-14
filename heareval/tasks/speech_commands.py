@@ -46,6 +46,27 @@ config = {
         {"name": "test", "max_files": 100},
         {"name": "valid", "max_files": 100},
     ],
+    "small": {
+        "download_urls": [
+            {
+                "name": "train",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_v0-small.zip",  # noqa: E501
+                "md5": "74d72a260d2fd24fcfd05ed2e2943f52",
+            },
+            {
+                "name": "test",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_test_set_v0-small.zip",  # noqa: E501
+                "md5": "46716349e9296d3e57c6f6914627003c",
+            },
+        ],
+        "small_flag": True,
+        "version": "v0.0.2-small",
+        "splits": [
+            {"name": "train", "max_files": 100},
+            {"name": "test", "max_files": 100},
+            {"name": "valid", "max_files": 100},
+        ],
+    },
 }
 
 
@@ -207,10 +228,18 @@ class ExtractMetadata(pipeline.ExtractMetadata):
         return process_metadata
 
 
-def main(num_workers: int, sample_rates: List[int], small: bool = False):
+def main(
+    num_workers: int,
+    sample_rates: List[int],
+    luigi_dir: str,
+    tasks_dir: str,
+    small: bool = False,
+):
     if small:
-        pipeline.get_small_config(config)
+        config.update(config["small"])
+    config.update(**{"luigi_dir": luigi_dir})
 
+    # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)
 
     generate = GenerateTrainDataset(
@@ -224,7 +253,10 @@ def main(num_workers: int, sample_rates: List[int], small: bool = False):
     )
 
     final = pipeline.FinalizeCorpus(
-        sample_rates=sample_rates, metadata=configure_metadata, data_config=config
+        sample_rates=sample_rates,
+        tasks_dir=tasks_dir,
+        metadata=configure_metadata,
+        data_config=config,
     )
 
     pipeline.run(final, num_workers=num_workers)
