@@ -24,10 +24,6 @@ from heareval.tasks.util.luigi import (
     subsample_metadata,
 )
 
-OPEN_SMALL_DATASET_ROOT = (
-    "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/"
-)
-
 
 class DownloadCorpus(WorkTask):
     """
@@ -88,27 +84,6 @@ class ExtractArchive(WorkTask):
         )
 
         self.mark_complete()
-
-
-def get_small_config(config: Dict):
-    """
-    Modifies the config for a small version of the dataset
-    1. Changes the download urls for each data to the small url
-    2. Changes the version of the task to add a -small tag
-    """
-    config["download_urls"] = [
-        {
-            "name": urlobj["name"],
-            "url": "{root}{zip_download_name}-small.zip".format(
-                root=OPEN_SMALL_DATASET_ROOT,
-                zip_download_name=Path(urlparse(urlobj["url"]).path).name.split(".")[0],
-            ),
-            # Set the md5 to empty string so that the md5 is not checked
-            "md5": "",
-        }
-        for urlobj in config["download_urls"]
-    ]
-    config["version"] = "{version}-small".format(version=config["version"])
 
 
 def get_download_and_extract_tasks(config: Dict):
@@ -290,13 +265,17 @@ class ExtractMetadata(WorkTask):
         exists = process_metadata["relpath"].apply(
             lambda relpath: Path(relpath).exists()
         )
+
         if sum(exists) < len(process_metadata):
-            print(
-                "All Files in metadata doesnot exist in the dataset. "
-                f"Removing {len(process_metadata) - sum(exists)} entries in the "
-                "metadata"
-            )
-            process_metadata = process_metadata.loc[exists]
+            if "small" in self.data_config:
+                print(
+                    "All Files in metadata doesnot exist in the dataset. "
+                    f"Removing {len(process_metadata) - sum(exists)} entries in the "
+                    "metadata"
+                )
+                process_metadata = process_metadata.loc[exists]
+            else:
+                raise FileNotFoundError("All files in metadata are not found")
 
         process_metadata.to_csv(
             self.workdir.joinpath(self.outfile),
