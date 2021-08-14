@@ -1,17 +1,12 @@
 """
 Common utils for scoring.
 """
-import json
-import pickle
 from functools import partial
-from pathlib import Path
-from typing import Any, Callable, Collection, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 import sed_eval
-import sklearn.metrics
-import torch
 from dcase_util.containers import MetaDataContainer
 
 

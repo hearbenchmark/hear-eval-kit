@@ -399,23 +399,25 @@ def task_predictions_test(
 
         # A list of filenames and timestamps associated with each prediction
         file_timestamps = json.load(
-            embedding_path.joinpath(f"{split['name']}.filename-timestamps.json").open()
+            embedding_path.joinpath("test.filename-timestamps.json").open()
         )
 
         print("Creating events from predictions:")
+        # Probably don't need label_vocab any more since we have label_to_idx
+        label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
         events = get_events_for_all_files(
             predicted_labels, file_timestamps, label_vocab
         )
 
         json.dump(
             events,
-            embedding_path.joinpath(f"test.predictions.json").open("w"),
+            embedding_path.joinpath("test.predictions.json").open("w"),
             indent=4,
         )
 
     pickle.dump(
         predicted_labels,
-        open(embedding_path.joinpath(f"test.predicted-labels.pkl"), "wb"),
+        open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
 
 

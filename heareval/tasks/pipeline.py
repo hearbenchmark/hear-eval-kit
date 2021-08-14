@@ -16,13 +16,9 @@ from slugify import slugify
 from tqdm import tqdm
 
 import heareval.tasks.util.audio as audio_util
-from heareval.tasks.util.luigi import (
-    WorkTask,
-    download_file,
-    filename_to_int_hash,
-    new_basedir,
-    subsample_metadata,
-)
+from heareval.tasks.util.luigi import (WorkTask, download_file,
+                                       filename_to_int_hash, new_basedir,
+                                       subsample_metadata)
 
 
 class DownloadCorpus(WorkTask):
