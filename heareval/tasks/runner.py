@@ -39,16 +39,29 @@ tasks = {
     type=int,
 )
 @click.option(
+    "--luigi-dir",
+    default="_workdir",
+    help="Directory to save all the intermediate tasks",
+    type=str,
+)
+@click.option(
+    "--tasks-dir",
+    default="tasks",
+    help="Directory to save all the intermediate tasks",
+    type=str,
+)
+@click.option(
     "--small",
-    default=False,
-    help="Run Pipeline on a small version of the dataset"
-    "By default this is set to false",
+    is_flag=True,
+    help="Run pipeline on small version of data",
     type=bool,
 )
 def run(
     task: str,
     num_workers: Optional[int] = None,
     sample_rate: Optional[int] = None,
+    luigi_dir: Optional[str] = "_workdir",
+    tasks_dir: Optional[str] = "tasks",
     small: bool = False,
 ):
 
@@ -62,7 +75,11 @@ def run(
         sample_rates = [sample_rate]
 
     tasks[task].main(  # type: ignore
-        num_workers=num_workers, sample_rates=sample_rates, small=small
+        num_workers=num_workers,
+        sample_rates=sample_rates,
+        luigi_dir=luigi_dir,
+        tasks_dir=tasks_dir,
+        small=small,
     )
 
 

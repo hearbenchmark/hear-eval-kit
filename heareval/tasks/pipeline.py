@@ -727,6 +727,7 @@ class FinalizeCorpus(WorkTask):
 
     sample_rates = luigi.ListParameter()
     metadata = luigi.TaskParameter()
+    tasks_dir = luigi.Parameter()
 
     def requires(self):
         # Will copy the resampled data and the traintestmeta and the vocabmeta
@@ -748,7 +749,7 @@ class FinalizeCorpus(WorkTask):
     # the finalized top-level task directory
     @property
     def workdir(self):
-        return Path("tasks").joinpath(self.versioned_task_name)
+        return Path(self.tasks_dir).joinpath(self.versioned_task_name)
 
     def run(self):
         if self.workdir.exists():
