@@ -22,9 +22,7 @@ import pandas as pd
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
-from heareval.tasks.speech_commands import config as speech_command_config
-from heareval.tasks.dcase2016_task2 import config as dcase2016_task2_config
-from heareval.tasks.nsynth_pitch import config as nsynth_pitch_config
+from heareval.tasks import speech_commands, dcase2016_task2, nsynth_pitch
 
 logger = logging.getLogger("luigi-interface")
 
@@ -34,20 +32,21 @@ AUDIOFORMATS = [".mp3", ".wav", ".ogg"]
 
 configs = {
     "nsynth_pitch": {
-        "task_config": nsynth_pitch_config,
+        "task_config": nsynth_pitch.config,
         "audio_sample_size": 100,
         "necessary_keys": [],
     },
     "speech_commands": {
-        "task_config": speech_command_config,
+        "task_config": speech_commands.config,
         "audio_sample_size": 100,
         "necessary_keys": [],
     },
     "dcase2016_task2": {
-        "task_config": dcase2016_task2_config,
+        "task_config": dcase2016_task2.config,
         "audio_sample_size": 4,
-        # Add any keys in the file format that we compulsorily need to copy
-        "necessary_keys": [],
+        # dev-1-ebr-6-nec-2-poly-0 -> 1 train file in train split
+        # dev-1-ebr-6-nec-4-poly-1 -> 1 train file in valid split
+        "necessary_keys": ["dev_1_ebr_6_nec_2_poly_0.wav", "dev_1_ebr_6_nec_4_poly_1"],
     },
 }
 
@@ -73,7 +72,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
         # If the file name has a necessary key
         necessary_files = list(
             filter(
-                lambda file: any(key in file for key in self.necessary_keys),
+                lambda file: any(key in str(file) for key in self.necessary_keys),
                 all_files,
             )
         )
@@ -84,25 +83,27 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
         # sampling without stratifying makes no dev folder which disrupts
         # the original folder structure. Using the subsample metadata functions
         # from luiti_utils solves this issue.
-        metadata = pd.DataFrame(
-            list(
-                filter(
-                    lambda file: file.suffix.lower() in map(str.lower, AUDIOFORMATS),
-                    [file for file in all_files if file not in necessary_files],
-                )
-            ),
-            columns=["audio_path"],
+        audio_files = (
+            pd.DataFrame(
+                list(
+                    filter(
+                        lambda file: file.suffix.lower()
+                        in map(str.lower, AUDIOFORMATS),
+                        [file for file in all_files if file not in necessary_files],
+                    )
+                ),
+                columns=["audio_path"],
+            )
+            .assign(
+                stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
+                split_key=lambda df: df.audio_path.apply(
+                    lambda path: luigi_util.filename_to_int_hash(str(path))
+                ),
+                subsample_key=lambda df: df.split_key,
+            )
+            .pipe(luigi_util.subsample_metadata, self.audio_sample_size)
+            .audio_path.to_list()
         )
-        metadata = metadata.assign(
-            stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
-            split_key=lambda df: df.audio_path.apply(
-                lambda path: luigi_util.filename_to_int_hash(str(path))
-            ),
-            subsample_key=lambda df: df.split_key,
-        )
-        audio_files = luigi_util.subsample_metadata(
-            metadata, self.audio_sample_size
-        ).audio_path.to_list()
 
         return metadata_files + necessary_files + audio_files
 
