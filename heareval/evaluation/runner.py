@@ -35,7 +35,7 @@ def runner(embeddings_dir: str = "embeddings") -> None:
 
         tasks = list(embedding.iterdir())
         embedding_results = {}
-        for task_path in tasks:
+        for task_path in tqdm(tasks):
             print(f"  - Evaluating task: {task_path.name}")
             embedding_results[task_path.name] = task_evaluation(task_path)
 
