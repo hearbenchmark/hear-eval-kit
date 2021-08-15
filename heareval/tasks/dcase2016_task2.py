@@ -42,7 +42,7 @@ config = {
     "splits": [
         {"name": "train", "max_files": 10},
         {"name": "test", "max_files": 10},
-        {"name": "valid", "max_files": 10},
+        {"name": "valid", "max_files": 2},
     ],
 }
 
