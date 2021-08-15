@@ -38,6 +38,12 @@ class WorkTask(luigi.Task):
         visibility=luigi.parameter.ParameterVisibility.PRIVATE
     )
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Add versioned task name to the task id, so that each task is unique across
+        # different datasets. This helps in tracking task in the pipeline's DAG.
+        self.task_id = f"{self.task_id}_{self.versioned_task_name}"
+
     @property
     def name(self):
         return type(self).__name__
