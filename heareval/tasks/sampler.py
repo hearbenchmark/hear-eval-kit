@@ -46,8 +46,8 @@ configs = {
         "audio_sample_size": 4,
         # Put two files from the dev and train split so that those splits are
         # made
-        # dev_1_ebr_6_nec_2_poly_0.wav -> 1 train file in train split
-        # dev_1_ebr_6_nec_3_poly_0.wav -> 1 train file in valid split
+        # dev_1_ebr_6_nec_2_poly_0.wav -> 1 train file in valid split
+        # dev_1_ebr_6_nec_3_poly_0.wav -> 1 valid file in valid split
         "necessary_keys": [
             "dev_1_ebr_6_nec_2_poly_0.wav",
             "dev_1_ebr_6_nec_3_poly_0.wav",
@@ -81,55 +81,56 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
                 all_files,
             )
         )
-        # Audio files (leaving out the necessary files will be sampled)
-        # Also stratify on the basis of base folder to make sure a better
-        # snapshot is captured. For example in dcase the train and dev
-        # are in same folder and the dev size is too small. Randomly
-        # sampling without stratifying makes no dev folder which disrupts
-        # the original folder structure. Using the subsample metadata functions
-        # from luiti_utils solves this issue.
-        audio_files = (
-            pd.DataFrame(
-                list(
-                    filter(
-                        lambda file: file.suffix.lower()
-                        in map(str.lower, AUDIOFORMATS),
-                        [file for file in all_files if file not in necessary_files],
-                    )
-                ),
-                columns=["audio_path"],
-            )
-            .assign(
-                stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
-                split_key=lambda df: df.audio_path.apply(
-                    lambda path: luigi_util.filename_to_int_hash(str(path))
-                ),
-                subsample_key=lambda df: df.split_key,
-            )
-            .pipe(luigi_util.subsample_metadata, self.audio_sample_size)
-            .audio_path.to_list()
+        audio_files_to_sample = pd.DataFrame(
+            list(
+                # Filter all the audio files which are not in the necessary list.
+                # Out of these audios audio_sample_size number of samples will be
+                # selected
+                filter(
+                    lambda file: file.suffix.lower() in map(str.lower, AUDIOFORMATS),
+                    [file for file in all_files if file not in necessary_files],
+                )
+            ),
+            columns=["audio_path"],
         )
 
-        return metadata_files + necessary_files + audio_files
+        sampled_audio_files = (
+            audio_files_to_sample.assign(
+                # The subfolder name is set as the stratify key. This ensures at least
+                # one audio is selected from each subfolder in the original dataset
+                stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
+                # The split key is the hash of the path. This ensures the sampling is
+                # deterministic
+                subsample_key=lambda df: df.audio_path.apply(
+                    lambda path: luigi_util.filename_to_int_hash(str(path))
+                ),
+                # Split key is same as the subsample key in this case
+                split_key=lambda df: df.split_key,
+            )
+            # The above metadata is passed in the subsample metadata and
+            # audio_sample_size number of files are selected
+            .pipe(
+                luigi_util.subsample_metadata, self.audio_sample_size
+            ).audio_path.to_list()
+        )
+
+        return metadata_files + necessary_files + sampled_audio_files
 
     def run(self):
-        for download_extract_task in self.data_config["download_urls"]:
-            zip_download_name = Path(
-                urlparse(download_extract_task["url"]).path
-            ).name.split(".")[0]
-            zip_extract_name = download_extract_task["name"]
-            copy_to = self.workdir.joinpath(zip_download_name)
-            # Remove the sampled folder if it already exists
+        for url_obj in self.data_config["small"]["download_urls"]:
+            # Sample a small subset to copy from all the files
+            url_name = Path(urlparse(url_obj["url"]).path).stem
+            split = url_obj["name"]
+            copy_from = self.requires()[split].workdir.joinpath(url_name)
+            all_files = [file.relative_to(copy_from) for file in copy_from.rglob("*")]
+            copy_files = self.sample(all_files)
+
+            # Copy and make a zip
+            copy_to = self.workdir.joinpath(url_name)
             if copy_to.exists():
                 shutil.rmtree(copy_to)
-            copy_from = self.requires()[zip_extract_name].workdir.joinpath(
-                zip_extract_name
-            )
-            copy_files = self.sample(list(copy_from.rglob("*")))
             for file in tqdm(copy_files):
-                self.safecopy(
-                    src=file, dst=copy_to.joinpath(file.relative_to(copy_from))
-                )
+                self.safecopy(src=copy_from.joinpath(file), dst=copy_to.joinpath(file))
             shutil.make_archive(f"{copy_to}-small", "zip", copy_to)
 
 
