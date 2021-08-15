@@ -254,7 +254,7 @@ class ExtractMetadata(WorkTask):
         # test and valid if not found in the metadata can be sampled
         # from the train
         assert "train" in splits_present, "Train split not found in metadata"
-        splits_to_sample = set(["test", "valid"]).difference(splits_present)
+        splits_to_sample = set(self.data_config["splits"]).difference(splits_present)
         print(f"Splits getting sampled with the split key are: {splits_to_sample}")
 
         # Depending on whether valid and test are already present, the percentage can
@@ -367,7 +367,7 @@ class SubsampleSplit(WorkTask):
     """
 
     split = luigi.Parameter()
-    max_files = luigi.IntParameter()
+    dataset_fraction = luigi.IntParameter()
     metadata = luigi.TaskParameter()
 
     def requires(self):
@@ -399,7 +399,10 @@ class SubsampleSplit(WorkTask):
 
         metadata = self.get_metadata()
         num_files = len(metadata)
-        max_files = num_files if self.max_files is None else self.max_files
+        if (self.dataset_fraction == 1) or (self.dataset_fraction is None):
+            max_files = num_files
+        else:
+            max_files = int(num_files * self.dataset_fraction)
         if num_files > max_files:
             print(
                 f"{num_files} audio files in corpus."
@@ -440,10 +443,10 @@ class SubsampleSplits(WorkTask):
     def requires(self):
         # Perform subsampling on each split independently
         subsample_splits = {
-            split["name"]: SubsampleSplit(
+            split: SubsampleSplit(
                 metadata=self.metadata,
-                split=split["name"],
-                max_files=split["max_files"],
+                split=split,
+                dataset_fraction=self.data_config["dataset_fraction"],
                 data_config=self.data_config,
             )
             for split in self.data_config["splits"]
@@ -731,7 +734,7 @@ class ResampleSubcorpuses(WorkTask):
         resample_splits = [
             ResampleSubCorpus(
                 sr=sr,
-                split=split["name"],
+                split=split,
                 metadata=self.metadata,
                 data_config=self.data_config,
             )
@@ -833,7 +836,6 @@ def run(task: Union[List[luigi.Task], luigi.Task], num_workers: int):
     if isinstance(task, luigi.Task):
         task = [task]
 
-    Path("_workdir").mkdir(exist_ok=True)
     luigi.build(
         task,
         workers=num_workers,

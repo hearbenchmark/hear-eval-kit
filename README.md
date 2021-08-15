@@ -35,6 +35,11 @@ For DCASE 2016, Task 2 (sound event detection):
 python3 -m heareval.tasks.runner dcase2016_task2
 ```
 
+For running all the above tasks at once:
+```
+python3 -m heareval.tasks.runner all
+```
+
 These commands will download and preprocess the entire dataset. An intermediary directory
 defined by the option `luigi-dir`(default `_workdir`) will be created, and then a 
 final directory defined by the option `tasks-dir` (default `tasks`) will contain
@@ -63,6 +68,8 @@ The small flag runs the preprocessing pipeline on a small version of each datase
 python -m heareval.tasks.sampler <taskname>
 ```
 Supported task name are speech_commands, nsynth_pitch and dcase2016_task2.
+
+**_NOTE_** : Each task config has `dataset_fraction`. The data in each split is subsampled by this fraction in the final output. This is not to be confused with the `--small` flag which is used to run the task on a small version of the dataset for development. Also the small version in the config has its own `dataset_fraction` which can be used to subsample the small dataset when the small flag is passed.
 
 Additionally, to check the stats of an audio directory:
 ```
