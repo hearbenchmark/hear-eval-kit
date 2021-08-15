@@ -260,7 +260,7 @@ class ExtractMetadata(WorkTask):
         # Depending on whether valid and test are already present, the percentage can
         # either be the predefined percentage or 0
         valid_perc = VALIDATION_PERCENTAGE if "valid" in splits_to_sample else 0
-        test_perc = VALIDATION_PERCENTAGE if "test" in splits_to_sample else 0
+        test_perc = TESTING_PERCENTAGE if "test" in splits_to_sample else 0
 
         metadata[metadata["split"] == "train"] = metadata[
             metadata["split"] == "train"
