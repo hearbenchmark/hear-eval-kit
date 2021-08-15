@@ -47,7 +47,7 @@ tasks = {
 @click.option(
     "--tasks-dir",
     default="tasks",
-    help="Directory to save all the intermediate tasks",
+    help="Directory to save the final task output",
     type=str,
 )
 @click.option(

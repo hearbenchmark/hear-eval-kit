@@ -131,7 +131,7 @@ def main(
     small: bool = False,
 ):
     if small:
-        config.update(config["small"])
+        config.update(dict(config["small"])) # type: ignore
     config.update({"luigi_dir": luigi_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
