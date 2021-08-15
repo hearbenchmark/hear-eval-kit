@@ -9,6 +9,7 @@ pre-commit
 pytest
 pytest-cov
 pytest-env
+pytorch-lightning
 python-slugify
 requests
 soundfile

@@ -20,12 +20,25 @@ import pickle
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
+import pytorch_lightning as pl
 import torch
-from torch.utils.data import Dataset, DataLoader
+from intervaltree import IntervalTree
+from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
+
+
+class OneHotToCrossEntropyLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.CrossEntropyLoss()
+
+    def forward(self, y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        # One and only one label per class
+        assert torch.all(torch.sum(y, dim=1) == torch.ones(y.shape[0]))
+        y = y.argmax(dim=1)
+        return self.loss(y_hat, y)
 
 
 class RandomProjectionPrediction(torch.nn.Module):
@@ -36,16 +49,54 @@ class RandomProjectionPrediction(torch.nn.Module):
         torch.nn.init.normal_(self.projection.weight)
         if prediction_type == "multilabel":
             self.activation: torch.nn.Module = torch.nn.Sigmoid()
+            self.logitloss = torch.nn.BCEWithLogitsLoss()
         elif prediction_type == "multiclass":
             self.activation = torch.nn.Softmax()
+            self.logit_loss = OneHotToCrossEntropyLoss()
         else:
             raise ValueError(f"Unknown prediction_type {prediction_type}")
 
-    def forward(self, x: torch.Tensor):
-        x, y = x
-        x = self.projection(x)
+    def forward_logit(self, x: torch.Tensor) -> torch.Tensor:
+        return self.projection(x)
+        return x
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.forward_logit(x)
         x = self.activation(x)
         return x
+
+
+class PredictionModel(pl.LightningModule):
+    def __init__(self, nfeatures: int, nlabels: int, prediction_type: str):
+        super().__init__()
+
+        self.predictor = RandomProjectionPrediction(nfeatures, nlabels, prediction_type)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.predictor(x)
+
+    def training_step(self, batch, batch_idx):
+        # training_step defined the train loop.
+        # It is independent of forward
+        x, y = batch
+        y_hat = self.predictor.forward_logit(x)
+        loss = self.predictor.logit_loss(y_hat, y)
+        # Logging to TensorBoard by default
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.predictor.forward_logit(x)
+        loss = self.predictor.logit_loss(y_hat, y)
+        # Logging to TensorBoard by default
+        self.log("val_loss", loss)
+        # TODO: Use the actual evaluation criterion?
+        return loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
 
 
 class SplitMemmapDataset(Dataset):
@@ -55,11 +106,8 @@ class SplitMemmapDataset(Dataset):
     WARNING: Don't shuffle this or access will be SLOW.
     """
 
-    def __init__(
-        self, embedding_path: Path, prediction_type: str, nlabels: int, split_name: str
-    ):
+    def __init__(self, embedding_path: Path, nlabels: int, split_name: str):
         self.embedding_path = embedding_path
-        self.prediction_type = prediction_type
         self.nlabels = nlabels
         self.split_name = split_name
 
@@ -94,25 +142,24 @@ class SplitMemmapDataset(Dataset):
         return self.dim[0]
 
     def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        For all labels, return a multi or one-hot vector.
+        This allows us to have tensors that are all the same shape.
+        Later we reduce this with an argmax to get the vocabulary indices.
+        """
         x = self.embedding_memmap[idx]
         y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-        if self.prediction_type == "multilabel":
-            # Lame special case
-            if not y:
-                return x, torch.zeros((self.nlabels,), dtype=torch.int64)
-            return (
-                x,
-                torch.nn.functional.one_hot(
-                    torch.LongTensor(y), num_classes=self.nlabels
-                )
-                .max(axis=0)
-                .values,
-            )
-        elif self.prediction_type == "multiclass":
-            assert len(y) == 1
-            return x, y[0]
-        else:
-            raise ValueError(f"Unknown prediction_type {self.prediction_type}")
+        # Lame special case
+        if not y:
+            return x, torch.zeros((self.nlabels,), dtype=torch.int32)
+        # TODO: Could rewrite faster using scatter_:
+        # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
+        return (
+            x,
+            torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
+            .max(axis=0)
+            .values,
+        )
 
 
 def create_events_from_prediction(
@@ -257,6 +304,21 @@ def label_vocab_nlabels(embedding_path: Path) -> Tuple[pd.DataFrame, int]:
     return (label_vocab, nlabels)
 
 
+def dataloader_from_split_name(
+    embedding_path: Path, nlabels: int, split_name: str, batch_size: int = 64
+) -> DataLoader:
+    print(f"Getting embeddings for split: {split_name}")
+
+    return DataLoader(
+        SplitMemmapDataset(embedding_path, nlabels, split_name),
+        batch_size=batch_size,
+        # We don't shuffle because it's slow.
+        # Also we want predicted labels in the same order as
+        # target labels.
+        shuffle=False,
+    )
+
+
 def task_predictions_train(
     embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
 ) -> torch.nn.Module:
@@ -264,15 +326,21 @@ def task_predictions_train(
     label_vocal, nlabels = label_vocab_nlabels(embedding_path)
 
     if metadata["embedding_type"] == "scene":
-        predictor = RandomProjectionPrediction(
+        predictor = PredictionModel(
             scene_embedding_size, nlabels, metadata["prediction_type"]
         )
     elif metadata["embedding_type"] == "event":
-        predictor = RandomProjectionPrediction(
+        predictor = PredictionModel(
             timestamp_embedding_size, nlabels, metadata["prediction_type"]
         )
     else:
         raise ValueError(f"embedding_type {metadata['embedding_type']} unknown.")
+    # train on CPU
+    # TODO: FIXME
+    trainer = pl.Trainer()
+    train_dataloader = dataloader_from_split_name(embedding_path, nlabels, "train")
+    valid_dataloader = dataloader_from_split_name(embedding_path, nlabels, "valid")
+    trainer.fit(predictor, train_dataloader, valid_dataloader)
     return predictor
 
 
@@ -294,24 +362,11 @@ def task_predictions_test(
             timestamp_embedding_size, nlabels, metadata["prediction_type"]
         )
 
-    # for split in metadata["splits"]:
     for split in [{"name": "test"}]:
-        print(f"Getting embeddings for split: {split['name']}")
-
-        dataloader = DataLoader(
-            SplitMemmapDataset(
-                embedding_path, metadata["prediction_type"], nlabels, split["name"]
-            ),
-            batch_size=64,
-            # We don't shuffle because it's slow.
-            # Also we want predicted labels in the same order as
-            # target labels.
-            shuffle=False,
-        )
+        dataloader = dataloader_from_split_name(embedding_path, nlabels, split["name"])
 
         all_predicted_labels = []
-        for embs in tqdm(dataloader):
-            # for embs, target_labels in tqdm(dataloader):
+        for embs, target_labels in tqdm(dataloader):
             predicted_labels = predictor(embs)
             # TODO: Uses less memory to stack them one at a time
             all_predicted_labels.append(predicted_labels)
