@@ -35,8 +35,9 @@ For DCASE 2016, Task 2 (sound event detection):
 python3 -m heareval.tasks.runner dcase2016_task2
 ```
 
-These commands will download and preprocess the entire dataset. An intermediary dir
-call `_workdir` will be created, and then a final directory called `tasks` will contain
+These commands will download and preprocess the entire dataset. An intermediary directory
+defined by the option `luigi-dir`(default `_workdir`) will be created, and then a 
+final directory defined by the option `tasks-dir` (default `tasks`) will contain
 the completed dataset.
 
 Options:
@@ -50,6 +51,12 @@ Options:
   
   --small       FLAG     If passed, the task will run on a small-version of the 
                          data.
+
+  --luigi-dir   STRING   Path to dir to store the intermediate luigi task outputs.
+                         By default this is set to _workdir in the module root directory
+
+  --tasks-dir   STRING   Path to dir to store the final task outputs.
+                         By default this is set to tasks in the module root directory
 ```
 The small flag runs the preprocessing pipeline on a small version of each dataset stored at [Downsampled HEAR Open Tasks](https://github.com/turian/hear2021-open-tasks-downsampled). This is used for development and continuous integration tests for the pipeline. These small versions of the data can be generated deterministically with the following command:
 ```
