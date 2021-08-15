@@ -35,6 +35,11 @@ For DCASE 2016, Task 2 (sound event detection):
 python3 -m heareval.tasks.runner dcase2016_task2
 ```
 
+For running all the above tasks at once:
+```
+python3 -m heareval.tasks.runner all
+```
+
 These commands will download and preprocess the entire dataset. An intermediary directory
 defined by the option `luigi-dir`(default `_workdir`) will be created, and then a 
 final directory defined by the option `tasks-dir` (default `tasks`) will contain

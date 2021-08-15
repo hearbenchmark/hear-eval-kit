@@ -399,7 +399,7 @@ class SubsampleSplit(WorkTask):
 
         metadata = self.get_metadata()
         num_files = len(metadata)
-        if (self.dataset_fraction == 1) or (self.dataset_fraction == None):
+        if (self.dataset_fraction == 1) or (self.dataset_fraction is None):
             max_files = num_files
         else:
             max_files = int(num_files * self.dataset_fraction)
