@@ -20,11 +20,6 @@ import heareval.tasks.util.luigi as luigi_utils
 
 logger = logging.getLogger("luigi-interface")
 
-# This percentage should not be change as this decides
-# the data in the split and hence is not a part of the config
-VALIDATION_PERCENTAGE = 0.3
-TESTING_PERCENTAGE = 0
-
 config = {
     "task_name": "dcase2016_task2",
     "version": "hear2021",
@@ -93,9 +88,6 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     }
 
     def get_split_metadata(self, split: str) -> pd.DataFrame:
-        # Since the valid is part of the train
-        if split not in ["train", "test"]:
-            return pd.DataFrame()
         logger.info(f"Preparing metadata for {split}")
 
         split_path = (
@@ -117,22 +109,11 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 .replace("annotation", "sound")
                 .replace(".txt", ".wav")
             )
-            # Remove the assert statement as this file might not exist.
-            # This is anyways ensured in the Base ExtractMetadata task.
-            # assert os.path.exists(sound_file)
             metadata = metadata.assign(
                 relpath=sound_file,
                 slug=lambda df: df.relpath.apply(self.slugify_file_name),
                 subsample_key=lambda df: self.get_subsample_key(df),
-                # For train the split is decided by the which set function.
-                # which takes in validation and testing percentage
-                split=lambda df: split
-                if split == "test"
-                else df["subsample_key"].apply(
-                    lambda filename_hash: luigi_utils.which_set(
-                        filename_hash, VALIDATION_PERCENTAGE, TESTING_PERCENTAGE
-                    )
-                ),
+                split=lambda df: split,
                 split_key=lambda df: self.get_split_key(df),
                 stratify_key=lambda df: self.get_stratify_key(df),
             )
