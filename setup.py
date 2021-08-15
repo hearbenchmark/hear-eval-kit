@@ -41,6 +41,7 @@ setup(
         "python-slugify",
         "requests",
         "soundfile",
+        "tensorflow",
         "torch",
         "tqdm",
         # Following from librosa, not directly required,
