@@ -51,17 +51,17 @@ config = {
             {
                 "name": "train",
                 "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-train-small.zip",  # noqa: E501
-                "md5": "1222321b8694e64706370175bb19f7bc",
+                "md5": "c17070e4798655d8bea1231506479ba8",
             },
             {
                 "name": "valid",
                 "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-valid-small.zip",  # noqa: E501
-                "md5": "17653ba28da0eb6cb96f70f3600c08f3",
+                "md5": "e36722262497977f6b945bb06ab0969d",
             },
             {
                 "name": "test",
                 "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-test-small.zip",  # noqa: E501
-                "md5": "da3a6b20b5b00a60037abc9355add3f9",
+                "md5": "9a98e869ed4add8ba9ebb0d7c22becca",
             },
         ],
         "version": "v2.2.3-small",

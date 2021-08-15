@@ -49,12 +49,12 @@ config = {
             {
                 "name": "train",
                 "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_train_dev-small.zip",  # noqa: E501
-                "md5": "3adca7e1860aedf7d1b0c06358f1b867",
+                "md5": "aa9b43c40e9d496163caab83becf972e",
             },
             {
                 "name": "test",
                 "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_test_public-small.zip",  # noqa: E501
-                "md5": "73446e2156cb5f1d44a1de1e70e536a5",
+                "md5": "14539d85dec03cb7ac75eb62dd1dd21e",
             },
         ],
         "version": "hear2021-small",

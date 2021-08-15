@@ -105,7 +105,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
                     lambda path: luigi_util.filename_to_int_hash(str(path))
                 ),
                 # Split key is same as the subsample key in this case
-                split_key=lambda df: df.split_key,
+                split_key=lambda df: df.subsample_key,
             )
             # The above metadata is passed in the subsample metadata and
             # audio_sample_size number of files are selected
@@ -121,7 +121,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
             # Sample a small subset to copy from all the files
             url_name = Path(urlparse(url_obj["url"]).path).stem
             split = url_obj["name"]
-            copy_from = self.requires()[split].workdir.joinpath(url_name)
+            copy_from = self.requires()[split].workdir.joinpath(split)
             all_files = [file.relative_to(copy_from) for file in copy_from.rglob("*")]
             copy_files = self.sample(all_files)
 
@@ -131,7 +131,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
                 shutil.rmtree(copy_to)
             for file in tqdm(copy_files):
                 self.safecopy(src=copy_from.joinpath(file), dst=copy_to.joinpath(file))
-            shutil.make_archive(f"{copy_to}-small", "zip", copy_to)
+            shutil.make_archive(copy_to, "zip", copy_to)
 
 
 @click.command()

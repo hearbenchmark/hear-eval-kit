@@ -50,13 +50,13 @@ config = {
         "download_urls": [
             {
                 "name": "train",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_v0-small.zip",  # noqa: E501
-                "md5": "74d72a260d2fd24fcfd05ed2e2943f52",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_v0.02-small.zip",  # noqa: E501
+                "md5": "455123a88b8410d1f955c77ad331524f",
             },
             {
                 "name": "test",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_test_set_v0-small.zip",  # noqa: E501
-                "md5": "46716349e9296d3e57c6f6914627003c",
+                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_test_set_v0.02-small.zip",  # noqa: E501
+                "md5": "26d08374a7abd13ca2f4a4b8424f41d0",
             },
         ],
         "version": "v0.0.2-small",
