@@ -103,20 +103,33 @@ class PredictionModel(pl.LightningModule):
         x, y, filename, timestamp = batch
         y_hat = self.predictor.forward_logit(x)
         y_pr = self.predictor(x)
-        return {"predictions": y_pr, "predictions_logit": y_hat, "targets": y}
+        return {
+            "predictions": y_pr,
+            "predictions_logit": y_hat,
+            "targets": y,
+            "filename": filename,
+            "timestamp": timestamp,
+        }
 
     def validation_epoch_end(self, outputs):
         targets = []
         predictions = []
         predictions_logit = []
+        filename = []
+        timestamp = []
         for output in outputs:
             targets += output["targets"]
             predictions += output["predictions"]
             predictions_logit += output["predictions_logit"]
+            filename += output["filename"]
+            timestamp += output["timestamp"]
 
         targets = torch.stack(targets)
         predictions = torch.stack(predictions)
         predictions_logit = torch.stack(predictions_logit)
+        # This is an array of strings, not a tensor of tensor strings
+        # filename = torch.stack(filename)
+        timestamp = torch.stack(timestamp)
 
         end_scores = {}
         end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
@@ -298,7 +311,9 @@ def create_events_from_prediction(
 
 
 def get_events_for_all_files(
-    predictions: torch.Tensor, file_timestamps: List, label_vocab: pd.DataFrame
+    predictions: torch.Tensor,
+    file_timestamps: List[Tuple[str, float]],
+    label_vocab: pd.DataFrame,
 ) -> Dict[str, List]:
     """
     Produces lists of events from a set of frame based label probabilities.
