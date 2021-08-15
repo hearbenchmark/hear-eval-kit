@@ -48,10 +48,14 @@ Options:
   --sample-rate INTEGER  Perform resampling only to this sample rate. By
                          default we resample to 16000, 22050, 44100, 48000.
   
-  --small       BOOL     If True, the task will run on a small-version of the 
+  --small       FLAG     If passed, the task will run on a small-version of the 
                          data.
 ```
-[Link to small version of data](https://github.com/turian/hear2021-open-tasks-downsampled)
+The small flag runs the preprocessing pipeline on a small version of each dataset stored at [Downsampled HEAR Open Tasks](https://github.com/turian/hear2021-open-tasks-downsampled). This is used for development and continuous integration tests for the pipeline. These small versions of the data can be generated deterministically with the following command:
+```
+python -m heareval.tasks.sampler <taskname>
+```
+Supported task name are speech_commands, nsynth_pitch and dcase2016_task2.
 
 Additionally, to check the stats of an audio directory:
 ```
@@ -61,13 +65,6 @@ Stats include: audio_count, audio_samplerate_count,
 mean meadian and certain (10, 25, 75, 90) percentile durations.
 This is helpful in getting a quick glance of the audio files in a folder and 
 helps in decideing the preprocessing configurations.
-
-For development, there is a sampler which could be used to generate small corpuses for testing of each task
-```
-python -m heareval.tasks.sampler <taskname>
-```
-Supported task name are speech_commands, nsynth_pitch and dcase2016_task2
-Sampled small version of the tasks can be found here: [Downsampled HEAR Open Tasks](https://github.com/turian/hear2021-open-tasks-downsampled)
 
 ### Computing embeddings
 
