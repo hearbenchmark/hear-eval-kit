@@ -15,6 +15,7 @@ TODO:
 """
 
 import json
+import os.path
 import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -91,7 +92,7 @@ class PredictionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
-        x, y = batch
+        x, y, filename, timestamp = batch
         y_hat = self.predictor.forward_logit(x)
         loss = self.predictor.logit_loss(y_hat, y)
         # Logging to TensorBoard by default
@@ -99,7 +100,7 @@ class PredictionModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
+        x, y, filename, timestamp = batch
         y_hat = self.predictor.forward_logit(x)
         y_pr = self.predictor(x)
         return {"predictions": y_pr, "predictions_logit": y_hat, "targets": y}
@@ -172,9 +173,15 @@ class SplitMemmapDataset(Dataset):
         if os.path.exists(filename_timestamps_json):
             self.filename_timestamps = json.load(open(filename_timestamps_json))
         else:
-            self.filename_timestamps = (None, None) * self.dim[0]
+            # Will including this extra junk waste time on GPU
+            # moves?
+            # self.filename_timestamps = [(None, None)] * self.dim[0]
+            self.filename_timestamps = [("", 0.0)] * self.dim[0]
         assert len(self.labels) == self.dim[0]
-        assert len(self.labels) == len(self.filename_timestamps)
+        assert len(self.labels) == len(self.embedding_memmap)
+        assert len(self.labels) == len(
+            self.filename_timestamps
+        ), f"{len(self.labels)} != {len(self.filename_timestamps)}"
         assert (
             self.embedding_memmap[0].shape[0] == self.dim[1]
         ), f"{self.embedding_memmap[0].shape[0]}, {self.dim[1]}"
@@ -423,7 +430,7 @@ def task_predictions_test(
     )
 
     all_predicted_labels = []
-    for embs, target_labels in tqdm(dataloader):
+    for embs, target_labels, filenames, timestamps in tqdm(dataloader):
         predicted_labels = predictor(embs)
         # TODO: Uses less memory to stack them one at a time
         all_predicted_labels.append(predicted_labels)
