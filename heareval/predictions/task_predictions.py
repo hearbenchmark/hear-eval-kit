@@ -189,11 +189,13 @@ class SplitMemmapDataset(Dataset):
     def __len__(self) -> int:
         return self.dim[0]
 
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, str, float]:
         """
         For all labels, return a multi or one-hot vector.
         This allows us to have tensors that are all the same shape.
         Later we reduce this with an argmax to get the vocabulary indices.
+            We also include the filename and timestamp, which we need
+        for evaluation of timestamp (event) tasks.
         """
         x = self.embedding_memmap[idx]
         y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
