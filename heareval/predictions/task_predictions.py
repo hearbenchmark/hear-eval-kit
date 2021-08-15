@@ -20,6 +20,7 @@ import pickle
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+import more_itertools
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
@@ -84,6 +85,9 @@ class PredictionModel(pl.LightningModule):
 
         self.predictor = RandomProjectionPrediction(nfeatures, nlabels, prediction_type)
         self.label_to_idx = label_to_idx
+        self.idx_to_label: Dict[int, str] = {
+            idx: label for (label, idx) in self.label_to_idx.items()
+        }
         self.scores = scores
 
     def forward(self, x):
@@ -100,36 +104,42 @@ class PredictionModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y, filename, timestamp = batch
+        x, y, filenames, timestamps = batch
         y_hat = self.predictor.forward_logit(x)
         y_pr = self.predictor(x)
         return {
             "predictions": y_pr,
             "predictions_logit": y_hat,
             "targets": y,
-            "filename": filename,
-            "timestamp": timestamp,
+            "filenames": filenames,
+            "timestamps": timestamps,
         }
 
     def validation_epoch_end(self, outputs):
         targets = []
         predictions = []
         predictions_logit = []
-        filename = []
-        timestamp = []
+        filenames = []
+        timestamps = []
         for output in outputs:
             targets += output["targets"]
             predictions += output["predictions"]
             predictions_logit += output["predictions_logit"]
-            filename += output["filename"]
-            timestamp += output["timestamp"]
+            filenames += output["filenames"]
+            timestamps += output["timestamps"]
 
         targets = torch.stack(targets)
         predictions = torch.stack(predictions)
         predictions_logit = torch.stack(predictions_logit)
         # This is an array of strings, not a tensor of tensor strings
-        # filename = torch.stack(filename)
-        timestamp = torch.stack(timestamp)
+        # filenames = torch.stack(filenames)
+        timestamps = torch.stack(timestamps)
+
+        predicted_events = get_events_for_all_files(
+            predictions, filenames, timestamps, self.idx_to_label
+        )
+        print(predicted_events)
+        # TODO: Cache these or something?
 
         end_scores = {}
         end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
@@ -181,8 +191,11 @@ class SplitMemmapDataset(Dataset):
         )
         # Only used for event-based prediction
         filename_timestamps_json = embedding_path.joinpath(
-            f"{split_name}.filename_timestamps.json"
+            f"{split_name}.filename-timestamps.json"
         )
+        # This is weird and shitty and we should use the task type, not file existence,
+        # here
+        print(filename_timestamps_json)
         if os.path.exists(filename_timestamps_json):
             self.filename_timestamps = json.load(open(filename_timestamps_json))
         else:
@@ -228,7 +241,9 @@ class SplitMemmapDataset(Dataset):
             x,
             torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
             .max(axis=0)
-            .values,
+            .values
+            # BCEWithLogitsLoss wants float not long targets
+            .float(),
             filename,
             timestamp,
         )
@@ -257,12 +272,16 @@ def create_events_from_prediction(
     Returns:
         An IntervalTree object containing all the events from the predictions.
     """
+    print("prediction_dict", prediction_dict)
+
     # Make sure the timestamps are in the correct order
     timestamps = np.array(sorted(prediction_dict.keys()))
+    print("timestamps", timestamps)
 
     # Create a sorted numpy matrix of frame level predictions for this file. We convert
     # to a numpy array here before applying a median filter.
     predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
+    print("predictions", predictions)
 
     # We can apply a median filter here to smooth out events, but b/c participants
     # can select their own timestamp interval, selecting the filter window becomes
@@ -274,9 +293,33 @@ def create_events_from_prediction(
 
     # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
+    print("predictions", predictions)
 
+    event_tree = IntervalTree()
+    for label in range(predictions.shape[1]):
+        # print(label, predictions[:, label])
+        # print(np.where(predictions[:, label]))
+        for group in more_itertools.consecutive_groups(
+            np.where(predictions[:, label])[0]
+        ):
+            # for group in more_itertools.consecutive_groups(torch.where(predictions[:, label])[0]):
+            group = list(group)
+            startidx, endidx = (group[0], group[-1])
+
+            start = timestamps[startidx]
+            end = timestamps[endidx]
+            # Add event if greater than the minimum duration threshold
+            if end - start >= min_duration:
+                # print(label, start, end)
+                # We probably don't need this interval tree and can remove it maybe
+                # from requirements
+                event_tree.addi(begin=start, end=end, data=label)
+
+    # This code below is broken because it doesn't use the final note-off event at the end
+    """
     # Difference between each timestamp to find event boundaries
     pred_diff = np.diff(predictions, axis=0)
+    print("pred_dif", pred_diff)
 
     # This is slow, but for each class look through all the timestamp predictions
     # and construct a set of events with onset and offset timestamps.
@@ -306,15 +349,18 @@ def create_events_from_prediction(
                         begin=current_event[0], end=current_event[1], data=class_idx
                     )
                 current_event = []
+    """
 
+    # Er why return an intervaltree when we immediately postprocess it to a dict?
     return event_tree
 
 
 def get_events_for_all_files(
     predictions: torch.Tensor,
-    file_timestamps: List[Tuple[str, float]],
-    label_vocab: pd.DataFrame,
-) -> Dict[str, List]:
+    filenames: List[str],
+    timestamps: torch.Tensor,
+    idx_to_label: Dict[int, str],
+) -> Dict[str, List[Dict[str, Any]]]:
     """
     Produces lists of events from a set of frame based label probabilities.
     The input prediction tensor may contain frame predictions from a set of different
@@ -326,19 +372,23 @@ def get_events_for_all_files(
 
     Args:
         predictions: a tensor of frame based multi-label predictions.
-        file_timestamps: a list of filenames and timestamps where each entry corresponds
+        filenames: a list of filenames where each entry corresponds
             to a frame in the predictions tensor.
-        label_vocab: The set of labels and their associated int idx
+        timestamps: a list of timestamps where each entry corresponds
+            to a frame in the predictions tensor.
+        idx_to_label: Index to label mapping.
 
     Returns:
-        A dictionary of lists of events keyed on the filename slug
+        A dictionary of lists of events keyed on the filename slug.
+        The event list is of dicts of the following format:
+            {"label": str, "start": float ms, "end": float ms}
     """
     # This probably could be more efficient if we make the assumption that
     # timestamps are in sorted order. But this makes sure of it.
-    assert predictions.shape[0] == len(file_timestamps)
+    assert predictions.shape[0] == len(filenames)
+    assert predictions.shape[0] == len(timestamps)
     event_files: Dict[str, Dict[float, torch.Tensor]] = {}
-    for i, file_timestamp in enumerate(file_timestamps):
-        filename, timestamp = file_timestamp
+    for i, (filename, timestamp) in enumerate(zip(filenames, timestamps)):
         slug = Path(filename).name
 
         # Key on the slug to be consistent with the ground truth
@@ -348,18 +398,17 @@ def get_events_for_all_files(
         # Save the predictions for the file keyed on the timestamp
         event_files[slug][float(timestamp)] = predictions[i]
 
-    # Dictionary of labels: {idx -> label}
-    label_dict = label_vocab.set_index("idx").to_dict()["label"]
-
     # Create events for all the different files. Store all the events as a dictionary
     # with the same format as the ground truth from the luigi pipeline.
     # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
     event_dict = {}
     for slug, timestamp_predictions in tqdm(event_files.items()):
+        print(timestamp_predictions)
         event_tree = create_events_from_prediction(timestamp_predictions)
         events = []
         for interval in sorted(event_tree):
-            label = label_dict[interval.data]
+            # TODO: Do this earlier?
+            label = idx_to_label[interval.data]
             # TODO: start and end? Let's use begin and end like interval tree?
             events.append(
                 {"label": label, "start": interval.begin, "end": interval.end}
@@ -463,6 +512,8 @@ def task_predictions_test(
         file_timestamps = json.load(
             embedding_path.joinpath("test.filename-timestamps.json").open()
         )
+
+        # Can probably remove this stuff?
 
         print("Creating events from predictions:")
         # Probably don't need label_vocab any more since we have label_to_idx

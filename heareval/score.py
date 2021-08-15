@@ -137,7 +137,9 @@ class SoundEventScore(ScoreFunction):
         return overall_scores
 
     @staticmethod
-    def sed_eval_event_container(x: Dict) -> MetaDataContainer:
+    def sed_eval_event_container(
+        x: Dict[str, List[Dict[str, Any]]]
+    ) -> MetaDataContainer:
         # Reformat event list for sed_eval
         reference_events = []
         for filename, event_list in x.items():
@@ -163,6 +165,9 @@ class SegmentBasedScore(SoundEventScore):
     for params.
     """
 
+    # TODO: Fix this
+    name = "seg"
+
     score_class = sed_eval.sound_event.SegmentBasedMetrics
 
 
@@ -174,6 +179,9 @@ class EventBasedScore(SoundEventScore):
     See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedScores.html # noqa: E501
     for params.
     """
+
+    # TODO: Fix this
+    name = "ev"
 
     score_class = sed_eval.sound_event.EventBasedMetrics
 

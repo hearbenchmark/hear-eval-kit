@@ -4,6 +4,7 @@ dcase_util
 intervaltree
 librosa
 luigi
+more-itertools
 numpy
 pandas
 pre-commit
