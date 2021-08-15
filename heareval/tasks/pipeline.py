@@ -265,7 +265,7 @@ class ExtractMetadata(WorkTask):
         metadata[metadata["split"] == "train"] = metadata[
             metadata["split"] == "train"
         ].assign(
-            split = lambda df: df["split_key"].apply(
+            split=lambda df: df["split_key"].apply(
                 # Use the which set to split the train into the required splits
                 lambda split_key: which_set(split_key, valid_perc, test_perc)
             )
