@@ -69,6 +69,8 @@ python -m heareval.tasks.sampler <taskname>
 ```
 Supported task name are speech_commands, nsynth_pitch and dcase2016_task2.
 
+**_NOTE_** : Each task config has `dataset_fraction`. The data in each split is subsampled by this fraction in the final output. This is not to be confused with the `--small` flag which is used to run the task on a small version of the dataset for development. Also the small version in the config has its own `dataset_fraction` which can be used to subsample the small dataset when the small flag is passed.
+
 Additionally, to check the stats of an audio directory:
 ```
 python3 -m heareval.tasks.audio_dir_stats {input folder} {output json file}
