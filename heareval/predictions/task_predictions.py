@@ -50,9 +50,10 @@ class RandomProjectionPrediction(torch.nn.Module):
 
         self.projection = torch.nn.Linear(nfeatures, nlabels)
         torch.nn.init.normal_(self.projection.weight)
+        self.logit_loss: torch.nn.Module
         if prediction_type == "multilabel":
             self.activation: torch.nn.Module = torch.nn.Sigmoid()
-            self.logitloss = torch.nn.BCEWithLogitsLoss()
+            self.logit_loss = torch.nn.BCEWithLogitsLoss()
         elif prediction_type == "multiclass":
             self.activation = torch.nn.Softmax()
             self.logit_loss = OneHotToCrossEntropyLoss()
@@ -84,7 +85,7 @@ class PredictionModel(pl.LightningModule):
         self.label_to_idx = label_to_idx
         self.scores = scores
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         return self.predictor(x)
 
     def training_step(self, batch, batch_idx):

@@ -64,9 +64,10 @@ config = {
             {"name": "valid", "max_files": 100},
         ],
     },
-    # DCASE2016 task 2 used the segment-based total error rate as their main metric
-    # and then the onset only event based F1 as their secondary metric.
-    # However, we announced that we would use onset only event based F1 as primary.
+    # DCASE2016 task 2 used the segment-based total error rate as
+    # their main score and then the onset only event based F1 as
+    # their secondary score.
+    # However, we announced that onset F1 would be our primary score.
     "evaluation": ["onset_only_event_based", "segment_based"],
 }
 
