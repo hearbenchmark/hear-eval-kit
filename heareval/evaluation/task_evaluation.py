@@ -8,10 +8,9 @@ TODO: Fix AUC
 """
 
 import json
-from pathlib import Path
 import pickle
+from pathlib import Path
 from typing import Collection, Dict, List, Tuple
-
 
 import numpy as np
 import pandas as pd
@@ -84,7 +83,7 @@ def task_evaluation(task_path: Path):
     results = {}
     for score in scores:
         print("  -", score)
-        score_function = available_scores[score](metadata, label_idx)
+        score_function = available_scores[score](metadata, label_to_idx)
         new_results = score_function(predictions, targets)
         results.update({score: new_results})
 

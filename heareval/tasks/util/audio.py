@@ -2,17 +2,16 @@
 Audio utility functions for evaluation task preparation
 """
 
-import os
 import json
+import os
 import subprocess
+from collections import Counter
 from pathlib import Path
 from typing import List, Union
-from collections import Counter
 
 import numpy as np
-from tqdm import tqdm
-
 import soundfile as sf
+from tqdm import tqdm
 
 
 def mono_wav_and_fix_duration(in_file: str, out_file: str, duration: float):

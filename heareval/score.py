@@ -2,18 +2,12 @@
 Common utils for scoring.
 """
 from functools import partial
-import json
-from pathlib import Path
-import pickle
-from typing import Any, Callable, Collection, Dict, List, Tuple, Optional
+from typing import Any, Callable, Dict, List, Optional
 
-
-from dcase_util.containers import MetaDataContainer
 import numpy as np
 import pandas as pd
 import sed_eval
-import sklearn.metrics
-import torch
+from dcase_util.containers import MetaDataContainer
 
 
 def label_vocab_as_dict(df: pd.DataFrame, key: str, value: str) -> Dict:
