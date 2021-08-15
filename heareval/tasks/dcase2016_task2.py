@@ -9,7 +9,6 @@ We also allow training data outside this task.
 """
 
 import logging
-import os
 from pathlib import Path
 from typing import List
 
@@ -19,7 +18,6 @@ import pandas as pd
 import heareval.tasks.pipeline as pipeline
 
 logger = logging.getLogger("luigi-interface")
-
 
 config = {
     "task_name": "dcase2016_task2",
@@ -44,6 +42,7 @@ config = {
     "splits": [
         {"name": "train", "max_files": 10},
         {"name": "test", "max_files": 10},
+        {"name": "valid", "max_files": 2},
     ],
 }
 
@@ -67,6 +66,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     }
 
     def get_split_metadata(self, split: str) -> pd.DataFrame:
+
         logger.info(f"Preparing metadata for {split}")
 
         split_path = (
@@ -88,12 +88,11 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 .replace("annotation", "sound")
                 .replace(".txt", ".wav")
             )
-            assert os.path.exists(sound_file)
             metadata = metadata.assign(
                 relpath=sound_file,
                 slug=lambda df: df.relpath.apply(self.slugify_file_name),
-                split=lambda df: split,
                 subsample_key=lambda df: self.get_subsample_key(df),
+                split=lambda df: split,
                 split_key=lambda df: self.get_split_key(df),
                 stratify_key=lambda df: self.get_stratify_key(df),
             )
