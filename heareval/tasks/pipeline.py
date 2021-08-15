@@ -25,8 +25,8 @@ from heareval.tasks.util.luigi import (
     which_set,
 )
 
-# This percentage should not be change as this decides
-# the data in the split and hence is not a part of the config
+# This percentage should not be changed as this decides
+# the data in the split and hence is not a part of the data config
 VALIDATION_PERCENTAGE = 20
 TESTING_PERCENTAGE = 20
 
@@ -315,21 +315,27 @@ class ExtractMetadata(WorkTask):
                 "%s embedding_type unknown" % self.data_config["embedding_type"]
             )
 
-        # Remove files from the process metadata which donot exist in the dataset.
+        # Filter the files which actually exists in the data
         exists = process_metadata["relpath"].apply(
             lambda relpath: Path(relpath).exists()
         )
 
+        # If any of the audio files in the metadata is missing, raise an error for the
+        # regular dataset. However, in case of small dataset, this is expected and we
+        # need to remove those entries from the metadata
         if sum(exists) < len(process_metadata):
-            if "small" in self.data_config:
+            if self.data_config["version"].split("-")[-1] == "small":
                 print(
-                    "All Files in metadata doesnot exist in the dataset. "
+                    "All files in metadata donot exist in the dataset. This is "
+                    "expected behavior when small task is running."
                     f"Removing {len(process_metadata) - sum(exists)} entries in the "
                     "metadata"
                 )
                 process_metadata = process_metadata.loc[exists]
             else:
-                raise FileNotFoundError("All files in metadata are not found")
+                raise FileNotFoundError(
+                    "Files in the metadata are missing in the directory"
+                )
 
         process_metadata.to_csv(
             self.workdir.joinpath(self.outfile),

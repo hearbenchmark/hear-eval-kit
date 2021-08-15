@@ -16,7 +16,6 @@ import luigi
 import pandas as pd
 
 import heareval.tasks.pipeline as pipeline
-import heareval.tasks.util.luigi as luigi_utils
 
 logger = logging.getLogger("luigi-interface")
 
@@ -43,7 +42,7 @@ config = {
     "splits": [
         {"name": "train", "max_files": 10},
         {"name": "test", "max_files": 10},
-        {"name": "valid", "max_files": 10},
+        {"name": "valid", "max_files": 2},
     ],
     "small": {
         "download_urls": [
@@ -58,7 +57,6 @@ config = {
                 "md5": "73446e2156cb5f1d44a1de1e70e536a5",
             },
         ],
-        "small_flag": True,
         "version": "hear2021-small",
         "splits": [
             {"name": "train", "max_files": 100},
@@ -131,7 +129,7 @@ def main(
     small: bool = False,
 ):
     if small:
-        config.update(dict(config["small"])) # type: ignore
+        config.update(dict(config["small"]))  # type: ignore
     config.update({"luigi_dir": luigi_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task

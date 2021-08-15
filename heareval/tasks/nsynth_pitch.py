@@ -64,7 +64,6 @@ config = {
                 "md5": "da3a6b20b5b00a60037abc9355add3f9",
             },
         ],
-        "small_flag": True,
         "version": "v2.2.3-small",
         "splits": [
             {"name": "train", "max_files": 100},
@@ -134,7 +133,7 @@ def main(
     small: bool = False,
 ):
     if small:
-        config.update(dict(config["small"])) # type: ignore
+        config.update(dict(config["small"]))  # type: ignore
     config.update({"luigi_dir": luigi_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
