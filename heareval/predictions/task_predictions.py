@@ -165,7 +165,16 @@ class SplitMemmapDataset(Dataset):
         self.labels = pickle.load(
             open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
         )
+        # Only used for event-based prediction
+        filename_timestamps_json = embedding_path.joinpath(
+            f"{split_name}.filename_timestamps.json"
+        )
+        if os.path.exists(filename_timestamps_json):
+            self.filename_timestamps = json.load(open(filename_timestamps_json))
+        else:
+            self.filename_timestamps = (None, None) * self.dim[0]
         assert len(self.labels) == self.dim[0]
+        assert len(self.labels) == len(self.filename_timestamps)
         assert (
             self.embedding_memmap[0].shape[0] == self.dim[1]
         ), f"{self.embedding_memmap[0].shape[0]}, {self.dim[1]}"
@@ -181,9 +190,16 @@ class SplitMemmapDataset(Dataset):
         """
         x = self.embedding_memmap[idx]
         y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+        # Will be None for non-timestamp tasks
+        filename, timestamp = self.filename_timestamps[idx]
         # Lame special case
         if not y:
-            return x, torch.zeros((self.nlabels,), dtype=torch.int32)
+            return (
+                x,
+                torch.zeros((self.nlabels,), dtype=torch.int32),
+                filename,
+                timestamp,
+            )
         # TODO: Could rewrite faster using scatter_:
         # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
         return (
@@ -191,6 +207,8 @@ class SplitMemmapDataset(Dataset):
             torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
             .max(axis=0)
             .values,
+            filename,
+            timestamp,
         )
 
 
