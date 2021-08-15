@@ -220,7 +220,6 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
 
 def main(
-    num_workers: int,
     sample_rates: List[int],
     luigi_dir: str,
     tasks_dir: str,
@@ -243,11 +242,10 @@ def main(
         data_config=config,
     )
 
-    final = pipeline.FinalizeCorpus(
+    final_task = pipeline.FinalizeCorpus(
         sample_rates=sample_rates,
         tasks_dir=tasks_dir,
         metadata=configure_metadata,
         data_config=config,
     )
-
-    pipeline.run(final, num_workers=num_workers)
+    return final_task
