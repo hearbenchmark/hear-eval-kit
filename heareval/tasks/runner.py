@@ -38,8 +38,31 @@ tasks = {
     "By default we resample to 16000, 22050, 44100, 48000.",
     type=int,
 )
+@click.option(
+    "--luigi-dir",
+    default="_workdir",
+    help="Directory to save all the intermediate tasks",
+    type=str,
+)
+@click.option(
+    "--tasks-dir",
+    default="tasks",
+    help="Directory to save the final task output",
+    type=str,
+)
+@click.option(
+    "--small",
+    is_flag=True,
+    help="Run pipeline on small version of data",
+    type=bool,
+)
 def run(
-    task: str, num_workers: Optional[int] = None, sample_rate: Optional[int] = None
+    task: str,
+    num_workers: Optional[int] = None,
+    sample_rate: Optional[int] = None,
+    luigi_dir: Optional[str] = "_workdir",
+    tasks_dir: Optional[str] = "tasks",
+    small: bool = False,
 ):
 
     if num_workers is None:
@@ -51,7 +74,13 @@ def run(
     else:
         sample_rates = [sample_rate]
 
-    tasks[task].main(num_workers=num_workers, sample_rates=sample_rates)  # type: ignore
+    tasks[task].main(  # type: ignore
+        num_workers=num_workers,
+        sample_rates=sample_rates,
+        luigi_dir=luigi_dir,
+        tasks_dir=tasks_dir,
+        small=small,
+    )
 
 
 if __name__ == "__main__":
