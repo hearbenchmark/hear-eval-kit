@@ -22,10 +22,7 @@ from tqdm import tqdm
 
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
-from heareval.tasks.dcase2016_task2 import config as dcase2016_task2_config
-from heareval.tasks.nsynth_pitch import config as nsynth_pitch_config
-from heareval.tasks.speech_commands import config as speech_command_config
-from heareval.tasks import speech_commands, dcase2016_task2, nsynth_pitch
+from heareval.tasks import dcase2016_task2, nsynth_pitch, speech_commands
 
 logger = logging.getLogger("luigi-interface")
 
