@@ -22,7 +22,6 @@ BACKGROUND_NOISE = "_background_noise_"
 UNKNOWN = "_unknown_"
 SILENCE = "_silence_"
 
-
 config = {
     "task_name": "speech_commands",
     "version": "v0.0.2",
@@ -41,30 +40,23 @@ config = {
         },
     ],
     "sample_duration": 1.0,
-    "splits": [
-        {"name": "train", "max_files": 100},
-        {"name": "test", "max_files": 100},
-        {"name": "valid", "max_files": 100},
-    ],
+    "dataset_fraction": None,
+    "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
             {
                 "name": "train",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_v0.02-small.zip",  # noqa: E501
+                "url": "https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/speech_commands_v0.02-small.zip",  # noqa: E501
                 "md5": "455123a88b8410d1f955c77ad331524f",
             },
             {
                 "name": "test",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/speech_commands_test_set_v0.02-small.zip",  # noqa: E501
+                "url": "https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/speech_commands_test_set_v0.02-small.zip",  # noqa: E501
                 "md5": "26d08374a7abd13ca2f4a4b8424f41d0",
             },
         ],
         "version": "v0.0.2-small",
-        "splits": [
-            {"name": "train", "max_files": 100},
-            {"name": "test", "max_files": 100},
-            {"name": "valid", "max_files": 100},
-        ],
+        "dataset_fraction": None,
     },
 }
 

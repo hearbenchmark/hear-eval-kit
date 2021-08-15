@@ -39,37 +39,30 @@ config = {
         },
     ],
     "sample_duration": 4.0,
-    "splits": [
-        {"name": "train", "max_files": 100},
-        {"name": "test", "max_files": 100},
-        {"name": "valid", "max_files": 100},
-    ],
+    "dataset_fraction": None,
+    "splits": ["train", "test", "valid"],
     "pitch_range_min": 21,
     "pitch_range_max": 108,
     "small": {
         "download_urls": [
             {
                 "name": "train",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-train-small.zip",  # noqa: E501
+                "url": "https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/nsynth-train-small.zip",  # noqa: E501
                 "md5": "c17070e4798655d8bea1231506479ba8",
             },
             {
                 "name": "valid",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-valid-small.zip",  # noqa: E501
+                "url": "https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/nsynth-valid-small.zip",  # noqa: E501
                 "md5": "e36722262497977f6b945bb06ab0969d",
             },
             {
                 "name": "test",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/nsynth-test-small.zip",  # noqa: E501
+                "url": "https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/nsynth-test-small.zip",  # noqa: E501
                 "md5": "9a98e869ed4add8ba9ebb0d7c22becca",
             },
         ],
         "version": "v2.2.3-small",
-        "splits": [
-            {"name": "train", "max_files": 100},
-            {"name": "test", "max_files": 100},
-            {"name": "valid", "max_files": 100},
-        ],
+        "dataset_fraction": None,
     },
 }
 
