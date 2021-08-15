@@ -53,8 +53,8 @@ class ScoreFunction:
         return self.name
 
 
-class Top1Error(ScoreFunction):
-    name = "top1_err"
+class Top1Accuracy(ScoreFunction):
+    name = "top1_acc"
 
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
@@ -73,13 +73,13 @@ class Top1Error(ScoreFunction):
         return correct / len(targets)
 
 
-class ChromaError(ScoreFunction):
+class ChromaAccuracy(ScoreFunction):
     """
     Score specifically for pitch detection -- converts all pitches to chroma first.
     This score ignores octave errors in pitch classification.
     """
 
-    name = "chroma_err"
+    name = "chroma_acc"
 
     def __call__(self, predictions: np.ndarray, targets: List, **kwargs) -> float:
         # Compute the number of correct predictions
@@ -179,9 +179,9 @@ class EventBasedScore(SoundEventScore):
 
 
 available_scores: Dict[str, Callable] = {
-    "top1_err": Top1Error,
-    "pitch_err": partial(Top1Error, name="pitch_err"),
-    "chroma_err": ChromaError,
+    "top1_acc": Top1Accuracy,
+    "pitch_acc": partial(Top1Accuracy, name="pitch_acc"),
+    "chroma_acc": ChromaAccuracy,
     "onset_only_event_based": partial(
         EventBasedScore, params={"evaluate_offset": False, "t_collar": 0.2}
     ),

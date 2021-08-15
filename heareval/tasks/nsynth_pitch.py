@@ -71,7 +71,7 @@ config = {
             {"name": "valid", "max_files": 100},
         ],
     },
-    "evaluation": ["pitch_err", "chroma_err"],
+    "evaluation": ["pitch_acc", "chroma_acc"],
 }
 
 

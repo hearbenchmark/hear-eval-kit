@@ -66,7 +66,7 @@ config = {
             {"name": "valid", "max_files": 100},
         ],
     },
-    "evaluation": ["top1_err"],
+    "evaluation": ["top1_acc"],
 }
 
 
