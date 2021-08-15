@@ -39,30 +39,23 @@ config = {
     # TODO: FIXME
     # Want different for train and test?
     "sample_duration": 120.0,
-    "splits": [
-        {"name": "train", "max_files": 10},
-        {"name": "test", "max_files": 10},
-        {"name": "valid", "max_files": 2},
-    ],
+    "dataset_fraction": None,
+    "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
             {
                 "name": "train",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_train_dev-small.zip",  # noqa: E501
+                "url": "https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_train_dev-small.zip",  # noqa: E501
                 "md5": "aa9b43c40e9d496163caab83becf972e",
             },
             {
                 "name": "test",
-                "url": "https://github.com/turian/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_test_public-small.zip",  # noqa: E501
+                "url": "https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/dcase2016_task2_test_public-small.zip",  # noqa: E501
                 "md5": "14539d85dec03cb7ac75eb62dd1dd21e",
             },
         ],
         "version": "hear2021-small",
-        "splits": [
-            {"name": "train", "max_files": 100},
-            {"name": "test", "max_files": 100},
-            {"name": "valid", "max_files": 100},
-        ],
+        "dataset_fraction": None,
     },
     # DCASE2016 task 2 used the segment-based total error rate as
     # their main score and then the onset only event based F1 as
@@ -127,7 +120,6 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
 
 def main(
-    num_workers: int,
     sample_rates: List[int],
     luigi_dir: str,
     tasks_dir: str,
@@ -143,11 +135,10 @@ def main(
     configure_metadata = ExtractMetadata(
         outfile="process_metadata.csv", data_config=config, **download_tasks
     )
-    final = pipeline.FinalizeCorpus(
+    final_task = pipeline.FinalizeCorpus(
         sample_rates=sample_rates,
         tasks_dir=tasks_dir,
         metadata=configure_metadata,
         data_config=config,
     )
-
-    pipeline.run(final, num_workers=num_workers)
+    return final_task

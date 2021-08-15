@@ -43,6 +43,7 @@ setup(
         "requests",
         "sed_eval",
         "soundfile",
+        "tensorflow",
         "torch",
         "tqdm",
         # Following from librosa, not directly required,
