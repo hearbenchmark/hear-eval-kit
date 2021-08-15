@@ -25,8 +25,8 @@ from heareval.tasks.util.luigi import (
     which_set,
 )
 
-# This percentage should not be change as this decides
-# the data in the split and hence is not a part of the config
+# This percentage should not be changed as this decides
+# the data in the split and hence is not a part of the data config
 VALIDATION_PERCENTAGE = 20
 TESTING_PERCENTAGE = 20
 
@@ -202,15 +202,15 @@ class ExtractMetadata(WorkTask):
         """
         Gets the subsample key.
         Subsample key is a unique hash at a audio file level used for subsampling.
-        This is a hash of the relpath. This is not recommended to be
+        This is a hash of the slug. This is not recommended to be
         overridden.
 
         The data is first split by the split key and the subsample key is
         used to ensure stable sampling for groups which are incompletely
         sampled(the last group to be part of the subsample output)
         """
-        assert "relpath" in df, "relpath column not found in the dataframe"
-        return df["relpath"].apply(str).apply(filename_to_int_hash)
+        assert "slug" in df, "relpath column not found in the dataframe"
+        return df["slug"].apply(str).apply(filename_to_int_hash)
 
     def get_process_metadata(self) -> pd.DataFrame:
         """
@@ -260,7 +260,7 @@ class ExtractMetadata(WorkTask):
         # Depending on whether valid and test are already present, the percentage can
         # either be the predefined percentage or 0
         valid_perc = VALIDATION_PERCENTAGE if "valid" in splits_to_sample else 0
-        test_perc = VALIDATION_PERCENTAGE if "test" in splits_to_sample else 0
+        test_perc = TESTING_PERCENTAGE if "test" in splits_to_sample else 0
 
         metadata[metadata["split"] == "train"] = metadata[
             metadata["split"] == "train"
@@ -314,6 +314,28 @@ class ExtractMetadata(WorkTask):
             raise ValueError(
                 "%s embedding_type unknown" % self.data_config["embedding_type"]
             )
+
+        # Filter the files which actually exists in the data
+        exists = process_metadata["relpath"].apply(
+            lambda relpath: Path(relpath).exists()
+        )
+
+        # If any of the audio files in the metadata is missing, raise an error for the
+        # regular dataset. However, in case of small dataset, this is expected and we
+        # need to remove those entries from the metadata
+        if sum(exists) < len(process_metadata):
+            if self.data_config["version"].split("-")[-1] == "small":
+                print(
+                    "All files in metadata donot exist in the dataset. This is "
+                    "expected behavior when small task is running."
+                    f"Removing {len(process_metadata) - sum(exists)} entries in the "
+                    "metadata"
+                )
+                process_metadata = process_metadata.loc[exists]
+            else:
+                raise FileNotFoundError(
+                    "Files in the metadata are missing in the directory"
+                )
 
         process_metadata.to_csv(
             self.workdir.joinpath(self.outfile),
@@ -744,6 +766,7 @@ class FinalizeCorpus(WorkTask):
 
     sample_rates = luigi.ListParameter()
     metadata = luigi.TaskParameter()
+    tasks_dir = luigi.Parameter()
 
     def requires(self):
         # Will copy the resampled data and the traintestmeta and the vocabmeta
@@ -765,7 +788,7 @@ class FinalizeCorpus(WorkTask):
     # the finalized top-level task directory
     @property
     def workdir(self):
-        return Path("tasks").joinpath(self.versioned_task_name)
+        return Path(self.tasks_dir).joinpath(self.versioned_task_name)
 
     def run(self):
         if self.workdir.exists():
