@@ -22,7 +22,13 @@ from heareval.tasks.util.luigi import (
     filename_to_int_hash,
     new_basedir,
     subsample_metadata,
+    which_set,
 )
+
+# This percentage should not be change as this decides
+# the data in the split and hence is not a part of the config
+VALIDATION_PERCENTAGE = 20
+TESTING_PERCENTAGE = 20
 
 
 class DownloadCorpus(WorkTask):
@@ -183,6 +189,9 @@ class ExtractMetadata(WorkTask):
         By default this is the hash of the filename, but can be overridden if the
         data needs to split into certain groups while subsampling
         i.e leave out some groups and select others based on this key.
+
+        This key is also used to split the data into test and valid if those splits
+        are not made explicitly in the get_process_metadata
         """
         assert "relpath" in df, "relpath column not found in the dataframe"
         file_names = df["relpath"].apply(lambda path: Path(path).name)
@@ -209,20 +218,65 @@ class ExtractMetadata(WorkTask):
         entire task.
 
         By default, we do one split at a time and then concat them.
+        This runs only for the splits which have a requires task. All
+        other splits are sampled with the split train test val function.
         You might consider overriding this for some datasets (like
         Google Speech Commands) where you cannot process metadata
         on a per-split basis.
         """
         process_metadata = pd.concat(
             [
-                self.get_split_metadata(split["name"])
-                for split in self.data_config["splits"]
+                self.get_split_metadata(split)
+                # The splits should come from the requires and not from the data config
+                # splits as the splits in data config might need to be generated from
+                # the training split with split train test val function
+                for split in list(self.requires().keys())
             ]
         )
         return process_metadata
 
+    def split_train_test_val(self, metadata: pd.DataFrame):
+        """
+        This functions splits the metadata into test, train and valid from train
+        split if any of test or valid split is not found
+        Three cases might arise -
+        1. Validation split not found - Train will be split into valid and train
+        2. Test split not found - Train will be split into test and train
+        3. Validation and Test split not found - Train will be split into test, train
+            and valid
+        If there is any data specific split that will already be done in
+        get_process_metadata. This function is for automatic splitting if the splits
+        are not found
+        This uses the split key to do the split with the which set function.
+        """
+        splits_present = metadata["split"].unique()
+        # The metadata should at least have the train split
+        # test and valid if not found in the metadata can be sampled
+        # from the train
+        assert "train" in splits_present, "Train split not found in metadata"
+        splits_to_sample = set(["test", "valid"]).difference(splits_present)
+        print(f"Splits getting sampled with the split key are: {splits_to_sample}")
+
+        # Depending on whether valid and test are already present, the percentage can
+        # either be the predefined percentage or 0
+        valid_perc = VALIDATION_PERCENTAGE if "valid" in splits_to_sample else 0
+        test_perc = VALIDATION_PERCENTAGE if "test" in splits_to_sample else 0
+
+        metadata[metadata["split"] == "train"] = metadata[
+            metadata["split"] == "train"
+        ].assign(
+            split = lambda df: df["split_key"].apply(
+                # Use the which set to split the train into the required splits
+                lambda split_key: which_set(split_key, valid_perc, test_perc)
+            )
+        )
+        return metadata
+
     def run(self):
         process_metadata = self.get_process_metadata()
+        # Split the metadata to create valid and test set from train if they are not
+        # created explicitly in the get process metadata
+        process_metadata = self.split_train_test_val(process_metadata)
 
         if self.data_config["embedding_type"] == "event":
             assert set(
