@@ -101,12 +101,31 @@ class PredictionModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         x, y = batch
         y_hat = self.predictor.forward_logit(x)
-        loss = self.predictor.logit_loss(y_hat, y)
         y_pr = self.predictor(x)
-        # Logging to TensorBoard by default
-        self.log("val_loss", loss, prog_bar=True)
+        return {"predictions": y_pr, "predictions_logit": y_hat, "targets": y}
+
+    def validation_epoch_end(self, outputs):
+        targets = []
+        predictions = []
+        predictions_logit = []
+        for output in outputs:
+            targets += output["targets"]
+            predictions += output["predictions"]
+            predictions_logit += output["predictions_logit"]
+
+        targets = torch.stack(targets)
+        predictions = torch.stack(predictions)
+        predictions_logit = torch.stack(predictions_logit)
+
+        end_scores = {}
+        end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
         for score in self.scores:
-            self.log(f"val_{score}", score(y_pr, y), prog_bar=True)
+            end_scores[f"val_{score}"] = score(
+                predictions.detach().cpu().numpy(), targets.detach().cpu().numpy()
+            )
+        for score in end_scores:
+            self.log(score, end_scores[score], prog_bar=True)
+        return end_scores
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -358,7 +377,7 @@ def task_predictions_train(
 
     checkpoint_callback = ModelCheckpoint(monitor=target_score, mode="max")
     early_stop_callback = EarlyStopping(
-        monitor=target_score, min_delta=0.00, patience=10, verbose=False, mode="max"
+        monitor=target_score, min_delta=0.00, patience=50, verbose=False, mode="max"
     )
 
     # train on CPU
