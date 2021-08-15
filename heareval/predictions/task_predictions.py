@@ -49,7 +49,7 @@ class RandomProjectionPrediction(torch.nn.Module):
         torch.nn.init.normal_(self.projection.weight)
         if prediction_type == "multilabel":
             self.activation: torch.nn.Module = torch.nn.Sigmoid()
-            self.logitloss = torch.nn.BCEWithLogitsLoss()
+            self.logit_loss = torch.nn.BCEWithLogitsLoss()
         elif prediction_type == "multiclass":
             self.activation = torch.nn.Softmax()
             self.logit_loss = OneHotToCrossEntropyLoss()
