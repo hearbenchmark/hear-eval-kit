@@ -64,7 +64,9 @@ class WorkTask(luigi.Task):
     @property
     def task_subdir(self):
         """Task specific subdirectory"""
-        return Path("_workdir").joinpath(str(self.versioned_task_name))
+        return Path(self.data_config.get("luigi_dir", "_workdir")).joinpath(
+            str(self.versioned_task_name)
+        )
 
     @property
     def versioned_task_name(self):
@@ -121,7 +123,9 @@ def download_file(url, local_filename, expected_md5):
                 f.write(chunk)
                 pbar.update(chunk_size)
             pbar.close()
-    assert md5sum(local_filename) == expected_md5
+    assert (
+        md5sum(local_filename) == expected_md5
+    ), f"Md5sum for url: {url} is: {md5sum(local_filename)}"
     return local_filename
 
 
