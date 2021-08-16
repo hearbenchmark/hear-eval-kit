@@ -73,7 +73,7 @@ class RandomProjectionPrediction(torch.nn.Module):
         return x
 
 
-class PredictionModel(pl.LightningModule):
+class AbstractPredictionModel(pl.LightningModule):
     def __init__(
         self,
         nfeatures: int,
@@ -116,6 +116,83 @@ class PredictionModel(pl.LightningModule):
         # https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
         return {**z, **metadata}
 
+    # Implement this for each inheriting class
+    # TODO: Can we combine the boilerplate for both of these?
+    # def validation_epoch_end(self, outputs):
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
+
+
+class ScenePredictionModel(AbstractPredictionModel):
+    """
+    Prediction model with simple scoring over entire audio scenes.
+    """
+
+    def __init__(
+        self,
+        nfeatures: int,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        prediction_type: str,
+        scores: List[ScoreFunction],
+    ):
+        super().__init__(
+            nfeatures=nfeatures,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=prediction_type,
+            scores=scores,
+        )
+
+    def validation_epoch_end(self, outputs):
+        targets = []
+        predictions = []
+        predictions_logit = []
+        for output in outputs:
+            targets += output["targets"]
+            predictions += output["predictions"]
+            predictions_logit += output["predictions_logit"]
+
+        targets = torch.stack(targets)
+        predictions = torch.stack(predictions)
+        predictions_logit = torch.stack(predictions_logit)
+
+        end_scores = {}
+        end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
+
+        for score in self.scores:
+            end_scores[f"val_{score}"] = score(
+                predictions.detach().cpu().numpy(), targets.detach().cpu().numpy()
+            )
+        for score in end_scores:
+            self.log(score, end_scores[score], prog_bar=True)
+        return end_scores
+
+
+class EventPredictionModel(AbstractPredictionModel):
+    """
+    Event prediction model. For validation (and test), we combine timestamp events that are adjacent,
+    but discard ones that are too short.
+    """
+
+    def __init__(
+        self,
+        nfeatures: int,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        prediction_type: str,
+        scores: List[ScoreFunction],
+    ):
+        super().__init__(
+            nfeatures=nfeatures,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=prediction_type,
+            scores=scores,
+        )
+
     def validation_epoch_end(self, outputs):
         targets = []
         predictions = []
@@ -150,9 +227,6 @@ class PredictionModel(pl.LightningModule):
         end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
 
         for score in self.scores:
-            # end_scores[f"val_{score}"] = score(
-            #     predictions.detach().cpu().numpy(), targets.detach().cpu().numpy()
-            # )
             # Weird
             end_scores[f"val_{score}_fms"] = score(predicted_events, target_events)[
                 "f_measure"
@@ -163,10 +237,6 @@ class PredictionModel(pl.LightningModule):
         for score in end_scores:
             self.log(score, end_scores[score], prog_bar=True)
         return end_scores
-
-    def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer
 
 
 class SplitMemmapDataset(Dataset):
@@ -259,6 +329,9 @@ class SplitMemmapDataset(Dataset):
 def create_events_from_prediction(
     prediction_dict: Dict[float, torch.Tensor],
     threshold: float = 0.5,
+    # TODO: Honestly this stuff belongs in the scoring method
+    # Like when you choose the event scoring approach, it should pick this
+    # and wrap it somewhere else.
     min_duration=60.0,
 ) -> IntervalTree:
     """
@@ -466,9 +539,16 @@ def task_predictions_train(
     nlabels: int,
     scores: List[ScoreFunction],
 ) -> torch.nn.Module:
-    predictor = PredictionModel(
-        embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
-    )
+    if metadata["embedding_type"] == "event":
+        predictor = EventPredictionModel(
+            embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
+        )
+    elif metadata["embedding_type"] == "scene":
+        predictor = ScenePredictionModel(
+            embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
+        )
+    else:
+        raise ValueError(f"Unknown embedding_type {metadata['embedding_type']}")
 
     # First score is the target
     # target_score = f"val_{str(scores[0])}"
