@@ -99,9 +99,7 @@ class PredictionModel(pl.LightningModule):
         # It is independent of forward
         x, y, _ = batch
         y_hat = self.predictor.forward_logit(x)
-        # Why do we need .float()?
-        # https://discuss.pytorch.org/t/multi-label-binary-classification-result-type-float-cant-be-cast-to-the-desired-output-type-long/117915
-        loss = self.predictor.logit_loss(y_hat, y.float())
+        loss = self.predictor.logit_loss(y_hat, y)
         # Logging to TensorBoard by default
         self.log("train_loss", loss)
         return loss
@@ -211,42 +209,39 @@ class SplitMemmapDataset(Dataset):
         # This is weird and shitty and we should use the task type, not file existence,
         # here
         if os.path.exists(filename_timestamps_json):
-            self.filename_timestamps = json.load(open(filename_timestamps_json))
+            # For timestamp embedding tasks, the metadata for each instance is {filename: , timestamp: }.
+            self.metadata = [
+                {"filename": filename, "timestamp": timestamp}
+                for filename, timestamp in json.load(open(filename_timestamps_json))
+            ]
         else:
-            # Will including this extra junk waste time on GPU
-            # moves?
-            # self.filename_timestamps = [(None, None)] * self.dim[0]
-            self.filename_timestamps = [("", 0.0)] * self.dim[0]
+            self.metadata = {} * self.dim[0]
         assert len(self.labels) == self.dim[0]
         assert len(self.labels) == len(self.embedding_memmap)
-        assert len(self.labels) == len(
-            self.filename_timestamps
-        ), f"{len(self.labels)} != {len(self.filename_timestamps)}"
-        assert (
-            self.embedding_memmap[0].shape[0] == self.dim[1]
-        ), f"{self.embedding_memmap[0].shape[0]}, {self.dim[1]}"
+        assert len(self.labels) == len(self.metadata)
+        assert self.embedding_memmap[0].shape[0] == self.dim[1]
 
     def __len__(self) -> int:
         return self.dim[0]
 
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, str, float]:
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, Any]]:
         """
         For all labels, return a multi or one-hot vector.
         This allows us to have tensors that are all the same shape.
         Later we reduce this with an argmax to get the vocabulary indices.
             We also include the filename and timestamp, which we need
         for evaluation of timestamp (event) tasks.
+        We also return the metadata as a Dict.
         """
         x = self.embedding_memmap[idx]
         y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-        # Will be None for non-timestamp tasks
-        filename, timestamp = self.filename_timestamps[idx]
         # Lame special case
         if not y:
             return (
                 x,
-                torch.zeros((self.nlabels,), dtype=torch.int32),
-                {"filename": filename, "timestamp": timestamp},
+                # BCEWithLogitsLoss wants float not long targets
+                torch.zeros((self.nlabels,), dtype=torch.int32).float(),
+                self.metadata[idx],
             )
         # TODO: Could rewrite faster using scatter_:
         # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
@@ -257,7 +252,7 @@ class SplitMemmapDataset(Dataset):
             .values
             # BCEWithLogitsLoss wants float not long targets
             .float(),
-            {"filename": filename, "timestamp": timestamp},
+            self.metadata[idx],
         )
 
 
