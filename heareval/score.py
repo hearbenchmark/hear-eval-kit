@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import sed_eval
+
+# Can we get away with not using DCase for every event-based evaluation??
 from dcase_util.containers import MetaDataContainer
 
 
