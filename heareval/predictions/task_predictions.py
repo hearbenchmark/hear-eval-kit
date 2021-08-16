@@ -19,7 +19,7 @@ import math
 import pickle
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, Iterable, List, Tuple, Union
+from typing import Any, DefaultDict, Dict, List, Tuple
 
 import more_itertools
 import numpy as np
