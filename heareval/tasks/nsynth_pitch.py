@@ -64,6 +64,7 @@ config = {
         "version": "v2.2.3-small",
         "dataset_fraction": None,
     },
+    "evaluation": ["pitch_err", "chroma_err"],
 }
 
 

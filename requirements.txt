@@ -1,5 +1,6 @@
 black
 boto3
+dcase_util
 intervaltree
 librosa
 luigi
@@ -12,6 +13,7 @@ pytest-env
 pytorch-lightning
 python-slugify
 requests
+sed_eval
 soundfile
 tensorflow
 torch

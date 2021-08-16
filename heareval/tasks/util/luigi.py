@@ -9,8 +9,8 @@ from functools import partial
 from pathlib import Path
 
 import luigi
-import requests
 import pandas as pd
+import requests
 from tqdm.auto import tqdm
 
 

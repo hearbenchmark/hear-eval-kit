@@ -57,6 +57,11 @@ config = {
         "version": "hear2021-small",
         "dataset_fraction": None,
     },
+    # DCASE2016 task 2 used the segment-based total error rate as
+    # their main score and then the onset only event based F1 as
+    # their secondary score.
+    # However, we announced that onset F1 would be our primary score.
+    "evaluation": ["onset_only_event_based", "segment_based"],
 }
 
 
