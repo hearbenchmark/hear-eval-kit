@@ -61,7 +61,7 @@ config = {
     # their main score and then the onset only event based F1 as
     # their secondary score.
     # However, we announced that onset F1 would be our primary score.
-    "evaluation": ["onset_only_event_based", "segment_based"],
+    "evaluation": ["event_onset_200ms_fms", "segment_1s_er"],
 }
 
 

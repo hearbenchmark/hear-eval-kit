@@ -241,13 +241,10 @@ class EventPredictionModel(AbstractPredictionModel):
         end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         for score in self.scores:
-            # Weird
-            end_scores[f"val_{score}_fms"] = score(predicted_events, target_events)[
-                "f_measure"
-            ]["f_measure"]
+            end_scores[f"val_{score}"] = score(predicted_events, target_events)
             # Weird, this can happen if precision has zero guesses
-            if math.isnan(end_scores[f"val_{score}_fms"]):
-                end_scores[f"val_{score}_fms"] = 0.0
+            if math.isnan(end_scores[f"val_{score}"]):
+                end_scores[f"val_{score}"] = 0.0
         for score in end_scores:
             self.log(score, end_scores[score], prog_bar=True)
         return end_scores
@@ -569,9 +566,18 @@ def task_predictions_train(
     # target_score = f"val_{str(scores[0])}"
     target_score = f"val_{str(scores[0])}" + "_fms"
 
-    checkpoint_callback = ModelCheckpoint(monitor=target_score, mode="max")
+    if scores[0].maximize:
+        mode = "max"
+    else:
+        mode = "min"
+    checkpoint_callback = ModelCheckpoint(monitor=target_score, mode=mode)
     early_stop_callback = EarlyStopping(
-        monitor=target_score, min_delta=0.00, patience=50, verbose=False, mode="max"
+        # TODO: Tune these
+        monitor=target_score,
+        min_delta=0.00,
+        patience=50,
+        verbose=False,
+        mode=mode,
     )
 
     # train on CPU
@@ -652,7 +658,7 @@ def task_predictions(
 
     label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
     scores = [
-        available_scores[score](metadata, label_to_idx)
+        available_scores[score](label_to_idx=label_to_idx)
         for score in metadata["evaluation"]
     ]
 

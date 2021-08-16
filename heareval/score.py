@@ -33,17 +33,23 @@ class ScoreFunction:
     A simple abstract base class for score functions
     """
 
-    # TODO: Remove task_metadata since we don't use it much
+    # TODO: Remove label_to_idx?
     def __init__(
         self,
-        task_metadata: Dict,
         label_to_idx: Dict[str, int],
         name: Optional[str] = None,
+        maximize: bool = True,
     ):
-        self.task_metadata = task_metadata
+        """
+        :param label_to_idx: Map from label string to integer index.
+        :param name: Override the name of this scoring function.
+        :param maximize: Maximize this score? (Otherwise, it's a loss or energy we want to minimize,
+            and I guess technically isn't a score.)
+        """
         self.label_to_idx = label_to_idx
         if name:
             self.name = name
+        self.maximize = maximize
 
     def __call__(self, predictions: Any, targets: Any, **kwargs) -> float:
         """
@@ -83,7 +89,7 @@ class ChromaAccuracy(ScoreFunction):
 
     name = "chroma_acc"
 
-    def __call__(self, predictions: np.ndarray, targets: List, **kwargs) -> float:
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         # Compute the number of correct predictions
         correct = 0
         for target, prediction in zip(targets, predictions):
@@ -109,10 +115,20 @@ class SoundEventScore(ScoreFunction):
     score_class: sed_eval.sound_event.SoundEventMetrics = None
 
     def __init__(
-        self, task_metadata: Dict, label_to_idx: Dict[str, int], params: Dict = None
+        self,
+        label_to_idx: Dict[str, int],
+        score: str,
+        params: Dict = {},
+        name: Optional[str] = None,
+        maximize: bool = True,
     ):
-        super().__init__(task_metadata=task_metadata, label_to_idx=label_to_idx)
-        self.params = params if params is not None else {}
+        """
+        :param score: Score to use, from the list of overall SED eval scores.
+        :param params: Parameters to pass to the scoring function, see inheriting children for details.
+        """
+        super().__init__(label_to_idx=label_to_idx, name=name, maximize=maximize)
+        self.score = score
+        self.params = params
         assert self.score_class is not None
 
     def __call__(self, predictions: Dict, targets: Dict, **kwargs):
@@ -133,10 +149,9 @@ class SoundEventScore(ScoreFunction):
             )
 
         # This (and segment_based_scores) return a pretty large selection of scores.
-        # We might want to add a task_metadata option to filter these for the specific
-        # score that we are going to use to evaluate the task.
         overall_scores = scores.results_overall_metrics()
-        return overall_scores
+        # Filter these for the specific score that we are going to use to evaluate the task.
+        return overall_scores[self.score][self.score]
 
     @staticmethod
     def sed_eval_event_container(
@@ -167,9 +182,6 @@ class SegmentBasedScore(SoundEventScore):
     for params.
     """
 
-    # TODO: Fix this
-    name = "seg"
-
     score_class = sed_eval.sound_event.SegmentBasedMetrics
 
 
@@ -178,12 +190,9 @@ class EventBasedScore(SoundEventScore):
     event-based scores - the ground truth and system output are compared at
     event instance level;
 
-    See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedScores.html # noqa: E501
+    See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedMetrics.html # noqa: E501
     for params.
     """
-
-    # TODO: Fix this
-    name = "ev"
 
     score_class = sed_eval.sound_event.EventBasedMetrics
 
@@ -192,8 +201,23 @@ available_scores: Dict[str, Callable] = {
     "top1_acc": Top1Accuracy,
     "pitch_acc": partial(Top1Accuracy, name="pitch_acc"),
     "chroma_acc": ChromaAccuracy,
-    "onset_only_event_based": partial(
-        EventBasedScore, params={"evaluate_offset": False, "t_collar": 0.2}
+    # https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedMetrics.html
+    "event_onset_200ms_fms": partial(
+        EventBasedScore,
+        name="event_onset_200ms_fms",
+        score="f_measure",
+        params={
+            "evaluate_onset": True,
+            "evaluate_offset": False,
+            "t_collar": 0.2,
+            "percentage_of_length": 0.5,
+        },
     ),
-    "segment_based": SegmentBasedScore,
+    "segment_1s_er": partial(
+        SegmentBasedScore,
+        name="segment_1s_er",
+        score="error_rate",
+        params={"time_resolution": 1.0},
+        maximize=False,
+    ),
 }
