@@ -18,8 +18,9 @@ import json
 import math
 import os.path
 import pickle
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple
 
 import more_itertools
 import numpy as np
@@ -109,16 +110,36 @@ class AbstractPredictionModel(pl.LightningModule):
         y_hat = self.predictor.forward_logit(x)
         y_pr = self.predictor(x)
         z = {
-            "predictions": y_pr,
-            "predictions_logit": y_hat,
-            "targets": y,
+            "prediction": y_pr,
+            "prediction_logit": y_hat,
+            "target": y,
         }
         # https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
         return {**z, **metadata}
 
     # Implement this for each inheriting class
     # TODO: Can we combine the boilerplate for both of these?
-    # def validation_epoch_end(self, outputs):
+    def validation_epoch_end(self, outputs):
+        raise NotImplementedError("Implement this in children")
+
+    def _flatten_batched_outputs(
+        self,
+        outputs: List[Dict[str, Iterable[Any]]],
+        keys: List[str],
+        dont_stack: List[str] = [],
+    ) -> Dict[str, Iterable[Any]]:
+        flat_outputs = defaultdict(list)
+        for output in outputs:
+            assert set(output.keys()) == set(keys)
+            for key in keys:
+                flat_outputs[key] += output[key]
+        flat_outputs = dict(flat_outputs)
+        for key in keys:
+            if key in dont_stack:
+                continue
+            else:
+                flat_outputs[key] = torch.stack(flat_outputs[key])
+        return flat_outputs
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
@@ -147,24 +168,19 @@ class ScenePredictionModel(AbstractPredictionModel):
         )
 
     def validation_epoch_end(self, outputs):
-        targets = []
-        predictions = []
-        predictions_logit = []
-        for output in outputs:
-            targets += output["targets"]
-            predictions += output["predictions"]
-            predictions_logit += output["predictions_logit"]
-
-        targets = torch.stack(targets)
-        predictions = torch.stack(predictions)
-        predictions_logit = torch.stack(predictions_logit)
+        outputs = self._flatten_batched_outputs(
+            outputs, keys=["target", "prediction", "prediction_logit"]
+        )
+        target, prediction, prediction_logit = (
+            outputs[key] for key in ["target", "prediction", "prediction_logit"]
+        )
 
         end_scores = {}
-        end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
+        end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         for score in self.scores:
             end_scores[f"val_{score}"] = score(
-                predictions.detach().cpu().numpy(), targets.detach().cpu().numpy()
+                prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
         for score in end_scores:
             self.log(score, end_scores[score], prog_bar=True)
@@ -193,28 +209,26 @@ class EventPredictionModel(AbstractPredictionModel):
             scores=scores,
         )
 
-    def validation_epoch_end(self, outputs):
-        targets = []
-        predictions = []
-        predictions_logit = []
-        filenames = []
-        timestamps = []
-        for output in outputs:
-            targets += output["targets"]
-            predictions += output["predictions"]
-            predictions_logit += output["predictions_logit"]
-            filenames += output["filename"]
-            timestamps += output["timestamp"]
-
-        targets = torch.stack(targets)
-        predictions = torch.stack(predictions)
-        predictions_logit = torch.stack(predictions_logit)
-        # This is an array of strings, not a tensor of tensor strings
-        # filenames = torch.stack(filenames)
-        timestamps = torch.stack(timestamps)
+    def validation_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
+        outputs = self._flatten_batched_outputs(
+            outputs,
+            keys=["target", "prediction", "prediction_logit", "filename", "timestamp"],
+            # This is a list of string, not tensor, so we don't need to stack it
+            dont_stack=["filename"],
+        )
+        target, prediction, prediction_logit, filename, timestamp = (
+            outputs[key]
+            for key in [
+                "target",
+                "prediction",
+                "prediction_logit",
+                "filename",
+                "timestamp",
+            ]
+        )
 
         predicted_events = get_events_for_all_files(
-            predictions, filenames, timestamps, self.idx_to_label
+            prediction, filename, timestamp, self.idx_to_label
         )
         # TODO: Cache these or something?
 
@@ -224,7 +238,7 @@ class EventPredictionModel(AbstractPredictionModel):
         )
 
         end_scores = {}
-        end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
+        end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         for score in self.scores:
             # Weird
