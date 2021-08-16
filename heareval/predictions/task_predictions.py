@@ -141,12 +141,22 @@ class PredictionModel(pl.LightningModule):
         print(predicted_events)
         # TODO: Cache these or something?
 
+        # TODO: Don't hardcode this either
+        target_events = json.load(
+            open("embeddings/hearbaseline/dcase2016_task2-hear2021-small/valid.json")
+        )
+
         end_scores = {}
         end_scores["val_loss"] = self.predictor.logit_loss(predictions_logit, targets)
+
         for score in self.scores:
-            end_scores[f"val_{score}"] = score(
-                predictions.detach().cpu().numpy(), targets.detach().cpu().numpy()
-            )
+            # end_scores[f"val_{score}"] = score(
+            #     predictions.detach().cpu().numpy(), targets.detach().cpu().numpy()
+            # )
+            # Weird
+            end_scores[f"val_{score}_fms"] = score(predicted_events, target_events)[
+                "f_measure"
+            ]["f_measure"]
         for score in end_scores:
             self.log(score, end_scores[score], prog_bar=True)
         return end_scores
