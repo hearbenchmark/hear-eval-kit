@@ -109,8 +109,6 @@ class AbstractPredictionModel(pl.LightningModule):
         x, y, metadata = batch
         y_hat = self.predictor.forward_logit(x)
         y_pr = self.predictor(x)
-        print(y)
-        print(y_pr)
         z = {
             "prediction": y_pr,
             "prediction_logit": y_hat,
