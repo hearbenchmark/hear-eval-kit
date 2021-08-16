@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Contains a set of various evaluation scores. Runs evaluation on the test predictions
-for predictions on a HEAR task.
+Runs evaluation on the test predictions for predictions on a HEAR task.
 """
 
 import json
