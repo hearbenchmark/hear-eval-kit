@@ -234,7 +234,6 @@ class EventPredictionModel(AbstractPredictionModel):
         predicted_events = get_events_for_all_files(
             prediction, filename, timestamp, self.idx_to_label
         )
-        # TODO: Cache these or something?
 
         end_scores = {}
         end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
