@@ -15,6 +15,7 @@ TODO:
 """
 
 import json
+import math
 import os.path
 import pickle
 from pathlib import Path
@@ -98,7 +99,9 @@ class PredictionModel(pl.LightningModule):
         # It is independent of forward
         x, y, filename, timestamp = batch
         y_hat = self.predictor.forward_logit(x)
-        loss = self.predictor.logit_loss(y_hat, y)
+        # Why do we need .float()?
+        # https://discuss.pytorch.org/t/multi-label-binary-classification-result-type-float-cant-be-cast-to-the-desired-output-type-long/117915
+        loss = self.predictor.logit_loss(y_hat, y.float())
         # Logging to TensorBoard by default
         self.log("train_loss", loss)
         return loss
@@ -138,7 +141,6 @@ class PredictionModel(pl.LightningModule):
         predicted_events = get_events_for_all_files(
             predictions, filenames, timestamps, self.idx_to_label
         )
-        print(predicted_events)
         # TODO: Cache these or something?
 
         # TODO: Don't hardcode this either
@@ -157,6 +159,9 @@ class PredictionModel(pl.LightningModule):
             end_scores[f"val_{score}_fms"] = score(predicted_events, target_events)[
                 "f_measure"
             ]["f_measure"]
+            # Weird, this can happen if precision has zero guesses
+            if math.isnan(end_scores[f"val_{score}_fms"]):
+                end_scores[f"val_{score}_fms"] = 0.0
         for score in end_scores:
             self.log(score, end_scores[score], prog_bar=True)
         return end_scores
@@ -205,7 +210,6 @@ class SplitMemmapDataset(Dataset):
         )
         # This is weird and shitty and we should use the task type, not file existence,
         # here
-        print(filename_timestamps_json)
         if os.path.exists(filename_timestamps_json):
             self.filename_timestamps = json.load(open(filename_timestamps_json))
         else:
@@ -282,16 +286,16 @@ def create_events_from_prediction(
     Returns:
         An IntervalTree object containing all the events from the predictions.
     """
-    print("prediction_dict", prediction_dict)
+    # print("prediction_dict", prediction_dict)
 
     # Make sure the timestamps are in the correct order
     timestamps = np.array(sorted(prediction_dict.keys()))
-    print("timestamps", timestamps)
+    # print("timestamps", timestamps)
 
     # Create a sorted numpy matrix of frame level predictions for this file. We convert
     # to a numpy array here before applying a median filter.
     predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
-    print("predictions", predictions)
+    # print("predictions", predictions)
 
     # We can apply a median filter here to smooth out events, but b/c participants
     # can select their own timestamp interval, selecting the filter window becomes
@@ -303,7 +307,7 @@ def create_events_from_prediction(
 
     # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
-    print("predictions", predictions)
+    # print("predictions", predictions)
 
     event_tree = IntervalTree()
     for label in range(predictions.shape[1]):
@@ -413,7 +417,7 @@ def get_events_for_all_files(
     # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
     event_dict = {}
     for slug, timestamp_predictions in tqdm(event_files.items()):
-        print(timestamp_predictions)
+        # print(timestamp_predictions)
         event_tree = create_events_from_prediction(timestamp_predictions)
         events = []
         for interval in sorted(event_tree):
@@ -474,7 +478,8 @@ def task_predictions_train(
     )
 
     # First score is the target
-    target_score = f"val_{str(scores[0])}"
+    # target_score = f"val_{str(scores[0])}"
+    target_score = f"val_{str(scores[0])}" + "_fms"
 
     checkpoint_callback = ModelCheckpoint(monitor=target_score, mode="max")
     early_stop_callback = EarlyStopping(
@@ -571,6 +576,7 @@ def task_predictions(
         nlabels=nlabels,
         scores=scores,
     )
+    """
     task_predictions_test(
         predictor=predictor,
         embedding_path=embedding_path,
@@ -578,3 +584,4 @@ def task_predictions(
         label_to_idx=label_to_idx,
         nlabels=nlabels,
     )
+    """
