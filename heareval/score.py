@@ -43,8 +43,8 @@ class ScoreFunction:
         """
         :param label_to_idx: Map from label string to integer index.
         :param name: Override the name of this scoring function.
-        :param maximize: Maximize this score? (Otherwise, it's a loss or energy we want to minimize,
-            and I guess technically isn't a score.)
+        :param maximize: Maximize this score? (Otherwise, it's a loss or energy
+            we want to minimize, and I guess technically isn't a score.)
         """
         self.label_to_idx = label_to_idx
         if name:
@@ -124,7 +124,8 @@ class SoundEventScore(ScoreFunction):
     ):
         """
         :param score: Score to use, from the list of overall SED eval scores.
-        :param params: Parameters to pass to the scoring function, see inheriting children for details.
+        :param params: Parameters to pass to the scoring function,
+                       see inheriting children for details.
         """
         super().__init__(label_to_idx=label_to_idx, name=name, maximize=maximize)
         self.score = score

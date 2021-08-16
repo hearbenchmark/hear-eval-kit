@@ -16,7 +16,6 @@ TODO:
 
 import json
 import math
-import os.path
 import pickle
 from collections import defaultdict
 from pathlib import Path
@@ -189,7 +188,8 @@ class ScenePredictionModel(AbstractPredictionModel):
 
 class EventPredictionModel(AbstractPredictionModel):
     """
-    Event prediction model. For validation (and test), we combine timestamp events that are adjacent,
+    Event prediction model. For validation (and test),
+    we combine timestamp events that are adjacent,
     but discard ones that are too short.
     """
 
@@ -285,7 +285,8 @@ class SplitMemmapDataset(Dataset):
             open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
         )
         # Only used for event-based prediction
-        # For timestamp (event) embedding tasks, the metadata for each instance is {filename: , timestamp: }.
+        # For timestamp (event) embedding tasks,
+        # the metadata for each instance is {filename: , timestamp: }.
         if self.embedding_type == "event":
             filename_timestamps_json = embedding_path.joinpath(
                 f"{split_name}.filename-timestamps.json"
@@ -295,7 +296,7 @@ class SplitMemmapDataset(Dataset):
                 for filename, timestamp in json.load(open(filename_timestamps_json))
             ]
         else:
-            self.metadata = {} * self.dim[0]
+            self.metadata = [{}] * self.dim[0]
         assert len(self.labels) == self.dim[0]
         assert len(self.labels) == len(self.embedding_memmap)
         assert len(self.labels) == len(self.metadata)
@@ -382,16 +383,12 @@ def create_events_from_prediction(
 
     # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
-    # print("predictions", predictions)
 
     event_tree = IntervalTree()
     for label in range(predictions.shape[1]):
-        # print(label, predictions[:, label])
-        # print(np.where(predictions[:, label]))
         for group in more_itertools.consecutive_groups(
             np.where(predictions[:, label])[0]
         ):
-            # for group in more_itertools.consecutive_groups(torch.where(predictions[:, label])[0]):
             group = list(group)
             startidx, endidx = (group[0], group[-1])
 
@@ -399,7 +396,6 @@ def create_events_from_prediction(
             end = timestamps[endidx]
             # Add event if greater than the minimum duration threshold
             if end - start >= min_duration:
-                # print(label, start, end)
                 # We probably don't need this interval tree and can remove it maybe
                 # from requirements
                 event_tree.addi(begin=start, end=end, data=label)
@@ -644,6 +640,7 @@ def task_predictions(
         nlabels=nlabels,
         scores=scores,
     )
+    # TODO: Do something with me
     """
     task_predictions_test(
         predictor=predictor,
