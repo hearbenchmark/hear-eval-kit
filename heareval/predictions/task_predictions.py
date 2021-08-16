@@ -200,6 +200,7 @@ class EventPredictionModel(AbstractPredictionModel):
         nlabels: int,
         prediction_type: str,
         scores: List[ScoreFunction],
+        validation_target_events: Dict[str, List[Dict[str, Any]]],
     ):
         super().__init__(
             nfeatures=nfeatures,
@@ -208,6 +209,7 @@ class EventPredictionModel(AbstractPredictionModel):
             prediction_type=prediction_type,
             scores=scores,
         )
+        self.validation_target_events = validation_target_events
 
     def validation_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
         outputs = self._flatten_batched_outputs(
@@ -232,16 +234,13 @@ class EventPredictionModel(AbstractPredictionModel):
         )
         # TODO: Cache these or something?
 
-        # TODO: Don't hardcode this either
-        target_events = json.load(
-            open("embeddings/hearbaseline/dcase2016_task2-hear2021-small/valid.json")
-        )
-
         end_scores = {}
         end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         for score in self.scores:
-            end_scores[f"val_{score}"] = score(predicted_events, target_events)
+            end_scores[f"val_{score}"] = score(
+                predicted_events, self.validation_target_events
+            )
             # Weird, this can happen if precision has zero guesses
             if math.isnan(end_scores[f"val_{score}"]):
                 end_scores[f"val_{score}"] = 0.0
@@ -405,42 +404,6 @@ def create_events_from_prediction(
                 # from requirements
                 event_tree.addi(begin=start, end=end, data=label)
 
-    # This code below is broken because it doesn't use the final note-off event at the end
-    """
-    # Difference between each timestamp to find event boundaries
-    pred_diff = np.diff(predictions, axis=0)
-    print("pred_dif", pred_diff)
-
-    # This is slow, but for each class look through all the timestamp predictions
-    # and construct a set of events with onset and offset timestamps.
-    event_tree = IntervalTree()
-    for class_idx in range(predictions.shape[1]):
-        # Check to see if this starts with an active event
-        current_event = []
-        if predictions[0][class_idx] == 1:
-            assert pred_diff[0][class_idx] != 1
-            current_event = [timestamps[0]]
-
-        for t in range(pred_diff.shape[0]):
-            # New onset
-            if pred_diff[t][class_idx] == 1:
-                assert len(current_event) == 0
-                current_event = [timestamps[t]]
-
-            # Offset for current event
-            elif pred_diff[t][class_idx] == -1:
-                assert len(current_event) == 1
-                current_event.append(timestamps[t + 1])
-                event_duration = current_event[1] - current_event[0]
-
-                # Add event if greater than the minimum duration threshold
-                if event_duration >= min_duration:
-                    event_tree.addi(
-                        begin=current_event[0], end=current_event[1], data=class_idx
-                    )
-                current_event = []
-    """
-
     # Er why return an intervaltree when we immediately postprocess it to a dict?
     return event_tree
 
@@ -552,19 +515,30 @@ def task_predictions_train(
     scores: List[ScoreFunction],
 ) -> torch.nn.Module:
     if metadata["embedding_type"] == "event":
+        validation_target_events = json.load(
+            embedding_path.joinpath("valid.json").open()
+        )
         predictor = EventPredictionModel(
-            embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
+            nfeatures=embedding_size,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=metadata["prediction_type"],
+            scores=scores,
+            validation_target_events=validation_target_events,
         )
     elif metadata["embedding_type"] == "scene":
         predictor = ScenePredictionModel(
-            embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
+            nfeatures=embedding_size,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=metadata["prediction_type"],
+            scores=scores,
         )
     else:
         raise ValueError(f"Unknown embedding_type {metadata['embedding_type']}")
 
     # First score is the target
-    # target_score = f"val_{str(scores[0])}"
-    target_score = f"val_{str(scores[0])}" + "_fms"
+    target_score = f"val_{str(scores[0])}"
 
     if scores[0].maximize:
         mode = "max"
