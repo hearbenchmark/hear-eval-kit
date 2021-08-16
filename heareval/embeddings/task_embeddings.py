@@ -71,7 +71,9 @@ class Embedding:
             self.model.to(self.device)
         elif isinstance(self.model, tf.Module):
             self.type = TENSORFLOW
-            self.device = None # Tensorflow automatically manages data transfers to device 
+
+            # Tensorflow automatically manages data transfers to device
+            self.device = None
         else:
             raise TypeError(f"Unsupported model type received: {type(self.model)}")
 
@@ -102,7 +104,7 @@ class Embedding:
 
         elif self.type == TENSORFLOW:
             # Load array as tensor onto device
-            
+
             if not isinstance(x, np.ndarray):
                 x = x.numpy()
             x = tf.convert_to_tensor(x)
