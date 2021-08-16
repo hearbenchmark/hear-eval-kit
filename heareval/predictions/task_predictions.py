@@ -252,11 +252,13 @@ class SplitMemmapDataset(Dataset):
         label_to_idx: Dict[str, int],
         nlabels: int,
         split_name: str,
+        embedding_type: str,
     ):
         self.embedding_path = embedding_path
         self.label_to_idx = label_to_idx
         self.nlabels = nlabels
         self.split_name = split_name
+        self.embedding_type = embedding_type
 
         self.dim = tuple(
             json.load(
@@ -273,13 +275,11 @@ class SplitMemmapDataset(Dataset):
             open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
         )
         # Only used for event-based prediction
-        filename_timestamps_json = embedding_path.joinpath(
-            f"{split_name}.filename-timestamps.json"
-        )
-        # This is weird and shitty and we should use the task type, not file existence,
-        # here
-        if os.path.exists(filename_timestamps_json):
-            # For timestamp embedding tasks, the metadata for each instance is {filename: , timestamp: }.
+        # For timestamp (event) embedding tasks, the metadata for each instance is {filename: , timestamp: }.
+        if self.embedding_type == "event":
+            filename_timestamps_json = embedding_path.joinpath(
+                f"{split_name}.filename-timestamps.json"
+            )
             self.metadata = [
                 {"filename": filename, "timestamp": timestamp}
                 for filename, timestamp in json.load(open(filename_timestamps_json))
@@ -317,11 +317,10 @@ class SplitMemmapDataset(Dataset):
         # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
         return (
             x,
+            # BCEWithLogitsLoss wants float not long targets
             torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
             .max(axis=0)
-            .values
-            # BCEWithLogitsLoss wants float not long targets
-            .float(),
+            .values.float(),
             self.metadata[idx],
         )
 
@@ -512,6 +511,7 @@ def dataloader_from_split_name(
     embedding_path: Path,
     label_to_idx: Dict[str, int],
     nlabels: int,
+    embedding_type: str,
     batch_size: int = 64,
 ) -> DataLoader:
     print(f"Getting embeddings for split: {split_name}")
@@ -522,6 +522,7 @@ def dataloader_from_split_name(
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             split_name=split_name,
+            embedding_type=embedding_type,
         ),
         batch_size=batch_size,
         # We don't shuffle because it's slow.
@@ -563,10 +564,10 @@ def task_predictions_train(
     # TODO: FIXME
     trainer = pl.Trainer(callbacks=[checkpoint_callback, early_stop_callback])
     train_dataloader = dataloader_from_split_name(
-        "train", embedding_path, label_to_idx, nlabels
+        "train", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     valid_dataloader = dataloader_from_split_name(
-        "valid", embedding_path, label_to_idx, nlabels
+        "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     return predictor
@@ -580,7 +581,7 @@ def task_predictions_test(
     nlabels: int,
 ):
     dataloader = dataloader_from_split_name(
-        "test", embedding_path, label_to_idx, nlabels
+        "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
 
     all_predicted_labels = []
