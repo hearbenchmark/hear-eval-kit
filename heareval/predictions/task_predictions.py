@@ -19,7 +19,7 @@ import math
 import pickle
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, DefaultDict, Dict, Iterable, List, Tuple, Union
 
 import more_itertools
 import numpy as np
@@ -105,9 +105,12 @@ class AbstractPredictionModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        # -> Dict[str, Union[torch.Tensor, List(str)]]:
         x, y, metadata = batch
         y_hat = self.predictor.forward_logit(x)
         y_pr = self.predictor(x)
+        print(y)
+        print(y_pr)
         z = {
             "prediction": y_pr,
             "prediction_logit": y_hat,
@@ -123,16 +126,17 @@ class AbstractPredictionModel(pl.LightningModule):
 
     def _flatten_batched_outputs(
         self,
-        outputs: List[Dict[str, Iterable[Any]]],
+        outputs,  #: Union[torch.Tensor, List[str]],
         keys: List[str],
         dont_stack: List[str] = [],
-    ) -> Dict[str, Iterable[Any]]:
-        flat_outputs = defaultdict(list)
+    ) -> Dict:
+        # ) -> Dict[str, Union[torch.Tensor, List[str]]]:
+        flat_outputs_default: DefaultDict = defaultdict(list)
         for output in outputs:
             assert set(output.keys()) == set(keys)
             for key in keys:
-                flat_outputs[key] += output[key]
-        flat_outputs = dict(flat_outputs)
+                flat_outputs_default[key] += output[key]
+        flat_outputs = dict(flat_outputs_default)
         for key in keys:
             if key in dont_stack:
                 continue
@@ -167,11 +171,11 @@ class ScenePredictionModel(AbstractPredictionModel):
         )
 
     def validation_epoch_end(self, outputs):
-        outputs = self._flatten_batched_outputs(
+        flat_outputs = self._flatten_batched_outputs(
             outputs, keys=["target", "prediction", "prediction_logit"]
         )
         target, prediction, prediction_logit = (
-            outputs[key] for key in ["target", "prediction", "prediction_logit"]
+            flat_outputs[key] for key in ["target", "prediction", "prediction_logit"]
         )
 
         end_scores = {}
@@ -212,14 +216,14 @@ class EventPredictionModel(AbstractPredictionModel):
         self.validation_target_events = validation_target_events
 
     def validation_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
-        outputs = self._flatten_batched_outputs(
+        flat_outputs = self._flatten_batched_outputs(
             outputs,
             keys=["target", "prediction", "prediction_logit", "filename", "timestamp"],
             # This is a list of string, not tensor, so we don't need to stack it
             dont_stack=["filename"],
         )
         target, prediction, prediction_logit, filename, timestamp = (
-            outputs[key]
+            flat_outputs[key]
             for key in [
                 "target",
                 "prediction",
@@ -244,8 +248,8 @@ class EventPredictionModel(AbstractPredictionModel):
             # Weird, this can happen if precision has zero guesses
             if math.isnan(end_scores[f"val_{score}"]):
                 end_scores[f"val_{score}"] = 0.0
-        for score in end_scores:
-            self.log(score, end_scores[score], prog_bar=True)
+        for score_name in end_scores:
+            self.log(score_name, end_scores[score_name], prog_bar=True)
         return end_scores
 
 
@@ -389,8 +393,8 @@ def create_events_from_prediction(
         for group in more_itertools.consecutive_groups(
             np.where(predictions[:, label])[0]
         ):
-            group = list(group)
-            startidx, endidx = (group[0], group[-1])
+            grouptuple = tuple(group)
+            startidx, endidx = (grouptuple[0], grouptuple[-1])
 
             start = timestamps[startidx]
             end = timestamps[endidx]
@@ -510,6 +514,7 @@ def task_predictions_train(
     nlabels: int,
     scores: List[ScoreFunction],
 ) -> torch.nn.Module:
+    predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
         validation_target_events = json.load(
             embedding_path.joinpath("valid.json").open()
@@ -563,6 +568,8 @@ def task_predictions_train(
     return predictor
 
 
+# This all needs to be cleaned up and simplified later.
+"""
 def task_predictions_test(
     predictor: torch.nn.Module,
     embedding_path: Path,
@@ -611,6 +618,7 @@ def task_predictions_test(
         predicted_labels,
         open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
+"""
 
 
 def task_predictions(
