@@ -97,7 +97,7 @@ class PredictionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
-        x, y, filename, timestamp = batch
+        x, y, _ = batch
         y_hat = self.predictor.forward_logit(x)
         # Why do we need .float()?
         # https://discuss.pytorch.org/t/multi-label-binary-classification-result-type-float-cant-be-cast-to-the-desired-output-type-long/117915
@@ -107,16 +107,16 @@ class PredictionModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y, filenames, timestamps = batch
+        x, y, metadata = batch
         y_hat = self.predictor.forward_logit(x)
         y_pr = self.predictor(x)
-        return {
+        z = {
             "predictions": y_pr,
             "predictions_logit": y_hat,
             "targets": y,
-            "filenames": filenames,
-            "timestamps": timestamps,
         }
+        # https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
+        return {**z, **metadata}
 
     def validation_epoch_end(self, outputs):
         targets = []
@@ -128,8 +128,8 @@ class PredictionModel(pl.LightningModule):
             targets += output["targets"]
             predictions += output["predictions"]
             predictions_logit += output["predictions_logit"]
-            filenames += output["filenames"]
-            timestamps += output["timestamps"]
+            filenames += output["filename"]
+            timestamps += output["timestamp"]
 
         targets = torch.stack(targets)
         predictions = torch.stack(predictions)
@@ -246,8 +246,7 @@ class SplitMemmapDataset(Dataset):
             return (
                 x,
                 torch.zeros((self.nlabels,), dtype=torch.int32),
-                filename,
-                timestamp,
+                {"filename": filename, "timestamp": timestamp},
             )
         # TODO: Could rewrite faster using scatter_:
         # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
@@ -258,8 +257,7 @@ class SplitMemmapDataset(Dataset):
             .values
             # BCEWithLogitsLoss wants float not long targets
             .float(),
-            filename,
-            timestamp,
+            {"filename": filename, "timestamp": timestamp},
         )
 
 
