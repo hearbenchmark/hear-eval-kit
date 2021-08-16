@@ -54,7 +54,10 @@ def runner(
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
     tasks = list(embeddings_dir_path.iterdir())
-    for task_path in tqdm(tasks):
+    for task_path in tqdm(reversed(tasks)):
+        # TODO: Currently has no validation
+        if "dcase2016_task2-hear" in str(task_path):
+            continue
         print(f"Computing predictions for {task_path.name}")
         task_predictions(task_path, scene_embedding_size, timestamp_embedding_size)
 

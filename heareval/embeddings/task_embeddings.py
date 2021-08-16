@@ -314,6 +314,7 @@ def memmap_embeddings(
             idx += emb.shape[0]
         else:
             raise ValueError(f"Unknown embedding type: {metadata['embedding_type']}")
+
     # Write changes to disk
     embedding_memmap.flush()
     # TODO: Convert labels to indices?

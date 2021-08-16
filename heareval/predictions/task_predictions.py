@@ -3,8 +3,8 @@
 Map embeddings to predictions for every downstream task and store
 test predictions to disk.
 
-NOTE: Right now this is just a random projection. Later we should
-do shallow learning, and model selection, as described in our doc.
+NOTE: Shallow learning, later model selection, as described in our
+doc.
 
 TODO:
     * Profiling should occur here (both embedding time AFTER loading
@@ -17,14 +17,31 @@ TODO:
 import json
 import pickle
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, Tuple
 
-from intervaltree import IntervalTree
 import numpy as np
 import pandas as pd
+import pytorch_lightning as pl
 import torch
-from torch.utils.data import Dataset, DataLoader
+from intervaltree import IntervalTree
+from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
+
+from heareval.score import ScoreFunction, available_scores, label_vocab_as_dict
+
+
+class OneHotToCrossEntropyLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = torch.nn.CrossEntropyLoss()
+
+    def forward(self, y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        # One and only one label per class
+        assert torch.all(torch.sum(y, dim=1) == torch.ones(y.shape[0]))
+        y = y.argmax(dim=1)
+        return self.loss(y_hat, y)
 
 
 class RandomProjectionPrediction(torch.nn.Module):
@@ -33,28 +50,86 @@ class RandomProjectionPrediction(torch.nn.Module):
 
         self.projection = torch.nn.Linear(nfeatures, nlabels)
         torch.nn.init.normal_(self.projection.weight)
+        self.logit_loss: torch.nn.Module
         if prediction_type == "multilabel":
             self.activation: torch.nn.Module = torch.nn.Sigmoid()
+            self.logit_loss = torch.nn.BCEWithLogitsLoss()
         elif prediction_type == "multiclass":
             self.activation = torch.nn.Softmax()
+            self.logit_loss = OneHotToCrossEntropyLoss()
         else:
             raise ValueError(f"Unknown prediction_type {prediction_type}")
 
-    def forward(self, x: torch.Tensor):
-        x = self.projection(x)
+    def forward_logit(self, x: torch.Tensor) -> torch.Tensor:
+        return self.projection(x)
+        return x
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.forward_logit(x)
         x = self.activation(x)
         return x
 
 
+class PredictionModel(pl.LightningModule):
+    def __init__(
+        self,
+        nfeatures: int,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        prediction_type: str,
+        scores: List[ScoreFunction],
+    ):
+        super().__init__()
+
+        self.predictor = RandomProjectionPrediction(nfeatures, nlabels, prediction_type)
+        self.label_to_idx = label_to_idx
+        self.scores = scores
+
+    def forward(self, x):
+        return self.predictor(x)
+
+    def training_step(self, batch, batch_idx):
+        # training_step defined the train loop.
+        # It is independent of forward
+        x, y = batch
+        y_hat = self.predictor.forward_logit(x)
+        loss = self.predictor.logit_loss(y_hat, y)
+        # Logging to TensorBoard by default
+        self.log("train_loss", loss)
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        x, y = batch
+        y_hat = self.predictor.forward_logit(x)
+        loss = self.predictor.logit_loss(y_hat, y)
+        y_pr = self.predictor(x)
+        # Logging to TensorBoard by default
+        self.log("val_loss", loss, prog_bar=True)
+        for score in self.scores:
+            self.log(f"val_{score}", score(y_pr, y), prog_bar=True)
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        return optimizer
+
+
 class SplitMemmapDataset(Dataset):
     """
-    Embeddings are memmap'ed. (We don't use the labels yet, but will add them later.)
+    Embeddings are memmap'ed.
 
     WARNING: Don't shuffle this or access will be SLOW.
     """
 
-    def __init__(self, embedding_path: Path, split_name: str):
+    def __init__(
+        self,
+        embedding_path: Path,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        split_name: str,
+    ):
         self.embedding_path = embedding_path
+        self.label_to_idx = label_to_idx
+        self.nlabels = nlabels
         self.split_name = split_name
 
         self.dim = tuple(
@@ -68,18 +143,36 @@ class SplitMemmapDataset(Dataset):
             mode="r",
             shape=self.dim,
         )
-        # self.labels = pickle.load(
-        #     open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
-        # )
-        # assert len(self.labels) == dim[0]
+        self.labels = pickle.load(
+            open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
+        )
+        assert len(self.labels) == self.dim[0]
+        assert (
+            self.embedding_memmap[0].shape[0] == self.dim[1]
+        ), f"{self.embedding_memmap[0].shape[0]}, {self.dim[1]}"
 
-    def __len__(self):
+    def __len__(self) -> int:
         return self.dim[0]
-        # return len(self.labels)
 
-    def __getitem__(self, idx):
-        return self.embedding_memmap[idx]
-        # return self.embedding_memmap[idx], self.labels[idx]
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        For all labels, return a multi or one-hot vector.
+        This allows us to have tensors that are all the same shape.
+        Later we reduce this with an argmax to get the vocabulary indices.
+        """
+        x = self.embedding_memmap[idx]
+        y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+        # Lame special case
+        if not y:
+            return x, torch.zeros((self.nlabels,), dtype=torch.int32)
+        # TODO: Could rewrite faster using scatter_:
+        # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
+        return (
+            x,
+            torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
+            .max(axis=0)
+            .values,
+        )
 
 
 def create_events_from_prediction(
@@ -92,14 +185,15 @@ def create_events_from_prediction(
     converts the prediction tensor to a binary label based on the threshold value. Any
     events occurring at adjacent timestamps are considered to be part of the same event.
     This loops through and creates events for each label class. Disregards events that
-    are less than the min_duration.
+    are less than the min_duration milliseconds.
 
     Args:
         prediction_dict: A dictionary of predictions keyed on timestamp
             {timestamp -> prediction}. The prediction is a tensor of label
             probabilities.
         threshold: Threshold for determining whether to apply a label
-        min_duration: the minimum duration requirement for an event to be included.
+        min_duration: the minimum duration in milliseconds for an
+                event to be included.
 
     Returns:
         An IntervalTree object containing all the events from the predictions.
@@ -215,76 +309,150 @@ def get_events_for_all_files(
     return event_dict
 
 
-def task_predictions(
-    embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
-):
-    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
-
+def label_vocab_nlabels(embedding_path: Path) -> Tuple[pd.DataFrame, int]:
     label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
 
     nlabels = len(label_vocab)
     assert nlabels == label_vocab["idx"].max() + 1
+    return (label_vocab, nlabels)
+
+
+def dataloader_from_split_name(
+    split_name: str,
+    embedding_path: Path,
+    label_to_idx: Dict[str, int],
+    nlabels: int,
+    batch_size: int = 64,
+) -> DataLoader:
+    print(f"Getting embeddings for split: {split_name}")
+
+    return DataLoader(
+        SplitMemmapDataset(
+            embedding_path=embedding_path,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            split_name=split_name,
+        ),
+        batch_size=batch_size,
+        # We don't shuffle because it's slow.
+        # Also we want predicted labels in the same order as
+        # target labels.
+        shuffle=False,
+    )
+
+
+def task_predictions_train(
+    embedding_path: Path,
+    embedding_size: int,
+    metadata: Dict[str, Any],
+    label_to_idx: Dict[str, int],
+    nlabels: int,
+    scores: List[ScoreFunction],
+) -> torch.nn.Module:
+    predictor = PredictionModel(
+        embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
+    )
+
+    # First score is the target
+    target_score = f"val_{str(scores[0])}"
+
+    checkpoint_callback = ModelCheckpoint(monitor=target_score, mode="max")
+    early_stop_callback = EarlyStopping(
+        monitor=target_score, min_delta=0.00, patience=10, verbose=False, mode="max"
+    )
+
+    # train on CPU
+    # TODO: FIXME
+    trainer = pl.Trainer(callbacks=[checkpoint_callback, early_stop_callback])
+    train_dataloader = dataloader_from_split_name(
+        "train", embedding_path, label_to_idx, nlabels
+    )
+    valid_dataloader = dataloader_from_split_name(
+        "valid", embedding_path, label_to_idx, nlabels
+    )
+    trainer.fit(predictor, train_dataloader, valid_dataloader)
+    return predictor
+
+
+def task_predictions_test(
+    predictor: torch.nn.Module,
+    embedding_path: Path,
+    metadata: Dict[str, Any],
+    label_to_idx: Dict[str, int],
+    nlabels: int,
+):
+    dataloader = dataloader_from_split_name(
+        "test", embedding_path, label_to_idx, nlabels
+    )
+
+    all_predicted_labels = []
+    for embs, target_labels in tqdm(dataloader):
+        predicted_labels = predictor(embs)
+        # TODO: Uses less memory to stack them one at a time
+        all_predicted_labels.append(predicted_labels)
+    predicted_labels = torch.cat(all_predicted_labels)
+
+    if metadata["embedding_type"] == "event":
+        # For event predictions we need to convert the frame-based predictions
+        # to a list of events with start and stop timestamps. These events are
+        # computed on each file independently and then saved as JSON in the same
+        # format as the ground truth events produced by the luigi pipeline.
+
+        # A list of filenames and timestamps associated with each prediction
+        file_timestamps = json.load(
+            embedding_path.joinpath("test.filename-timestamps.json").open()
+        )
+
+        print("Creating events from predictions:")
+        # Probably don't need label_vocab any more since we have label_to_idx
+        label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
+        events = get_events_for_all_files(
+            predicted_labels, file_timestamps, label_vocab
+        )
+
+        json.dump(
+            events,
+            embedding_path.joinpath("test.predictions.json").open("w"),
+            indent=4,
+        )
+
+    pickle.dump(
+        predicted_labels,
+        open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
+    )
+
+
+def task_predictions(
+    embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
+):
+    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
     if metadata["embedding_type"] == "scene":
-        predictor = RandomProjectionPrediction(
-            scene_embedding_size, nlabels, metadata["prediction_type"]
-        )
+        embedding_size = scene_embedding_size
     elif metadata["embedding_type"] == "event":
-        predictor = RandomProjectionPrediction(
-            timestamp_embedding_size, nlabels, metadata["prediction_type"]
-        )
+        embedding_size = timestamp_embedding_size
     else:
-        raise ValueError(f"embedding_type {metadata['embedding_type']} unknown.")
+        raise ValueError(f"Unknown embedding type {metadata['embedding_type']}")
 
-    # for split in metadata["splits"]:
-    # Only do test for now, for the unlearned random predictor
-    for split in [{"name": "test"}]:
-        print(f"Getting embeddings for split: {split['name']}")
+    label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
+    scores = [
+        available_scores[score](metadata, label_to_idx)
+        for score in metadata["evaluation"]
+    ]
 
-        dataloader = DataLoader(
-            SplitMemmapDataset(embedding_path, split["name"]),
-            batch_size=64,
-            # We don't shuffle because it's slow.
-            # Also we want predicted labels in the same order as
-            # target labels.
-            shuffle=False,
-        )
-
-        all_predicted_labels = []
-        for embs in tqdm(dataloader):
-            # for embs, target_labels in tqdm(dataloader):
-            predicted_labels = predictor(embs)
-            # TODO: Uses less memory to stack them one at a time
-            all_predicted_labels.append(predicted_labels)
-        predicted_labels = torch.cat(all_predicted_labels)
-
-        if metadata["embedding_type"] == "event":
-            # For event predictions we need to convert the frame-based predictions
-            # to a list of events with start and stop timestamps. These events are
-            # computed on each file independently and then saved as JSON in the same
-            # format as the ground truth events produced by the luigi pipeline.
-
-            # A list of filenames and timestamps associated with each prediction
-            file_timestamps = json.load(
-                embedding_path.joinpath(
-                    f"{split['name']}.filename-timestamps.json"
-                ).open()
-            )
-
-            print("Creating events from predictions:")
-            events = get_events_for_all_files(
-                predicted_labels, file_timestamps, label_vocab
-            )
-
-            json.dump(
-                events,
-                embedding_path.joinpath(f"{split['name']}.predictions.json").open("w"),
-                indent=4,
-            )
-
-        pickle.dump(
-            predicted_labels,
-            open(
-                embedding_path.joinpath(f"{split['name']}.predicted-labels.pkl"), "wb"
-            ),
-        )
+    predictor = task_predictions_train(
+        embedding_path=embedding_path,
+        embedding_size=embedding_size,
+        metadata=metadata,
+        label_to_idx=label_to_idx,
+        nlabels=nlabels,
+        scores=scores,
+    )
+    task_predictions_test(
+        predictor=predictor,
+        embedding_path=embedding_path,
+        metadata=metadata,
+        label_to_idx=label_to_idx,
+        nlabels=nlabels,
+    )

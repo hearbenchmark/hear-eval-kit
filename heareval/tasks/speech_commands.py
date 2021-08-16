@@ -9,8 +9,8 @@ from typing import List
 
 import luigi
 import pandas as pd
-from pandas import DataFrame, Series
 import soundfile as sf
+from pandas import DataFrame, Series
 from slugify import slugify
 from tqdm import tqdm
 
@@ -58,6 +58,7 @@ config = {
         "version": "v0.0.2-small",
         "dataset_fraction": None,
     },
+    "evaluation": ["top1_err"],
 }
 
 
