@@ -2,9 +2,6 @@
 """
 Contains a set of various evaluation scores. Runs evaluation on the test predictions
 for predictions on a HEAR task.
-Would it make sense to move all the score functions over to a file called scores?
-
-TODO: Fix AUC
 """
 
 import json
