@@ -151,7 +151,7 @@ class SoundEventScore(ScoreFunction):
 
         # This (and segment_based_scores) return a pretty large selection of scores.
         overall_scores = scores.results_overall_metrics()
-        # Filter these for the specific score that we are going to use to evaluate the task.
+        # Keep the specific score we want
         return overall_scores[self.score][self.score]
 
     @staticmethod

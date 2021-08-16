@@ -632,7 +632,8 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
-    predictor = task_predictions_train(
+    # predictor =
+    task_predictions_train(
         embedding_path=embedding_path,
         embedding_size=embedding_size,
         metadata=metadata,
