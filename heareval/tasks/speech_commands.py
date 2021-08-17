@@ -104,13 +104,15 @@ class GenerateTrainDataset(luigi_util.WorkTask):
         for file_obj in train_path.iterdir():
             if file_obj.is_dir() and file_obj.name != BACKGROUND_NOISE:
                 linked_folder = Path(os.path.join(self.workdir, file_obj.name))
-                linked_folder.unlink(missing_ok=True)
+                if linked_folder.exists():
+                    linked_folder.unlink(missing_ok)
                 linked_folder.symlink_to(file_obj.absolute(), target_is_directory=True)
 
             # Also need the testing and validation splits
             if file_obj.name in ["testing_list.txt", "validation_list.txt"]:
                 linked_file = Path(os.path.join(self.workdir, file_obj.name))
-                linked_file.unlink(missing_ok=True)
+                if linked_file.exists():
+                    linked_file.unlink(missing_ok)
                 linked_file.symlink_to(file_obj.absolute())
 
         self.mark_complete()

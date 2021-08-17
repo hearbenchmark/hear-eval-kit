@@ -422,7 +422,9 @@ class SubsampleSplit(WorkTask):
             newaudiofile = Path(
                 self.workdir.joinpath(f"{audio['slug']}{audiofile.suffix}")
             )
-            newaudiofile.unlink(missing_ok=True)
+            # missing_ok is python >= 3.8
+            if newaudiofile.exists():
+                newaudiofile.unlink()
             newaudiofile.symlink_to(audiofile.resolve())
 
         self.mark_complete()
