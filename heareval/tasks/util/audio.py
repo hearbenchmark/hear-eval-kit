@@ -36,7 +36,7 @@ def mono_wav_and_fix_duration(in_file: str, out_file: str, duration: float):
         stderr=subprocess.DEVNULL,
     )
     # Make sure the return code is 0 and the command was successful.
-    assert ret == 0
+    assert ret == 0, f"ret = {ret}"
 
 
 def convert_to_mono_wav(in_file: str, out_file: str):

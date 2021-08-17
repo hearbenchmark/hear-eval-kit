@@ -8,11 +8,7 @@ Evaluation kit for HEAR 2021 NeurIPS competition
 pip3 install heareval
 ```
 
-You can use our preprocessed datasets. If you want to run preprocessing yourself:
-* You will need `ffmpeg>=4.2` installed (possibly from conda-forge).
-* You will need `soxr` support, which might require package
-libsox-fmt-ffmpeg or [installing from
-source](https://github.com/neuralaudio/hear-eval-kit/issues/156#issuecomment-893151305).
+You can use our preprocessed datasets. Otherwise, see "Development > Preprocessing"
 
 ## Evaluation
 
@@ -74,10 +70,16 @@ Running tests:
 python3 -m pytest
 ```
 
-## Preprocessing
+### Preprocessing
 
 You probably don't need to do this unless you are implementing the
 HEAR challenge.
+
+If you want to run preprocessing yourself:
+* You will need `ffmpeg>=4.2` installed (possibly from conda-forge).
+* You will need `soxr` support, which might require package
+libsox-fmt-ffmpeg or [installing from
+source](https://github.com/neuralaudio/hear-eval-kit/issues/156#issuecomment-893151305).
 
 These Luigi pipelines are used to preprocess the evaluation tasks
 into a common format for downstream evaluation.
@@ -122,6 +124,16 @@ Stats include: audio_count, audio_samplerate_count, mean meadian
 and certain (10, 25, 75, 90) percentile durations.  This is helpful
 in getting a quick glance of the audio files in a folder and helps
 in decideing the preprocessing configurations.
+
+The pipeline will also generate some stats of the original and
+preprocessed data sets, e.g.:
+```
+speech_commands-v0.0.2/01-ExtractArchive/test_stats.json
+speech_commands-v0.0.2/01-ExtractArchive/train_stats.json
+speech_commands-v0.0.2/03-ExtractMetadata/labelcount_test.json
+speech_commands-v0.0.2/03-ExtractMetadata/labelcount_train.json
+speech_commands-v0.0.2/03-ExtractMetadata/labelcount_valid.json
+```
 
 ### Faster preprocessing, for development
 
