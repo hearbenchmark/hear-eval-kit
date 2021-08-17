@@ -1,5 +1,5 @@
 """
-Utility function to help 
+Utility function to help
 1. Change the luigi config and run tasks
 2. Run the tasks in a different subprocess so that pytest can work
 """
