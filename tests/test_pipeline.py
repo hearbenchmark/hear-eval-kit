@@ -1,80 +1,62 @@
 import tempfile
 from pathlib import Path
-from heareval.tasks.runner import run
-from heareval import tasks
-from importlib import import_module
-from mock import patch
-from contextlib import ExitStack
+import shutil
 
 from subprocess import Popen, PIPE
-import threading
-from multiprocessing import Process, Queue
 
 
 class TestLuigiPipeline:
     def setup(self):
+        # Will change this path later. Currently for testing
         self.test_dir = Path("./test_output")
         self.test_dir.mkdir(exist_ok=True)
-        # self.tempdir = Path(
-        #     "/Users/khumairraj/Desktop/audio/audionew/hear2021-eval-kit/test_output/tmp_zfb62uz"
-        # )
 
     def teardown(self):
+        shutil.rmtree(self.test_dir)
         del self.test_dir
 
-    def _run_pipeline(self, task, dataset_fraction, suffix):
+    def test_run_pipeline_cli(
+        self, task="speech_commands", dataset_fraction=0.5, suffix="test1"
+    ):
+        """
+        This function will call a subprocess with the luigi task
+
+        Luigi Process have to run in a different process so that we can run multiple
+        luigi pipeline in the same pytest and do appropriate comparisons
+        """
         # Make a temporary directory
         temp_dir = Path(tempfile.mkdtemp(dir=self.test_dir))
-        # Get the config of the task and change the dataset fraction to test the dataset
-        # fraction
-        task_module = import_module(f"heareval.tasks.{task}")
-        task_config = task_module.config
-        task_config["small"]["dataset_fraction"] = 1
-        task_config["small"]["version"] = "{suffix}_{version}".format(
-            suffix = suffix, version=task_config["small"]["version"]
-        )
-
-        # Get the command line arguments to run the task
-        args = (
-            f"heareval.tasks.runner {task}"
-            f" --small"
-            f" --luigi-dir {temp_dir.joinpath('luigi_dir')}"
-            f" --tasks-dir {temp_dir.joinpath('task_dir')}"
-        )
-
-        with ExitStack() as stack:
-            stack.enter_context(patch(f"heareval.tasks.{task}.config", task_config))
-            stack.enter_context(patch("sys.argv", args.split()))
-            queue = Queue()
-            p = Process(target=run())
-            p.start()
-            p.join() # this blocks until the process terminates
-            result = queue.get()
-            print(result)
-
+        # Pass the arguments and run the luigi pipeline for these arguments
+        # These arguments help configure the interior of the pipeline and thus can
+        # mock arguments for the pipeline run
+        args = [temp_dir, task, str(dataset_fraction), suffix]
+        p = Popen(["python", "tests/luigi_subprocess.py"] + args, stdout=PIPE)
+        p.communicate()
         return temp_dir
-    
-    def test_run_pipeline_cli(self):
-        p = Popen(["python", "-m", "heareval.tasks.runner", "speech_commands", "--small"], stdout=PIPE)
-        stdout, _ = p.communicate()
-        assert stdout == b"Hello World!\n"
 
     def test_speech_commands(self):
-        temp_dir1 = self._run_pipeline(
+        # Run the cli with for speech commands with the parameters
+        test_dir_1 = self.test_run_pipeline_cli(
             task="speech_commands", dataset_fraction=0.5, suffix="test1"
         )
-        temp_dir2 = self._run_pipeline(
+        # Rerun the cli with a different base folder to check the sampling stability
+        test_dir_2 = self.test_run_pipeline_cli(
             task="speech_commands", dataset_fraction=0.5, suffix="test2"
         )
-        all_in_temp1 = set(temp_dir1.glob("*"))
-        all_int_temp2 = set(temp_dir2.glob("*"))
-        print(all_in_temp1[:5])
-        print(all_int_temp2[:5])
-        assert all_in_temp1 == all_int_temp2
+        # Get the files in test dir 1
+        test_dir_1_files = list(
+            map(lambda file: file.relative_to(test_dir_1), test_dir_1.glob("*"))
+        )
+        # Get the files in test dir 2
+        test_dir_2_files = list(
+            map(lambda file: file.relative_to(test_dir_2), test_dir_2.glob("*"))
+        )
+        # Check if they are same
+        assert set(test_dir_1_files) == set(test_dir_2_files)
 
 
 if __name__ == "__main__":
-    task = "speech_commands"
+    # Run the pytest quickly for development. Remove later
     test = TestLuigiPipeline()
     test.setup()
     test.test_speech_commands()
