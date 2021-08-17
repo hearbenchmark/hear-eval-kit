@@ -1,118 +1,80 @@
-import pandas as pd
-from pandas.testing import assert_frame_equal
-import pytest
-from heareval.tasks.util.luigi import subsample_metadata
+import tempfile
+from pathlib import Path
+from heareval.tasks.runner import run
+from heareval import tasks
+from importlib import import_module
+from mock import patch
+from contextlib import ExitStack
+
+from subprocess import Popen, PIPE
+import threading
+from multiprocessing import Process, Queue
 
 
-@pytest.mark.parametrize(
-    ("test_metadata", "max_files", "expected_subsampled_metadata"),
-    [
-        # Tests - Stratification during standard label distribution
-        # (comparatively balanced)
-        # Expectation - Size of each label group is 2, and we need to select 3 examples.
-        # Examples in l1, l2 and l3 with the smallest split key and subsample key
-        # will be selected
-        pytest.param(
-            [
-                ("l1", 1, 1),
-                ("l1", 1, 2),
-                ("l2", 5, 3),
-                ("l2", 1, 4),
-                ("l2", 7, 5),
-                ("l3", 2, 6),
-            ],
-            3,
-            ([("l1", 1, 1), ("l2", 1, 4), ("l3", 2, 6)]),
-            id="1. Test Stratify Key",
-        ),
-        # Tests - Stratification during Extreme imbalance in the label distribution.
-        # Expectation - By stratification the 2 labels will be picked up from the
-        # l2 and since l1 just has 1 sample, that will be picked up to ensure
-        # we atleast have one instance of each stratify key
-        pytest.param(
-            [
-                ("l1", 1, 1),
-                ("l1", 1, 2),
-                ("l2", 5, 3),
-                ("l2", 1, 4),
-                ("l2", 1, 5),
-                ("l2", 1, 6),
-                ("l2", 2, 7),
-                ("l2", 2, 8),
-                ("l2", 2, 9),
-            ],
-            2,
-            [("l1", 1, 1), ("l2", 1, 4)],
-            id="2. Test Stratify Key",
-        ),
-        # Tests - Data points in same with same split key in a label group
-        # are selected in chunks
-        # Expectation - By stratification we need to select 2 from l1 and 2
-        # from l2. From l1, the data point with split key 1 will be selected
-        # and from l2, the data point with split key 2 will be selected
-        pytest.param(
-            [
-                ("l1", 1, 1),
-                ("l1", 1, 2),
-                ("l1", 2, 3),
-                ("l1", 2, 4),
-                ("l2", 5, 5),
-                ("l2", 5, 6),
-                ("l2", 2, 7),
-                ("l2", 2, 8),
-            ],
-            4,
-            [("l1", 1, 1), ("l1", 1, 2), ("l2", 2, 7), ("l2", 2, 8)],
-            id="3. Test Split Key",
-        ),
-        # Tests - Disabiguity on the basis of subsample key
-        # Expectation - By stratification we need to select 3 from l1 and 3 from l2.
-        # Here since the split key group in l1 and l2 are of size 2,
-        # the third example for each of "l1" and "l2" will be selected on the
-        # basis of the subsample key
-        pytest.param(
-            [
-                ("l1", 1, 1),
-                ("l1", 1, 2),
-                ("l1", 2, 3),
-                ("l1", 2, 4),
-                ("l2", 1, 5),
-                ("l2", 1, 6),
-                ("l2", 2, 7),
-                ("l2", 2, 8),
-            ],
-            6,
-            [
-                ("l1", 1, 1),
-                ("l1", 1, 2),
-                ("l1", 2, 3),
-                ("l2", 1, 5),
-                ("l2", 1, 6),
-                ("l2", 2, 7),
-            ],
-            id="4. Test Subsample Key",
-        ),
-    ],
-)
-def test_subsampling(test_metadata, max_files, expected_subsampled_metadata):
-    test_metadata = pd.DataFrame(
-        test_metadata, columns=["stratify_key", "split_key", "subsample_key"]
-    )
-    # Shuffle the test_metadata
-    test_metadata = test_metadata.sample(frac=1)
-    expected_subsampled_metadata = pd.DataFrame(
-        expected_subsampled_metadata,
-        columns=["stratify_key", "split_key", "subsample_key"],
-    )
-    subsampled_metadata = subsample_metadata(test_metadata, max_files).reset_index(
-        drop=True
-    )
-    # Test for correctness of subsampling
-    assert_frame_equal(subsampled_metadata, expected_subsampled_metadata)
-    # Test for stability of subsampling
-    assert_frame_equal(
-        subsampled_metadata,
-        subsample_metadata(test_metadata.sample(frac=1), max_files).reset_index(
-            drop=True
-        ),
-    )
+class TestLuigiPipeline:
+    def setup(self):
+        self.test_dir = Path("./test_output")
+        self.test_dir.mkdir(exist_ok=True)
+        # self.tempdir = Path(
+        #     "/Users/khumairraj/Desktop/audio/audionew/hear2021-eval-kit/test_output/tmp_zfb62uz"
+        # )
+
+    def teardown(self):
+        del self.test_dir
+
+    def _run_pipeline(self, task, dataset_fraction, suffix):
+        # Make a temporary directory
+        temp_dir = Path(tempfile.mkdtemp(dir=self.test_dir))
+        # Get the config of the task and change the dataset fraction to test the dataset
+        # fraction
+        task_module = import_module(f"heareval.tasks.{task}")
+        task_config = task_module.config
+        task_config["small"]["dataset_fraction"] = 1
+        task_config["small"]["version"] = "{suffix}_{version}".format(
+            suffix = suffix, version=task_config["small"]["version"]
+        )
+
+        # Get the command line arguments to run the task
+        args = (
+            f"heareval.tasks.runner {task}"
+            f" --small"
+            f" --luigi-dir {temp_dir.joinpath('luigi_dir')}"
+            f" --tasks-dir {temp_dir.joinpath('task_dir')}"
+        )
+
+        with ExitStack() as stack:
+            stack.enter_context(patch(f"heareval.tasks.{task}.config", task_config))
+            stack.enter_context(patch("sys.argv", args.split()))
+            queue = Queue()
+            p = Process(target=run())
+            p.start()
+            p.join() # this blocks until the process terminates
+            result = queue.get()
+            print(result)
+
+        return temp_dir
+    
+    def test_run_pipeline_cli(self):
+        p = Popen(["python", "-m", "heareval.tasks.runner", "speech_commands", "--small"], stdout=PIPE)
+        stdout, _ = p.communicate()
+        assert stdout == b"Hello World!\n"
+
+    def test_speech_commands(self):
+        temp_dir1 = self._run_pipeline(
+            task="speech_commands", dataset_fraction=0.5, suffix="test1"
+        )
+        temp_dir2 = self._run_pipeline(
+            task="speech_commands", dataset_fraction=0.5, suffix="test2"
+        )
+        all_in_temp1 = set(temp_dir1.glob("*"))
+        all_int_temp2 = set(temp_dir2.glob("*"))
+        print(all_in_temp1[:5])
+        print(all_int_temp2[:5])
+        assert all_in_temp1 == all_int_temp2
+
+
+if __name__ == "__main__":
+    task = "speech_commands"
+    test = TestLuigiPipeline()
+    test.setup()
+    test.test_speech_commands()
