@@ -803,25 +803,23 @@ class FinalizeCorpus(WorkTask):
         shutil.copytree(self.requires()["resample"].workdir, self.workdir)
 
         # Copy the traintestmetadata
-        shutil.copytree(
+        # and vocabmetadata
+        for src in [
             self.requires()["traintestmeta"].workdir,
-            self.workdir,
-            # Python >= 3.8 only
-            # dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns("*.csv"),
-        )
-        # Copy the vocabmetadata
-        src = self.requires()["vocabmeta"].workdir
-        dst = self.workdir
-        for item in os.listdir(src):
-            # Based upon https://stackoverflow.com/a/27161799
-            s = os.path.join(src, item)
-            d = os.path.join(dst, item)
-            assert not os.path.exists(d)
-            assert not os.path.isdir(s)
-            shutil.copy2(s, d)
+            self.requires()["vocabmeta"].workdir,
+        ]:
+            dst = self.workdir
+            for item in os.listdir(src):
+                if item.endswith(".csv"):
+                    continue
+                # Based upon https://stackoverflow.com/a/27161799
+                s = os.path.join(src, item)
+                d = os.path.join(dst, item)
+                assert not os.path.exists(d)
+                assert not os.path.isdir(s)
+                shutil.copy2(s, d)
         # Python >= 3.8 only
-        # shutil.copytree(src, dst, dirs_exist_ok=True)
+        # shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.csv"))
         # Save the dataset config as a json file
         config_out = self.workdir.joinpath("task_metadata.json")
         with open(config_out, "w") as fp:
