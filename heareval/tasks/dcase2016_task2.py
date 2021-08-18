@@ -36,8 +36,6 @@ config = {
             "md5": "ac98768b39a08fc0c6c2ddd15a981dd7",
         },
     ],
-    # TODO: FIXME
-    # Want different for train and test?
     "sample_duration": 120.0,
     "dataset_fraction": None,
     "splits": ["train", "test", "valid"],

@@ -71,9 +71,8 @@ class Embedding:
             self.model.to(self.device)
         elif isinstance(self.model, tf.Module):
             self.type = TENSORFLOW
-
-            # Tensorflow automatically manages data transfers to device
-            self.device = None
+            # Tensorflow automatically manages data transfers to device,
+            # so we don't need to set self.device
         else:
             raise TypeError(f"Unsupported model type received: {type(self.model)}")
 

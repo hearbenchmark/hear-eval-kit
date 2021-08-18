@@ -422,7 +422,9 @@ class SubsampleSplit(WorkTask):
             newaudiofile = Path(
                 self.workdir.joinpath(f"{audio['slug']}{audiofile.suffix}")
             )
-            newaudiofile.unlink(missing_ok=True)
+            # missing_ok is python >= 3.8
+            if newaudiofile.exists():
+                newaudiofile.unlink()
             newaudiofile.symlink_to(audiofile.resolve())
 
         self.mark_complete()
@@ -800,19 +802,23 @@ class FinalizeCorpus(WorkTask):
         # Copy the resampled files
         shutil.copytree(self.requires()["resample"].workdir, self.workdir)
 
-        # Copy the traintestmetadata
-        shutil.copytree(
-            self.requires()["traintestmeta"].workdir,
-            self.workdir,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns("*.csv"),
+        # Copy labelvocabulary.csv
+        shutil.copy2(
+            self.requires()["vocabmeta"].workdir.joinpath("labelvocabulary.csv"),
+            self.workdir.joinpath("labelvocabulary.csv"),
         )
-        # Copy the vocabmetadata
-        shutil.copytree(
-            self.requires()["vocabmeta"].workdir,
-            self.workdir,
-            dirs_exist_ok=True,
-        )
+        # Copy the train test metadata jsons
+        src = self.requires()["traintestmeta"].workdir
+        dst = self.workdir
+        for item in os.listdir(src):
+            if item.endswith(".json"):
+                # Based upon https://stackoverflow.com/a/27161799
+                assert not dst.joinpath(item).exists()
+                assert not src.joinpath(item).is_dir()
+                shutil.copy2(src.joinpath(item), dst.joinpath(item))
+        # Python >= 3.8 only
+        # shutil.copytree(src, dst, dirs_exist_ok=True, \
+        #        ignore=shutil.ignore_patterns("*.csv"))
         # Save the dataset config as a json file
         config_out = self.workdir.joinpath("task_metadata.json")
         with open(config_out, "w") as fp:
