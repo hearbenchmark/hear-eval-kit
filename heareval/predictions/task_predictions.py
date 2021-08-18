@@ -346,8 +346,9 @@ def create_events_from_prediction(
     min_duration=60.0,
 ) -> IntervalTree:
     """
-    Takes a set of prediction tensors keyed on timestamps and generates events. This
-    converts the prediction tensor to a binary label based on the threshold value. Any
+    Takes a set of prediction tensors keyed on timestamps and generates events.
+    (This is for one particular audio scene.)
+    We convert the prediction tensor to a binary label based on the threshold value. Any
     events occurring at adjacent timestamps are considered to be part of the same event.
     This loops through and creates events for each label class. Disregards events that
     are less than the min_duration milliseconds.
