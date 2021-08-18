@@ -19,21 +19,25 @@ from heareval.predictions.task_predictions import task_predictions
 @click.command()
 @click.argument("module", type=str)
 @click.option(
-    "--embeddings-dir",
-    default="embeddings",
-    help="Location of task embeddings to compute predictions on",
-    type=click.Path(exists=True),
-)
-@click.option(
     "--model",
     default=None,
     help="Location of model weights file",
     type=click.Path(exists=True),
 )
+@click.option("--version", default="", help="Version of module and weights")
+@click.option(
+    "--embeddings-dir",
+    default="embeddings",
+    help="Location of task embeddings to compute predictions on",
+    type=click.Path(exists=True),
+)
 def runner(
-    module: str, embeddings_dir: str = "embeddings", model: Optional[str] = None
+    module: str,
+    embeddings_dir: str = "embeddings",
+    model: Optional[str] = None,
+    version: Optional[str] = "",
 ) -> None:
-    embeddings_dir_path = Path(embeddings_dir).joinpath(module)
+    embeddings_dir_path = Path(embeddings_dir).joinpath(f"{module}-{str(version)}")
     if not embeddings_dir_path.is_dir():
         raise ValueError(
             "Cannot locate directory containing embeddings. "
