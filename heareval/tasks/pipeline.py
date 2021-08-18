@@ -802,22 +802,20 @@ class FinalizeCorpus(WorkTask):
         # Copy the resampled files
         shutil.copytree(self.requires()["resample"].workdir, self.workdir)
 
-        # Copy the traintestmetadata
-        # and vocabmetadata
-        for src in [
-            self.requires()["traintestmeta"].workdir,
-            self.requires()["vocabmeta"].workdir,
-        ]:
-            dst = self.workdir
-            for item in os.listdir(src):
-                if item.endswith(".csv"):
-                    continue
+        # Copy labelvocabulary.csv
+        shutil.copy2(
+            self.requires()["vocabmeta"].workdir.joinpath("labelvocabulary.csv"),
+            self.workdir.joinpath("labelvocabulary.csv"),
+        )
+        # Copy the train test metadata jsons
+        src = self.requires()["traintestmeta"].workdir
+        dst = self.workdir
+        for item in os.listdir(src):
+            if item.endswith(".json"):
                 # Based upon https://stackoverflow.com/a/27161799
-                s = os.path.join(src, item)
-                d = os.path.join(dst, item)
-                assert not os.path.exists(d)
-                assert not os.path.isdir(s)
-                shutil.copy2(s, d)
+                assert not dst.joinpath(item).exists()
+                assert not src.joinpath(item).is_dir()
+                shutil.copy2(src.joinpath(item), dst.joinpath(item))
         # Python >= 3.8 only
         # shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.csv"))
         # Save the dataset config as a json file
