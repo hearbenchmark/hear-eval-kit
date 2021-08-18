@@ -817,7 +817,8 @@ class FinalizeCorpus(WorkTask):
                 assert not src.joinpath(item).is_dir()
                 shutil.copy2(src.joinpath(item), dst.joinpath(item))
         # Python >= 3.8 only
-        # shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.csv"))
+        # shutil.copytree(src, dst, dirs_exist_ok=True, \
+        #        ignore=shutil.ignore_patterns("*.csv"))
         # Save the dataset config as a json file
         config_out = self.workdir.joinpath("task_metadata.json")
         with open(config_out, "w") as fp:
