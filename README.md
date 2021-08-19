@@ -191,7 +191,7 @@ passed.
 To test the pipeline with small version of each task(currently only running on 
 speech_commands.py), please run the following bash scripts
 ```
-bash run-test.sh <path/to/temorary_dir>
+bash run-small.sh <path/to/temorary_dir>
 ```
 All the required subfolders will be generated in the `temporary directory` provided above.
 ## DEPRECATED
