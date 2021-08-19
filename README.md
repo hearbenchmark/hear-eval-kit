@@ -27,7 +27,7 @@ baseline](https://github.com/neuralaudio/hear-baseline):
 1) Install the hearbaseline and download the model weights:
 ```
 pip3 install hearbaseline
-wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt -P path/to/model
+wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
 ```
 
 2) Compute the embeddings for all the tasks
@@ -49,7 +49,9 @@ python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt \
 ```
 
 ### Downstream Evalution
-For evalution of each task, a shallow model will be trained on the embeddings followed by task specific evaluations. The names of the scoring functions used for these task specific evalutions can be found in the `task_metadata.json` inside every task directory.
+For evalution of each task, a shallow model will be trained on the embeddings followed by 
+task specific evaluations. The names of the scoring functions used for these task specific 
+evalutions can be found in the `task_metadata.json` inside every task directory.
 
 1) Train the shallow model and generate the test set predictions for each task
 ```
@@ -61,7 +63,9 @@ python3 -m heareval.predictions.runner $module --model path/to/model
 python3 -m heareval.evaluation.runner
 ```
 
-By default, both the steps above assume a folder named `embeddings`, generated in the compute embeddings step. If this directory is different, the option `--embeddings-dir` can be used:
+By default, both the steps above assume a folder named `embeddings`, generated in the 
+compute embeddings step. If this directory is different, the option `--embeddings-dir` 
+can be used:
 
 ```
 $ python3 -m heareval.predictions.runner $module --model path/to/model \
@@ -70,7 +74,8 @@ $ python3 -m heareval.evaluation.runner \
     --embeddings-dir /path/to/embeddings
 ```
 
-Running the above will generate `evaluation_results.json` in the current working directory containing the evalution scores for each task.
+Running the above will generate `evaluation_results.json` in the current working 
+directory containing the evalution scores for each task.
 
 [TODO: make sure this works with pip3 install]
 
