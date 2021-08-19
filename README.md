@@ -12,6 +12,7 @@ We have only tested on Python >= 3.7.
 
 You can use our preprocessed datasets. Otherwise, see "Development > Preprocessing"
 
+
 ## Evaluation
 
 ### Computing embeddings
@@ -26,7 +27,7 @@ baseline](https://github.com/neuralaudio/hear-baseline):
 1) Install the hearbaseline and download the model weights:
 ```
 pip3 install hearbaseline
-wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
+wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt -P path/to/model
 ```
 
 2) Compute the embeddings for all the tasks
@@ -37,16 +38,39 @@ python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt
 This assumes that your current working directory contains a folder
 called `tasks` produced by `heareval.tasks.runner`. If this directory
 is in a different location or named something different you can use
-the option `--tasks-dir`:
+the option `--tasks-dir`. 
+
+By default embeddings will be computed in a folder named `embeddings` in the current 
+working directory. To generate in a different location use the option `--embeddings-dir`.
 ```
-python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt --tasks-dir /path/to/tasks
+python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt \
+    --tasks-dir /path/to/tasks 
+    --embeddings-dir /path/to/embeddings
 ```
 
-### Downstream Evaluation
+### Downstream Evalution
+For evalution of each task, a shallow model will be trained on the embeddings followed by task specific evaluations. The names of the scoring functions used for these task specific evalutions can be found in the `task_metadata.json` inside every task directory.
+
+1) Train the shallow model and generate the test set predictions for each task
+```
+python3 -m heareval.predictions.runner $module --model path/to/model
+```
+
+2) Evaluate the generated predictions for the test set
+```
+python3 -m heareval.evaluation.runner
+```
+
+By default, both the steps above assume a folder named `embeddings`, generated in the compute embeddings step. If this directory is different, the option `--embeddings-dir` can be used:
 
 ```
-python3 heareval/task_embeddings.py
+$ python3 -m heareval.predictions.runner $module --model path/to/model \
+    --embeddings-dir /path/to/embeddings
+$ python3 -m heareval.evaluation.runner \
+    --embeddings-dir /path/to/embeddings
 ```
+
+Running the above will generate `evaluation_results.json` in the current working directory containing the evalution scores for each task.
 
 [TODO: make sure this works with pip3 install]
 
@@ -162,6 +186,14 @@ the small version in the config has its own `dataset_fraction` which
 can be used to subsample the small dataset when the small flag is
 passed.
 
+### End to end testing
+
+To test the pipeline with small version of each task(currently only running on 
+speech_commands.py), please run the following bash scripts
+```
+bash run-test.sh <path/to/temorary_dir>
+```
+All the required subfolders will be generated in the `temporary directory` provided above.
 ## DEPRECATED
 
 See [ROADMAP](ROADMAP.md).
