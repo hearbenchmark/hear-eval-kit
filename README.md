@@ -40,18 +40,21 @@ called `tasks` produced by `heareval.tasks.runner`. If this directory
 is in a different location or named something different you can use
 the option `--tasks-dir`. 
 
-By default embeddings will be computed in a folder named `embeddings` in the current 
-working directory. To generate in a different location use the option `--embeddings-dir`.
+By default embeddings will be computed in a folder named `embeddings`
+in the current working directory. To generate in a different location
+use the option `--embeddings-dir`.
 ```
 python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt \
     --tasks-dir /path/to/tasks 
     --embeddings-dir /path/to/embeddings
 ```
 
-### Downstream Evalution
-For evalution of each task, a shallow model will be trained on the embeddings followed by 
-task specific evaluations. The names of the scoring functions used for these task specific 
-evalutions can be found in the `task_metadata.json` inside every task directory.
+### Downstream Evaluation
+
+For evaluation of each task, a shallow model will be trained on the
+embeddings followed by task specific evaluations. The names of the
+scoring functions used for these task specific evalutions can be
+found in the `task_metadata.json` inside every task directory.
 
 1) Train the shallow model and generate the test set predictions for each task
 ```
@@ -63,9 +66,9 @@ python3 -m heareval.predictions.runner $module --model path/to/model
 python3 -m heareval.evaluation.runner
 ```
 
-By default, both the steps above assume a folder named `embeddings`, generated in the 
-compute embeddings step. If this directory is different, the option `--embeddings-dir` 
-can be used:
+By default, both the steps above assume a folder named `embeddings`,
+generated in the compute embeddings step. If this directory is
+different, the option `--embeddings-dir` can be used:
 
 ```
 $ python3 -m heareval.predictions.runner $module --model path/to/model \
@@ -74,8 +77,9 @@ $ python3 -m heareval.evaluation.runner \
     --embeddings-dir /path/to/embeddings
 ```
 
-Running the above will generate `evaluation_results.json` in the current working 
-directory containing the evalution scores for each task.
+Running the above will generate `evaluation_results.json` in the
+current working directory containing the evalution scores for each
+task.
 
 [TODO: make sure this works with pip3 install]
 
