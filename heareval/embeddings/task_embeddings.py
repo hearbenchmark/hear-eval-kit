@@ -349,7 +349,7 @@ def memmap_embeddings(
         ).write(json.dumps(filename_timestamps, indent=4))
 
 
-def task_embeddings(embedding: Embedding, task_path: Path):
+def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path):
     prng = random.Random()
     prng.seed(0)
 
@@ -359,7 +359,7 @@ def task_embeddings(embedding: Embedding, task_path: Path):
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
-    embed_dir = Path("embeddings").joinpath(embedding.name)
+    embed_dir = embeddings_dir.joinpath(embedding.name)
 
     task_name = task_path.name
     embed_task_dir = embed_dir.joinpath(task_name)

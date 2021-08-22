@@ -79,8 +79,9 @@ def task_evaluation(task_path: Path):
     results = {}
     for score in scores:
         print("  -", score)
+        # score_function = available_scores[score](metadata, label_to_idx)
         score_function = available_scores[score](label_to_idx=label_to_idx)
-        new_results = score_function(predictions, targets)
+        new_results = score_function(np.array(predictions), np.array(targets))
         results.update({score: new_results})
 
     return results
