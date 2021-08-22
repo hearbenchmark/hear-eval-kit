@@ -147,8 +147,12 @@ Options:
   --small       FLAG     If passed, the task will run on a small-version of the 
                          data.
 
-  --luigi-dir   STRING   Path to dir to store the intermediate luigi task outputs.
-                         By default this is set to _workdir in the module root directory
+  --work-dir    STRING   Temporary directory to save all the
+                         intermediate tasks (will not be deleted afterwords).
+                         It will require as much disk space as the final output,
+                         if not more.
+                         By default this is set to _workdir in the
+                         module root directory.
 
   --tasks-dir   STRING   Path to dir to store the final task outputs.
                          By default this is set to tasks in the module root directory

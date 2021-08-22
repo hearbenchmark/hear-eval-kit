@@ -41,9 +41,9 @@ tasks = {
     type=int,
 )
 @click.option(
-    "--luigi-dir",
+    "--tmp-dir",
     default="_workdir",
-    help="Directory to save all the intermediate tasks",
+    help="Temporary directory to save all the intermediate tasks (will not be deleted afterwords)",
     type=str,
 )
 @click.option(
@@ -62,7 +62,7 @@ def run(
     task: str,
     num_workers: Optional[int] = None,
     sample_rate: Optional[int] = None,
-    luigi_dir: Optional[str] = "_workdir",
+    tmp_dir: Optional[str] = "_workdir",
     tasks_dir: Optional[str] = "tasks",
     small: bool = False,
 ):
@@ -79,7 +79,7 @@ def run(
     tasks_to_run = [
         task_script.main(  # type: ignore
             sample_rates=sample_rates,
-            luigi_dir=luigi_dir,
+            tmp_dir=tmp_dir,
             tasks_dir=tasks_dir,
             small=small,
         )
