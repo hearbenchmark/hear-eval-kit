@@ -33,6 +33,8 @@ wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_ba
 2) Compute the embeddings for all the tasks
 ```
 python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt
+    [--tasks-dir tasks]
+    [--embeddings-dir embeddings]
 ```
 
 This assumes that your current working directory contains a folder
@@ -43,11 +45,6 @@ the option `--tasks-dir`.
 By default embeddings will be computed in a folder named `embeddings`
 in the current working directory. To generate in a different location
 use the option `--embeddings-dir`.
-```
-python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt \
-    --tasks-dir /path/to/tasks 
-    --embeddings-dir /path/to/embeddings
-```
 
 ### Downstream Evaluation
 
@@ -58,24 +55,19 @@ found in the `task_metadata.json` inside every task directory.
 
 1) Train the shallow model and generate the test set predictions for each task
 ```
-python3 -m heareval.predictions.runner $module --model path/to/model
+python3 -m heareval.predictions.runner $module --model path/to/model \
+    [--embeddings-dir embeddings]
 ```
 
 2) Evaluate the generated predictions for the test set
 ```
-python3 -m heareval.evaluation.runner
+python3 -m heareval.evaluation.runner \
+    [--embeddings-dir embeddings]
 ```
 
 By default, both the steps above assume a folder named `embeddings`,
 generated in the compute embeddings step. If this directory is
-different, the option `--embeddings-dir` can be used:
-
-```
-$ python3 -m heareval.predictions.runner $module --model path/to/model \
-    --embeddings-dir /path/to/embeddings
-$ python3 -m heareval.evaluation.runner \
-    --embeddings-dir /path/to/embeddings
-```
+different, the option `--embeddings-dir` can be used.
 
 Running the above will generate `evaluation_results.json` in the
 current working directory containing the evalution scores for each
