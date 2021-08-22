@@ -24,10 +24,19 @@ from heareval.embeddings.task_embeddings import Embedding, task_embeddings
     help="Location of tasks to compute embeddings on",
     type=str,
 )
-def runner(module: str, model: str = None, tasks_dir: str = "tasks") -> None:
+@click.option(
+    "--embeddings-dir", default="embeddings", help="Location to save task embeddings"
+)
+def runner(
+    module: str,
+    model: str = None,
+    tasks_dir: str = "tasks",
+    embeddings_dir: str = "embeddings",
+) -> None:
 
     # Check for directory containing the tasks
     tasks_dir_path = Path(tasks_dir)
+    embeddings_dir_path = Path(embeddings_dir)
     if not tasks_dir_path.is_dir():
         raise ValueError(
             "Cannot locate directory containing tasks. "
@@ -41,7 +50,7 @@ def runner(module: str, model: str = None, tasks_dir: str = "tasks") -> None:
     tasks = list(tasks_dir_path.iterdir())
     for task_path in tqdm(tasks):
         print(f"Computing embeddings for {task_path.name}")
-        task_embeddings(embedding, task_path)
+        task_embeddings(embedding, task_path, embeddings_dir_path)
 
 
 if __name__ == "__main__":

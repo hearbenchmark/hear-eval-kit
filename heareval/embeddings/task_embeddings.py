@@ -349,7 +349,7 @@ def memmap_embeddings(
         ).write(json.dumps(filename_timestamps, indent=4))
 
 
-def task_embeddings(embedding: Embedding, task_path: Path):
+def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path):
     prng = random.Random()
     prng.seed(0)
 
@@ -359,7 +359,7 @@ def task_embeddings(embedding: Embedding, task_path: Path):
 
     # TODO: Would be good to include the version here
     # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
-    embed_dir = Path("embeddings").joinpath(embedding.name)
+    embed_dir = embeddings_dir.joinpath(embedding.name)
 
     task_name = task_path.name
     embed_task_dir = embed_dir.joinpath(task_name)
@@ -373,16 +373,16 @@ def task_embeddings(embedding: Embedding, task_path: Path):
     shutil.copy(label_vocab_path, embed_task_dir)
 
     for split in metadata["splits"]:
-        print(f"Getting embeddings for split: {split['name']}")
+        print(f"Getting embeddings for split: {split}")
 
-        split_path = task_path.joinpath(f"{split['name']}.json")
+        split_path = task_path.joinpath(f"{split}.json")
         assert split_path.is_file()
 
         # Copy over the ground truth labels as they may be needed for evaluation
         shutil.copy(split_path, embed_task_dir)
 
         # Root directory for audio files for this split
-        audio_dir = task_path.joinpath(str(embedding.sample_rate), split["name"])
+        audio_dir = task_path.joinpath(str(embedding.sample_rate), split)
 
         # TODO: We might consider skipping files that already
         # have embeddings on disk, for speed
@@ -393,7 +393,7 @@ def task_embeddings(embedding: Embedding, task_path: Path):
         split_data = json.load(split_path.open())
         dataloader = get_dataloader_for_embedding(split_data, audio_dir, embedding, 4)
 
-        outdir = embed_dir.joinpath(task_path.name, split["name"])
+        outdir = embed_dir.joinpath(task_path.name, split)
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
@@ -420,6 +420,4 @@ def task_embeddings(embedding: Embedding, task_path: Path):
                     f"Unknown embedding type: {metadata['embedding_type']}"
                 )
 
-        memmap_embeddings(
-            outdir, prng, metadata, split["name"], embed_dir, task_path.name
-        )
+        memmap_embeddings(outdir, prng, metadata, split, embed_dir, task_path.name)
