@@ -15,10 +15,13 @@ TODO:
 """
 
 import json
+import math
 import pickle
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, DefaultDict, Dict, List, Tuple
 
+import more_itertools
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
@@ -70,7 +73,7 @@ class RandomProjectionPrediction(torch.nn.Module):
         return x
 
 
-class PredictionModel(pl.LightningModule):
+class AbstractPredictionModel(pl.LightningModule):
     def __init__(
         self,
         nfeatures: int,
@@ -83,6 +86,9 @@ class PredictionModel(pl.LightningModule):
 
         self.predictor = RandomProjectionPrediction(nfeatures, nlabels, prediction_type)
         self.label_to_idx = label_to_idx
+        self.idx_to_label: Dict[int, str] = {
+            idx: label for (label, idx) in self.label_to_idx.items()
+        }
         self.scores = scores
 
     def forward(self, x):
@@ -91,7 +97,7 @@ class PredictionModel(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
         # It is independent of forward
-        x, y = batch
+        x, y, _ = batch
         y_hat = self.predictor.forward_logit(x)
         loss = self.predictor.logit_loss(y_hat, y)
         # Logging to TensorBoard by default
@@ -99,18 +105,149 @@ class PredictionModel(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        x, y = batch
+        # -> Dict[str, Union[torch.Tensor, List(str)]]:
+        x, y, metadata = batch
         y_hat = self.predictor.forward_logit(x)
-        loss = self.predictor.logit_loss(y_hat, y)
         y_pr = self.predictor(x)
-        # Logging to TensorBoard by default
-        self.log("val_loss", loss, prog_bar=True)
-        for score in self.scores:
-            self.log(f"val_{score}", score(y_pr, y), prog_bar=True)
+        z = {
+            "prediction": y_pr,
+            "prediction_logit": y_hat,
+            "target": y,
+        }
+        # https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
+        return {**z, **metadata}
+
+    # Implement this for each inheriting class
+    # TODO: Can we combine the boilerplate for both of these?
+    def validation_epoch_end(self, outputs):
+        raise NotImplementedError("Implement this in children")
+
+    def _flatten_batched_outputs(
+        self,
+        outputs,  #: Union[torch.Tensor, List[str]],
+        keys: List[str],
+        dont_stack: List[str] = [],
+    ) -> Dict:
+        # ) -> Dict[str, Union[torch.Tensor, List[str]]]:
+        flat_outputs_default: DefaultDict = defaultdict(list)
+        for output in outputs:
+            assert set(output.keys()) == set(keys)
+            for key in keys:
+                flat_outputs_default[key] += output[key]
+        flat_outputs = dict(flat_outputs_default)
+        for key in keys:
+            if key in dont_stack:
+                continue
+            else:
+                flat_outputs[key] = torch.stack(flat_outputs[key])
+        return flat_outputs
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
+
+
+class ScenePredictionModel(AbstractPredictionModel):
+    """
+    Prediction model with simple scoring over entire audio scenes.
+    """
+
+    def __init__(
+        self,
+        nfeatures: int,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        prediction_type: str,
+        scores: List[ScoreFunction],
+    ):
+        super().__init__(
+            nfeatures=nfeatures,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=prediction_type,
+            scores=scores,
+        )
+
+    def validation_epoch_end(self, outputs):
+        flat_outputs = self._flatten_batched_outputs(
+            outputs, keys=["target", "prediction", "prediction_logit"]
+        )
+        target, prediction, prediction_logit = (
+            flat_outputs[key] for key in ["target", "prediction", "prediction_logit"]
+        )
+
+        end_scores = {}
+        end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
+
+        for score in self.scores:
+            end_scores[f"val_{score}"] = score(
+                prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
+            )
+        for score in end_scores:
+            self.log(score, end_scores[score], prog_bar=True)
+        return end_scores
+
+
+class EventPredictionModel(AbstractPredictionModel):
+    """
+    Event prediction model. For validation (and test),
+    we combine timestamp events that are adjacent,
+    but discard ones that are too short.
+    """
+
+    def __init__(
+        self,
+        nfeatures: int,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        prediction_type: str,
+        scores: List[ScoreFunction],
+        validation_target_events: Dict[str, List[Dict[str, Any]]],
+    ):
+        super().__init__(
+            nfeatures=nfeatures,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=prediction_type,
+            scores=scores,
+        )
+        self.validation_target_events = validation_target_events
+
+    def validation_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
+        flat_outputs = self._flatten_batched_outputs(
+            outputs,
+            keys=["target", "prediction", "prediction_logit", "filename", "timestamp"],
+            # This is a list of string, not tensor, so we don't need to stack it
+            dont_stack=["filename"],
+        )
+        target, prediction, prediction_logit, filename, timestamp = (
+            flat_outputs[key]
+            for key in [
+                "target",
+                "prediction",
+                "prediction_logit",
+                "filename",
+                "timestamp",
+            ]
+        )
+
+        predicted_events = get_events_for_all_files(
+            prediction, filename, timestamp, self.idx_to_label
+        )
+
+        end_scores = {}
+        end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
+
+        for score in self.scores:
+            end_scores[f"val_{score}"] = score(
+                predicted_events, self.validation_target_events
+            )
+            # Weird, this can happen if precision has zero guesses
+            if math.isnan(end_scores[f"val_{score}"]):
+                end_scores[f"val_{score}"] = 0.0
+        for score_name in end_scores:
+            self.log(score_name, end_scores[score_name], prog_bar=True)
+        return end_scores
 
 
 class SplitMemmapDataset(Dataset):
@@ -126,11 +263,13 @@ class SplitMemmapDataset(Dataset):
         label_to_idx: Dict[str, int],
         nlabels: int,
         split_name: str,
+        embedding_type: str,
     ):
         self.embedding_path = embedding_path
         self.label_to_idx = label_to_idx
         self.nlabels = nlabels
         self.split_name = split_name
+        self.embedding_type = embedding_type
 
         self.dim = tuple(
             json.load(
@@ -146,43 +285,70 @@ class SplitMemmapDataset(Dataset):
         self.labels = pickle.load(
             open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
         )
+        # Only used for event-based prediction
+        # For timestamp (event) embedding tasks,
+        # the metadata for each instance is {filename: , timestamp: }.
+        if self.embedding_type == "event":
+            filename_timestamps_json = embedding_path.joinpath(
+                f"{split_name}.filename-timestamps.json"
+            )
+            self.metadata = [
+                {"filename": filename, "timestamp": timestamp}
+                for filename, timestamp in json.load(open(filename_timestamps_json))
+            ]
+        else:
+            self.metadata = [{}] * self.dim[0]
         assert len(self.labels) == self.dim[0]
-        assert (
-            self.embedding_memmap[0].shape[0] == self.dim[1]
-        ), f"{self.embedding_memmap[0].shape[0]}, {self.dim[1]}"
+        assert len(self.labels) == len(self.embedding_memmap)
+        assert len(self.labels) == len(self.metadata)
+        assert self.embedding_memmap[0].shape[0] == self.dim[1]
 
     def __len__(self) -> int:
         return self.dim[0]
 
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, Any]]:
         """
         For all labels, return a multi or one-hot vector.
         This allows us to have tensors that are all the same shape.
         Later we reduce this with an argmax to get the vocabulary indices.
+            We also include the filename and timestamp, which we need
+        for evaluation of timestamp (event) tasks.
+        We also return the metadata as a Dict.
         """
         x = self.embedding_memmap[idx]
         y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
         # Lame special case
         if not y:
-            return x, torch.zeros((self.nlabels,), dtype=torch.int32)
+            return (
+                x,
+                # BCEWithLogitsLoss wants float not long targets
+                torch.zeros((self.nlabels,), dtype=torch.int32).float(),
+                self.metadata[idx],
+            )
         # TODO: Could rewrite faster using scatter_:
         # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
         return (
             x,
+            # BCEWithLogitsLoss wants float not long targets
             torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
             .max(axis=0)
-            .values,
+            .values.float(),
+            self.metadata[idx],
         )
 
 
 def create_events_from_prediction(
     prediction_dict: Dict[float, torch.Tensor],
     threshold: float = 0.5,
+    # TODO: Honestly this stuff belongs in the scoring method
+    # Like when you choose the event scoring approach, it should pick this
+    # and wrap it somewhere else.
     min_duration=60.0,
 ) -> IntervalTree:
     """
-    Takes a set of prediction tensors keyed on timestamps and generates events. This
-    converts the prediction tensor to a binary label based on the threshold value. Any
+    Takes a set of prediction tensors keyed on timestamps and generates events.
+    (This is for one particular audio scene.)
+    We convert the prediction tensor to a binary label based on the threshold value. Any
     events occurring at adjacent timestamps are considered to be part of the same event.
     This loops through and creates events for each label class. Disregards events that
     are less than the min_duration milliseconds.
@@ -198,12 +364,16 @@ def create_events_from_prediction(
     Returns:
         An IntervalTree object containing all the events from the predictions.
     """
+    # print("prediction_dict", prediction_dict)
+
     # Make sure the timestamps are in the correct order
     timestamps = np.array(sorted(prediction_dict.keys()))
+    # print("timestamps", timestamps)
 
     # Create a sorted numpy matrix of frame level predictions for this file. We convert
     # to a numpy array here before applying a median filter.
     predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
+    # print("predictions", predictions)
 
     # We can apply a median filter here to smooth out events, but b/c participants
     # can select their own timestamp interval, selecting the filter window becomes
@@ -216,44 +386,32 @@ def create_events_from_prediction(
     # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
 
-    # Difference between each timestamp to find event boundaries
-    pred_diff = np.diff(predictions, axis=0)
-
-    # This is slow, but for each class look through all the timestamp predictions
-    # and construct a set of events with onset and offset timestamps.
     event_tree = IntervalTree()
-    for class_idx in range(predictions.shape[1]):
-        # Check to see if this starts with an active event
-        current_event = []
-        if predictions[0][class_idx] == 1:
-            assert pred_diff[0][class_idx] != 1
-            current_event = [timestamps[0]]
+    for label in range(predictions.shape[1]):
+        for group in more_itertools.consecutive_groups(
+            np.where(predictions[:, label])[0]
+        ):
+            grouptuple = tuple(group)
+            startidx, endidx = (grouptuple[0], grouptuple[-1])
 
-        for t in range(pred_diff.shape[0]):
-            # New onset
-            if pred_diff[t][class_idx] == 1:
-                assert len(current_event) == 0
-                current_event = [timestamps[t]]
+            start = timestamps[startidx]
+            end = timestamps[endidx]
+            # Add event if greater than the minimum duration threshold
+            if end - start >= min_duration:
+                # We probably don't need this interval tree and can remove it maybe
+                # from requirements
+                event_tree.addi(begin=start, end=end, data=label)
 
-            # Offset for current event
-            elif pred_diff[t][class_idx] == -1:
-                assert len(current_event) == 1
-                current_event.append(timestamps[t + 1])
-                event_duration = current_event[1] - current_event[0]
-
-                # Add event if greater than the minimum duration threshold
-                if event_duration >= min_duration:
-                    event_tree.addi(
-                        begin=current_event[0], end=current_event[1], data=class_idx
-                    )
-                current_event = []
-
+    # Er why return an intervaltree when we immediately postprocess it to a dict?
     return event_tree
 
 
 def get_events_for_all_files(
-    predictions: torch.Tensor, file_timestamps: List, label_vocab: pd.DataFrame
-) -> Dict[str, List]:
+    predictions: torch.Tensor,
+    filenames: List[str],
+    timestamps: torch.Tensor,
+    idx_to_label: Dict[int, str],
+) -> Dict[str, List[Dict[str, Any]]]:
     """
     Produces lists of events from a set of frame based label probabilities.
     The input prediction tensor may contain frame predictions from a set of different
@@ -265,19 +423,23 @@ def get_events_for_all_files(
 
     Args:
         predictions: a tensor of frame based multi-label predictions.
-        file_timestamps: a list of filenames and timestamps where each entry corresponds
+        filenames: a list of filenames where each entry corresponds
             to a frame in the predictions tensor.
-        label_vocab: The set of labels and their associated int idx
+        timestamps: a list of timestamps where each entry corresponds
+            to a frame in the predictions tensor.
+        idx_to_label: Index to label mapping.
 
     Returns:
-        A dictionary of lists of events keyed on the filename slug
+        A dictionary of lists of events keyed on the filename slug.
+        The event list is of dicts of the following format:
+            {"label": str, "start": float ms, "end": float ms}
     """
     # This probably could be more efficient if we make the assumption that
     # timestamps are in sorted order. But this makes sure of it.
-    assert predictions.shape[0] == len(file_timestamps)
+    assert predictions.shape[0] == len(filenames)
+    assert predictions.shape[0] == len(timestamps)
     event_files: Dict[str, Dict[float, torch.Tensor]] = {}
-    for i, file_timestamp in enumerate(file_timestamps):
-        filename, timestamp = file_timestamp
+    for i, (filename, timestamp) in enumerate(zip(filenames, timestamps)):
         slug = Path(filename).name
 
         # Key on the slug to be consistent with the ground truth
@@ -287,18 +449,17 @@ def get_events_for_all_files(
         # Save the predictions for the file keyed on the timestamp
         event_files[slug][float(timestamp)] = predictions[i]
 
-    # Dictionary of labels: {idx -> label}
-    label_dict = label_vocab.set_index("idx").to_dict()["label"]
-
     # Create events for all the different files. Store all the events as a dictionary
     # with the same format as the ground truth from the luigi pipeline.
     # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
     event_dict = {}
     for slug, timestamp_predictions in tqdm(event_files.items()):
+        # print(timestamp_predictions)
         event_tree = create_events_from_prediction(timestamp_predictions)
         events = []
         for interval in sorted(event_tree):
-            label = label_dict[interval.data]
+            # TODO: Do this earlier?
+            label = idx_to_label[interval.data]
             # TODO: start and end? Let's use begin and end like interval tree?
             events.append(
                 {"label": label, "start": interval.begin, "end": interval.end}
@@ -322,6 +483,7 @@ def dataloader_from_split_name(
     embedding_path: Path,
     label_to_idx: Dict[str, int],
     nlabels: int,
+    embedding_type: str,
     batch_size: int = 64,
 ) -> DataLoader:
     print(f"Getting embeddings for split: {split_name}")
@@ -332,6 +494,7 @@ def dataloader_from_split_name(
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             split_name=split_name,
+            embedding_type=embedding_type,
         ),
         batch_size=batch_size,
         # We don't shuffle because it's slow.
@@ -349,31 +512,62 @@ def task_predictions_train(
     nlabels: int,
     scores: List[ScoreFunction],
 ) -> torch.nn.Module:
-    predictor = PredictionModel(
-        embedding_size, label_to_idx, nlabels, metadata["prediction_type"], scores
-    )
+    predictor: AbstractPredictionModel
+    if metadata["embedding_type"] == "event":
+        validation_target_events = json.load(
+            embedding_path.joinpath("valid.json").open()
+        )
+        predictor = EventPredictionModel(
+            nfeatures=embedding_size,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=metadata["prediction_type"],
+            scores=scores,
+            validation_target_events=validation_target_events,
+        )
+    elif metadata["embedding_type"] == "scene":
+        predictor = ScenePredictionModel(
+            nfeatures=embedding_size,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            prediction_type=metadata["prediction_type"],
+            scores=scores,
+        )
+    else:
+        raise ValueError(f"Unknown embedding_type {metadata['embedding_type']}")
 
     # First score is the target
     target_score = f"val_{str(scores[0])}"
 
-    checkpoint_callback = ModelCheckpoint(monitor=target_score, mode="max")
+    if scores[0].maximize:
+        mode = "max"
+    else:
+        mode = "min"
+    checkpoint_callback = ModelCheckpoint(monitor=target_score, mode=mode)
     early_stop_callback = EarlyStopping(
-        monitor=target_score, min_delta=0.00, patience=10, verbose=False, mode="max"
+        # TODO: Tune these
+        monitor=target_score,
+        min_delta=0.00,
+        patience=50,
+        verbose=False,
+        mode=mode,
     )
 
     # train on CPU
     # TODO: FIXME
     trainer = pl.Trainer(callbacks=[checkpoint_callback, early_stop_callback])
     train_dataloader = dataloader_from_split_name(
-        "train", embedding_path, label_to_idx, nlabels
+        "train", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     valid_dataloader = dataloader_from_split_name(
-        "valid", embedding_path, label_to_idx, nlabels
+        "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     return predictor
 
 
+# This all needs to be cleaned up and simplified later.
+"""
 def task_predictions_test(
     predictor: torch.nn.Module,
     embedding_path: Path,
@@ -382,11 +576,11 @@ def task_predictions_test(
     nlabels: int,
 ):
     dataloader = dataloader_from_split_name(
-        "test", embedding_path, label_to_idx, nlabels
+        "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
 
     all_predicted_labels = []
-    for embs, target_labels in tqdm(dataloader):
+    for embs, target_labels, filenames, timestamps in tqdm(dataloader):
         predicted_labels = predictor(embs)
         # TODO: Uses less memory to stack them one at a time
         all_predicted_labels.append(predicted_labels)
@@ -402,6 +596,8 @@ def task_predictions_test(
         file_timestamps = json.load(
             embedding_path.joinpath("test.filename-timestamps.json").open()
         )
+
+        # Can probably remove this stuff?
 
         print("Creating events from predictions:")
         # Probably don't need label_vocab any more since we have label_to_idx
@@ -420,6 +616,7 @@ def task_predictions_test(
         predicted_labels,
         open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
+"""
 
 
 def task_predictions(
@@ -437,11 +634,12 @@ def task_predictions(
 
     label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
     scores = [
-        available_scores[score](metadata, label_to_idx)
+        available_scores[score](label_to_idx=label_to_idx)
         for score in metadata["evaluation"]
     ]
 
-    predictor = task_predictions_train(
+    # predictor =
+    task_predictions_train(
         embedding_path=embedding_path,
         embedding_size=embedding_size,
         metadata=metadata,
@@ -449,6 +647,8 @@ def task_predictions(
         nlabels=nlabels,
         scores=scores,
     )
+    # TODO: Do something with me
+    """
     task_predictions_test(
         predictor=predictor,
         embedding_path=embedding_path,
@@ -456,3 +656,4 @@ def task_predictions(
         label_to_idx=label_to_idx,
         nlabels=nlabels,
     )
+    """

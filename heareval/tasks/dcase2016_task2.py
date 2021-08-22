@@ -36,8 +36,6 @@ config = {
             "md5": "ac98768b39a08fc0c6c2ddd15a981dd7",
         },
     ],
-    # TODO: FIXME
-    # Want different for train and test?
     "sample_duration": 120.0,
     "dataset_fraction": None,
     "splits": ["train", "test", "valid"],
@@ -61,7 +59,7 @@ config = {
     # their main score and then the onset only event based F1 as
     # their secondary score.
     # However, we announced that onset F1 would be our primary score.
-    "evaluation": ["onset_only_event_based", "segment_based"],
+    "evaluation": ["event_onset_200ms_fms", "segment_1s_er"],
 }
 
 
@@ -121,13 +119,13 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
 def main(
     sample_rates: List[int],
-    luigi_dir: str,
+    work_dir: str,
     tasks_dir: str,
     small: bool = False,
 ):
     if small:
         config.update(dict(config["small"]))  # type: ignore
-    config.update({"luigi_dir": luigi_dir})
+    config.update({"work_dir": work_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)

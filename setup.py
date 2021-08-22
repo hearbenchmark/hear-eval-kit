@@ -25,7 +25,7 @@ setup(
         "Source Code": "https://github.com/neuralaudio/hear2021-eval-kit",
     },
     packages=find_packages(exclude=("tests",)),
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     entry_points={
         "console_scripts": ["hear2021_tasks_coughvid=heareval.tasks.coughvid:main"]
     },
@@ -36,6 +36,7 @@ setup(
         "intervaltree",
         "librosa",
         "luigi",
+        "more-itertools",
         "numpy",
         "pandas",
         "pytorch-lightning",

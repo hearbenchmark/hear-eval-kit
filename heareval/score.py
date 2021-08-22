@@ -7,6 +7,8 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import sed_eval
+
+# Can we get away with not using DCase for every event-based evaluation??
 from dcase_util.containers import MetaDataContainer
 
 
@@ -31,17 +33,23 @@ class ScoreFunction:
     A simple abstract base class for score functions
     """
 
-    # TODO: Remove task_metadata since we don't use it much
+    # TODO: Remove label_to_idx?
     def __init__(
         self,
-        task_metadata: Dict,
         label_to_idx: Dict[str, int],
         name: Optional[str] = None,
+        maximize: bool = True,
     ):
-        self.task_metadata = task_metadata
+        """
+        :param label_to_idx: Map from label string to integer index.
+        :param name: Override the name of this scoring function.
+        :param maximize: Maximize this score? (Otherwise, it's a loss or energy
+            we want to minimize, and I guess technically isn't a score.)
+        """
         self.label_to_idx = label_to_idx
         if name:
             self.name = name
+        self.maximize = maximize
 
     def __call__(self, predictions: Any, targets: Any, **kwargs) -> float:
         """
@@ -53,8 +61,8 @@ class ScoreFunction:
         return self.name
 
 
-class Top1Error(ScoreFunction):
-    name = "top1_err"
+class Top1Accuracy(ScoreFunction):
+    name = "top1_acc"
 
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
@@ -73,15 +81,15 @@ class Top1Error(ScoreFunction):
         return correct / len(targets)
 
 
-class ChromaError(ScoreFunction):
+class ChromaAccuracy(ScoreFunction):
     """
     Score specifically for pitch detection -- converts all pitches to chroma first.
     This score ignores octave errors in pitch classification.
     """
 
-    name = "chroma_err"
+    name = "chroma_acc"
 
-    def __call__(self, predictions: np.ndarray, targets: List, **kwargs) -> float:
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         # Compute the number of correct predictions
         correct = 0
         for target, prediction in zip(targets, predictions):
@@ -107,10 +115,21 @@ class SoundEventScore(ScoreFunction):
     score_class: sed_eval.sound_event.SoundEventMetrics = None
 
     def __init__(
-        self, task_metadata: Dict, label_to_idx: Dict[str, int], params: Dict = None
+        self,
+        label_to_idx: Dict[str, int],
+        score: str,
+        params: Dict = {},
+        name: Optional[str] = None,
+        maximize: bool = True,
     ):
-        super().__init__(task_metadata=task_metadata, label_to_idx=label_to_idx)
-        self.params = params if params is not None else {}
+        """
+        :param score: Score to use, from the list of overall SED eval scores.
+        :param params: Parameters to pass to the scoring function,
+                       see inheriting children for details.
+        """
+        super().__init__(label_to_idx=label_to_idx, name=name, maximize=maximize)
+        self.score = score
+        self.params = params
         assert self.score_class is not None
 
     def __call__(self, predictions: Dict, targets: Dict, **kwargs):
@@ -131,13 +150,14 @@ class SoundEventScore(ScoreFunction):
             )
 
         # This (and segment_based_scores) return a pretty large selection of scores.
-        # We might want to add a task_metadata option to filter these for the specific
-        # score that we are going to use to evaluate the task.
-        overall_scores = scores.results_overall_scores()
-        return overall_scores
+        overall_scores = scores.results_overall_metrics()
+        # Keep the specific score we want
+        return overall_scores[self.score][self.score]
 
     @staticmethod
-    def sed_eval_event_container(x: Dict) -> MetaDataContainer:
+    def sed_eval_event_container(
+        x: Dict[str, List[Dict[str, Any]]]
+    ) -> MetaDataContainer:
         # Reformat event list for sed_eval
         reference_events = []
         for filename, event_list in x.items():
@@ -171,7 +191,7 @@ class EventBasedScore(SoundEventScore):
     event-based scores - the ground truth and system output are compared at
     event instance level;
 
-    See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedScores.html # noqa: E501
+    See https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedMetrics.html # noqa: E501
     for params.
     """
 
@@ -179,11 +199,26 @@ class EventBasedScore(SoundEventScore):
 
 
 available_scores: Dict[str, Callable] = {
-    "top1_err": Top1Error,
-    "pitch_err": partial(Top1Error, name="pitch_err"),
-    "chroma_err": ChromaError,
-    "onset_only_event_based": partial(
-        EventBasedScore, params={"evaluate_offset": False, "t_collar": 0.2}
+    "top1_acc": Top1Accuracy,
+    "pitch_acc": partial(Top1Accuracy, name="pitch_acc"),
+    "chroma_acc": ChromaAccuracy,
+    # https://tut-arg.github.io/sed_eval/generated/sed_eval.sound_event.EventBasedMetrics.html
+    "event_onset_200ms_fms": partial(
+        EventBasedScore,
+        name="event_onset_200ms_fms",
+        score="f_measure",
+        params={
+            "evaluate_onset": True,
+            "evaluate_offset": False,
+            "t_collar": 0.2,
+            "percentage_of_length": 0.5,
+        },
     ),
-    "segment_based": SegmentBasedScore,
+    "segment_1s_er": partial(
+        SegmentBasedScore,
+        name="segment_1s_er",
+        score="error_rate",
+        params={"time_resolution": 1.0},
+        maximize=False,
+    ),
 }
