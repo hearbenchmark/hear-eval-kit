@@ -64,7 +64,7 @@ config = {
         "version": "v2.2.3-small",
         "dataset_fraction": None,
     },
-    "evaluation": ["pitch_err", "chroma_err"],
+    "evaluation": ["pitch_acc", "chroma_acc"],
 }
 
 
@@ -121,13 +121,13 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
 def main(
     sample_rates: List[int],
-    luigi_dir: str,
+    work_dir: str,
     tasks_dir: str,
     small: bool = False,
 ):
     if small:
         config.update(dict(config["small"]))  # type: ignore
-    config.update({"luigi_dir": luigi_dir})
+    config.update({"work_dir": work_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)
