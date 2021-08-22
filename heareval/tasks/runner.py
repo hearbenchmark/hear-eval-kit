@@ -11,8 +11,8 @@ import click
 
 import heareval.tasks.dcase2016_task2 as dcase2016_task2
 import heareval.tasks.nsynth_pitch as nsynth_pitch
-import heareval.tasks.speech_commands as speech_commands
 import heareval.tasks.pipeline as pipeline
+import heareval.tasks.speech_commands as speech_commands
 
 logger = logging.getLogger("luigi-interface")
 

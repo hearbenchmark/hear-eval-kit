@@ -58,7 +58,7 @@ config = {
         "version": "v0.0.2-small",
         "dataset_fraction": None,
     },
-    "evaluation": ["top1_err"],
+    "evaluation": ["top1_acc"],
 }
 
 

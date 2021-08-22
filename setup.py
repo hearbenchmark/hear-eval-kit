@@ -36,6 +36,7 @@ setup(
         "intervaltree",
         "librosa",
         "luigi",
+        "more-itertools",
         "numpy",
         "pandas",
         "pytorch-lightning",

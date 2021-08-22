@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 """
-Contains a set of various evaluation scores. Runs evaluation on the test predictions
-for predictions on a HEAR task.
-Would it make sense to move all the score functions over to a file called scores?
-
-TODO: Fix AUC
+Runs evaluation on the test predictions for predictions on a HEAR task.
 """
 
 import json
@@ -83,7 +79,8 @@ def task_evaluation(task_path: Path):
     results = {}
     for score in scores:
         print("  -", score)
-        score_function = available_scores[score](metadata, label_to_idx)
+        # score_function = available_scores[score](metadata, label_to_idx)
+        score_function = available_scores[score](label_to_idx=label_to_idx)
         new_results = score_function(np.array(predictions), np.array(targets))
         results.update({score: new_results})
 
