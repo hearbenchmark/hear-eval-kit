@@ -172,7 +172,7 @@ class ExtractMetadata(WorkTask):
         The basic version here takes the filename and slugifies it.
         """
         slug_text = str(Path(relative_path).stem)
-        slug_text = slug_text.replace('-', '_negative_')
+        slug_text = slug_text.replace("-", "_negative_")
         return f"{slugify(slug_text)}"
 
     @staticmethod
