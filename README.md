@@ -123,7 +123,8 @@ python3 -m heareval.tasks.runner [speech_commands|nsynth_pitch|dcase2016_task2]
 
 Each pipeline will download and preprocess each dataset according
 to the following DAG:
-* download and extract datafiles
+* DownloadCorpus
+* ExtractArchive
 * ExtractMetadata
 * SubsampleSplit (subsample each split) => MonoWavTrimCorpus => SplitData (symlinks)
 * SplitData => {SplitMetadata, ResampleSubcorpus}

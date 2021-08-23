@@ -120,8 +120,9 @@ class ExtractMetadata(WorkTask):
     """
     This is an abstract class that extracts metadata over the full
     dataset.
-    This is where splitting ACTUALLY occurs. [correct?]
-    Based upon the choice of metadata.
+    If we detect that the original dataset doesn't have a full
+    train/valid/test split, we extract 20% validation/test if it
+    is missing.
 
     We create a metadata csv file that will be used by downstream
     luigi tasks to curate the final dataset.
@@ -253,6 +254,23 @@ class ExtractMetadata(WorkTask):
         are not found
         This uses the split key to do the split with the which set function.
         """
+
+        splits_present = metadata["split"].unique()
+
+        # The metadata should at least have the train split
+        # test and valid if not found in the metadata can be sampled
+        # from the train
+        assert "train" in splits_present, "Train split not found in metadata"
+        splits_to_sample = set(SPLITS).difference(splits_present)
+        print(
+            f"Splits not already present in the dataset, now sampled with split key are: {splits_to_sample}"
+        )
+
+        # Depending on whether valid and test are already present, the percentage can
+        # either be the predefined percentage or 0
+        valid_perc = VALIDATION_PERCENTAGE if "valid" in splits_to_sample else 0
+        test_perc = TESTING_PERCENTAGE if "test" in splits_to_sample else 0
+
         metadata[metadata["split"] == "train"] = metadata[
             metadata["split"] == "train"
         ].assign(
