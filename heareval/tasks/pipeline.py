@@ -850,9 +850,14 @@ def run(task: Union[List[luigi.Task], luigi.Task], num_workers: int):
     if isinstance(task, luigi.Task):
         task = [task]
 
-    luigi.build(
+    luigi_run_result = luigi.build(
         task,
         workers=num_workers,
         local_scheduler=True,
         log_level="INFO",
+        detailed_summary=True,
     )
+    assert luigi_run_result.status in [
+        luigi.execution_summary.LuigiStatusCode.SUCCESS,
+        luigi.execution_summary.LuigiStatusCode.SUCCESS_WITH_RETRY,
+    ], f"Received luigi_run_result.status = {luigi_run_result.status}"
