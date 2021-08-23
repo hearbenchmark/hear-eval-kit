@@ -29,3 +29,4 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+        python3 -m heareval.tasks.runner --small all
