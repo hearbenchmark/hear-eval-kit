@@ -36,17 +36,17 @@ AUDIOFORMATS = [".mp3", ".wav", ".ogg"]
 
 configs = {
     "nsynth_pitch": {
-        "task_config": nsynth_pitch.config,
+        "task_config": nsynth_pitch.task_config,
         "audio_sample_size": 100,
         "necessary_keys": [],
     },
     "speech_commands": {
-        "task_config": speech_commands.config,
+        "task_config": speech_commands.task_config,
         "audio_sample_size": 100,
         "necessary_keys": [],
     },
     "dcase2016_task2": {
-        "task_config": dcase2016_task2.config,
+        "task_config": dcase2016_task2.task_config,
         "audio_sample_size": 4,
         # Put two files from the dev and train split so that those splits are
         # made
@@ -65,7 +65,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
     audio_sample_size = luigi.Parameter()
 
     def requires(self):
-        return pipeline.get_download_and_extract_tasks(self.data_config)
+        return pipeline.get_download_and_extract_tasks(self.task_config)
 
     @staticmethod
     def safecopy(dst, src):
@@ -121,7 +121,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
         return metadata_files + necessary_files + sampled_audio_files
 
     def run(self):
-        for url_obj in self.data_config["small"]["download_urls"]:
+        for url_obj in self.task_config["small"]["download_urls"]:
             # Sample a small subset to copy from all the files
             url_name = Path(urlparse(url_obj["url"]).path).stem
             split = url_obj["name"]
@@ -153,7 +153,7 @@ def main(task: str, num_workers: Optional[int] = None):
     logger.info(f"Using {num_workers} workers")
     config = configs[task]
     sampler = RandomSampleOriginalDataset(
-        data_config=config["task_config"],
+        task_config=config["task_config"],
         audio_sample_size=config["audio_sample_size"],
         necessary_keys=config["necessary_keys"],
     )

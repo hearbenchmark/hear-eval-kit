@@ -417,7 +417,7 @@ class SubsampleSplit(WorkTask):
         num_files = len(metadata)
         # This might round badly for small corpora with long audio :\
         # TODO: Issue to check for this
-        sample_duration = self.data_config["sample_duration"]
+        sample_duration = self.task_config["sample_duration"]
         max_files = int(MAX_TASK_DURATION_BY_SPLIT[self.split] / sample_duration)
         if num_files > max_files:
             print(
