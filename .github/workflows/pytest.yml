@@ -19,12 +19,8 @@ jobs:
     - name: apt-get
       run: |
         sudo apt-get update
-        # ffmpeg >= 4.2 for focal
+        # ffmpeg >= 4.2 for focal ubuntu
         sudo apt-get install -y libsndfile-dev ffmpeg
-        ## ffmpeg >= 4.2
-        #sudo add-apt-repository ppa:jonathonf/ffmpeg-4
-        #sudo apt-get update
-        #sudo apt-get install -y ffmpeg
     - name: Display Python version
       run: python -c "import sys; print(sys.version)"
     - name: python dependencies
