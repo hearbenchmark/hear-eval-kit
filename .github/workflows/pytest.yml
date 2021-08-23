@@ -19,6 +19,10 @@ jobs:
     - name: apt-get
       run: |
         sudo apt-get install -y libsndfile-dev
+        # ffmpeg >= 4.2
+        sudo add-apt-repository ppa:jonathonf/ffmpeg-4
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
     - name: Display Python version
       run: python -c "import sys; print(sys.version)"
     - name: python dependencies
@@ -30,5 +34,3 @@ jobs:
       run: |
         pytest
         LUIGI_CONFIG_PATH=heareval/tasks/luigi.cfg python3 -m heareval.tasks.runner --small all
-        # If we use this grep, it errs correctly but we don't see the output :(
-        #LUIGI_CONFIG_PATH=heareval/tasks/luigi.cfg python3 -m heareval.tasks.runner --small all 2>&1 | grep 'This progress looks :)'
