@@ -270,13 +270,14 @@ class ExtractMetadata(WorkTask):
         assert "train" in splits_present, "Train split not found in metadata"
         splits_to_sample = set(SPLITS).difference(splits_present)
         print(
-            f"Splits not already present in the dataset, now sampled with split key are: {splits_to_sample}"
+            "Splits not already present in the dataset, "
+            + f"now sampled with split key are: {splits_to_sample}"
         )
 
         # Depending on whether valid and test are already present, the percentage can
         # either be the predefined percentage or 0
         valid_perc = VALIDATION_PERCENTAGE if "valid" in splits_to_sample else 0
-        test_perc = TESTING_PERCENTAGE if "test" in splits_to_sample else 0
+        test_perc = TEST_PERCENTAGE if "test" in splits_to_sample else 0
 
         metadata[metadata["split"] == "train"] = metadata[
             metadata["split"] == "train"
