@@ -31,6 +31,13 @@ SPLITS = ["train", "valid", "test"]
 VALIDATION_PERCENTAGE = 20
 TESTING_PERCENTAGE = 20
 
+# We want no more than 5 hours of audio per task.
+MAX_TASK_DURATION_BY_SPLIT = {
+    "train": 3 * 3600,
+    "valid": 1 * 3600,
+    "test": 1 * 3600,
+}
+
 
 class DownloadCorpus(WorkTask):
     """
@@ -118,8 +125,8 @@ def get_download_and_extract_tasks(task_config: Dict):
 
 class ExtractMetadata(WorkTask):
     """
-    This is an abstract class that extracts metadata over the full
-    dataset.
+    This is an abstract class that extracts metadata (including labels)
+    over the full dataset.
     If we detect that the original dataset doesn't have a full
     train/valid/test split, we extract 20% validation/test if it
     is missing.
@@ -378,7 +385,6 @@ class SubsampleSplit(WorkTask):
     """
 
     split = luigi.Parameter()
-    max_task_duration = luigi.FloatParameter()
     metadata = luigi.TaskParameter()
 
     def requires(self):
@@ -409,13 +415,10 @@ class SubsampleSplit(WorkTask):
     def run(self):
         metadata = self.get_metadata()
         num_files = len(metadata)
-        if self.max_task_duration is None:
-            max_files = num_files
-        else:
-            # This might round badly for small corpora with long audio :\
-            # TODO: Issue to check for this
-            sample_duration = self.data_config["sample_duration"]
-            max_files = int(max_task_duration / sample_duration)
+        # This might round badly for small corpora with long audio :\
+        # TODO: Issue to check for this
+        sample_duration = self.data_config["sample_duration"]
+        max_files = int(MAX_TASK_DURATION_BY_SPLIT[self.split] / sample_duration)
         if num_files > max_files:
             print(
                 f"{num_files} audio files in corpus."

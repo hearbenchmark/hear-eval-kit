@@ -125,7 +125,8 @@ Each pipeline will download and preprocess each dataset according
 to the following DAG:
 * DownloadCorpus
 * ExtractArchive
-* ExtractMetadata
+* ExtractMetadata: Create splits over the entire corpus and find
+the label metadata for them.
 * SubsampleSplit (subsample each split) => MonoWavTrimCorpus => SplitData (symlinks)
 * SplitData => {SplitMetadata, ResampleSubcorpus}
 * SplitMetadata => MetadataVocabulary
