@@ -284,9 +284,7 @@ class ExtractMetadata(WorkTask):
         ].assign(
             split=lambda df: df["split_key"].apply(
                 # Use the which set to split the train into the required splits
-                lambda split_key: which_set(
-                    split_key, VALIDATION_PERCENTAGE, TEST_PERCENTAGE
-                )
+                lambda split_key: which_set(split_key, valid_perc, test_perc)
             )
         )
         return metadata
@@ -663,7 +661,7 @@ class MetadataVocabulary(WorkTask):
 
     def run(self):
         labelset = set()
-        # Iterate over all the files in the traintestmeta and get the
+        # Iterate over all the files in the split metadata and get the
         # split_metadata
         for split_metadata in list(self.requires()["splitmeta"].workdir.glob("*.csv")):
             labeldf = pd.read_csv(split_metadata)
@@ -775,7 +773,7 @@ class FinalizeCorpus(WorkTask):
         metadata (ExtractMetadata): task which extracts corpus level metadata
     Requires:
         resample (List(ResampleSubCorpus)): list of task which resamples each split
-        metadata (SplitMetadata): task which produces the split
+        splitmeta (SplitMetadata): task which produces the split
             level metadata
     """
 
@@ -784,14 +782,14 @@ class FinalizeCorpus(WorkTask):
     tasks_dir = luigi.Parameter()
 
     def requires(self):
-        # Will copy the resampled data and the traintestmeta and the vocabmeta
+        # Will copy the resampled data and the split metadata and the vocabmeta
         return {
             "resample": ResampleSubcorpuses(
                 sample_rates=self.sample_rates,
                 metadata=self.metadata,
                 task_config=self.task_config,
             ),
-            "metadata": SplitMetadata(
+            "splitmeta": SplitMetadata(
                 metadata=self.metadata, task_config=self.task_config
             ),
             "vocabmeta": MetadataVocabulary(
@@ -818,7 +816,7 @@ class FinalizeCorpus(WorkTask):
             self.workdir.joinpath("labelvocabulary.csv"),
         )
         # Copy the train test metadata jsons
-        src = self.requires()["traintestmeta"].workdir
+        src = self.requires()["splitmeta"].workdir
         dst = self.workdir
         for item in os.listdir(src):
             if item.endswith(".json"):
