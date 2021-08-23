@@ -171,7 +171,9 @@ class ExtractMetadata(WorkTask):
 
         The basic version here takes the filename and slugifies it.
         """
-        return f"{slugify(str(Path(relative_path).stem))}"
+        slug_text = str(Path(relative_path).stem)
+        slug_text = slug_text.replace('-', '_negative_')
+        return f"{slugify(slug_text)}"
 
     @staticmethod
     def get_stratify_key(df: DataFrame) -> Series:
@@ -221,7 +223,7 @@ class ExtractMetadata(WorkTask):
         used to ensure stable sampling for groups which are incompletely
         sampled(the last group to be part of the subsample output)
         """
-        assert "slug" in df, "relpath column not found in the dataframe"
+        assert "slug" in df, "slug column not found in the dataframe"
         return df["slug"].apply(str).apply(filename_to_int_hash)
 
     def get_process_metadata(self) -> pd.DataFrame:
@@ -421,7 +423,7 @@ class SubsampleSplit(WorkTask):
         if num_files > max_files:
             print(
                 f"{num_files} audio files in corpus."
-                "Max files to subsample: {max_files}"
+                f"Max files to subsample: {max_files}"
             )
             sampled_metadata = subsample_metadata(metadata, max_files)
             print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
