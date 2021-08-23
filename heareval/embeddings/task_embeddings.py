@@ -38,6 +38,8 @@ from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
+from heareval.tasks.pipeline import SPLITS
+
 TORCH = "torch"
 TENSORFLOW = "tf"
 
@@ -372,7 +374,7 @@ def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path)
     shutil.copy(metadata_path, embed_task_dir)
     shutil.copy(label_vocab_path, embed_task_dir)
 
-    for split in metadata["splits"]:
+    for split in SPLITS:
         print(f"Getting embeddings for split: {split}")
 
         split_path = task_path.joinpath(f"{split}.json")

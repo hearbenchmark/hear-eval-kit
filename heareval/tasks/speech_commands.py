@@ -22,7 +22,7 @@ BACKGROUND_NOISE = "_background_noise_"
 UNKNOWN = "_unknown_"
 SILENCE = "_silence_"
 
-config = {
+task_config = {
     "task_name": "speech_commands",
     "version": "v0.0.2",
     "embedding_type": "scene",
@@ -40,8 +40,6 @@ config = {
         },
     ],
     "sample_duration": 1.0,
-    "dataset_fraction": None,
-    "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
             {
@@ -56,7 +54,6 @@ config = {
             },
         ],
         "version": "v0.0.2-small",
-        "dataset_fraction": None,
     },
     "evaluation": ["top1_acc"],
 }
@@ -139,7 +136,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     def slugify_file_name(relative_path: str) -> str:
         """
         For speech command each speaker might have given samples for
-        different labels. In this case, just sluggifying the file name
+        different metadata. In this case, just sluggifying the file name
         without the label would cause duplicates
         """
         # Get the foldername which is the label and the filename
@@ -229,26 +226,26 @@ def main(
     small: bool = False,
 ):
     if small:
-        config.update(dict(config["small"]))  # type: ignore
-    config.update({"tmp_dir": tmp_dir})
+        task_config.update(dict(task_config["small"]))  # type: ignore
+    task_config.update({"tmp_dir": tmp_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
-    download_tasks = pipeline.get_download_and_extract_tasks(config)
+    download_tasks = pipeline.get_download_and_extract_tasks(task_config)
 
     generate = GenerateTrainDataset(
-        train_data=download_tasks["train"], data_config=config
+        train_data=download_tasks["train"], task_config=task_config
     )
     configure_metadata = ExtractMetadata(
         train=generate,
         test=download_tasks["test"],
         outfile="process_metadata.csv",
-        data_config=config,
+        task_config=task_config,
     )
 
     final_task = pipeline.FinalizeCorpus(
         sample_rates=sample_rates,
         tasks_dir=tasks_dir,
         metadata=configure_metadata,
-        data_config=config,
+        task_config=task_config,
     )
     return final_task
