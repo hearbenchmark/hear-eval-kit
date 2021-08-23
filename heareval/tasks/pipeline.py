@@ -25,6 +25,7 @@ from heareval.tasks.util.luigi import (
     which_set,
 )
 
+SPLITS = ["train", "valid", "test"]
 # This percentage should not be changed as this decides
 # the data in the split and hence is not a part of the data config
 VALIDATION_PERCENTAGE = 20
@@ -252,13 +253,6 @@ class ExtractMetadata(WorkTask):
         are not found
         This uses the split key to do the split with the which set function.
         """
-        splits_present = metadata["split"].unique()
-        # The metadata should at least have the train split
-        # test and valid if not found in the metadata can be sampled
-        # from the train
-        assert "train" in splits_present, "Train split not found in metadata"
-        print(f"Splits getting sampled with the split key are: {splits_to_sample}")
-
         metadata[metadata["split"] == "train"] = metadata[
             metadata["split"] == "train"
         ].assign(
