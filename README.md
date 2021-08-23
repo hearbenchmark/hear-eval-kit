@@ -132,6 +132,12 @@ the label metadata for them.
 * SplitMetadata => MetadataVocabulary
 * FinalizeCorpus
 
+In terms of sampling:
+* We create a 60/20/20 split if train/valid/test does not exist.
+* We cap each split at 3/1/1/ hours of audio.
+* If further small sampling happens, that chooses a particular
+number of audio samples per task.
+
 These commands will download and preprocess the entire dataset. An
 intermediary directory defined by the option `luigi-dir`(default
 `_workdir`) will be created, and then a final directory defined by
