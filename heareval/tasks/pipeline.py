@@ -117,7 +117,10 @@ def get_download_and_extract_tasks(task_config: Dict):
 
 class ExtractMetadata(WorkTask):
     """
-    This is an abstract class that extracts metadata over the full dataset.
+    This is an abstract class that extracts metadata over the full
+    dataset.
+    This is where splitting ACTUALLY occurs. [correct?]
+    Based upon the choice of metadata.
 
     We create a metadata csv file that will be used by downstream
     luigi tasks to curate the final dataset.
@@ -367,7 +370,7 @@ class SubsampleSplit(WorkTask):
     """
 
     split = luigi.Parameter()
-    dataset_fraction = luigi.IntParameter()
+    max_task_duration = luigi.FloatParameter()
     metadata = luigi.TaskParameter()
 
     def requires(self):
@@ -396,16 +399,15 @@ class SubsampleSplit(WorkTask):
         return metadata
 
     def run(self):
-
         metadata = self.get_metadata()
         num_files = len(metadata)
-        sample_duration
-        max_task_duration
-        # This might round badly :\
-        if (self.max_task == 1) or (self.dataset_fraction is None):
+        if self.max_task_duration is None:
             max_files = num_files
         else:
-            max_files = int(num_files * self.dataset_fraction)
+            # This might round badly for small corpora with long audio :\
+            # TODO: Issue to check for this
+            sample_duration = self.data_config["sample_duration"]
+            max_files = int(max_task_duration / sample_duration)
         if num_files > max_files:
             print(
                 f"{num_files} audio files in corpus."
@@ -451,7 +453,6 @@ class SubsampleSplits(WorkTask):
             split: SubsampleSplit(
                 metadata=self.metadata,
                 split=split,
-                dataset_fraction=self.task_config["dataset_fraction"],
                 task_config=self.task_config,
             )
             for split in self.task_config["splits"]
@@ -476,7 +477,7 @@ class MonoWavTrimCorpus(WorkTask):
     Parameters
         metadata (ExtractMetadata): task which extracts a corpus level metadata
     Requires:
-        corpus(SubsampleSplits): task which aggregates the subsampling for each split
+        corpus (SubsampleSplits): task which aggregates the subsampling for each split
     """
 
     metadata = luigi.TaskParameter()

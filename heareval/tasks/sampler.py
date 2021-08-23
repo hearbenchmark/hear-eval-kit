@@ -2,6 +2,10 @@
 """
 Runs a sampler to sample the downloaded dataset.
 
+It resamples each task to have audio_sample_size samples.
+TODO: Consider changing this to a certain number of seconds
+(max_task_duration in the luigi pipeline).
+
 Uses the same download and extract tasks to make sure
 the same downloaded files can be used for sampling
 Also uses the configs defined in the task files for making
