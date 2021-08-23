@@ -466,7 +466,7 @@ class SubsampleSplits(WorkTask):
                 split=split,
                 task_config=self.task_config,
             )
-            for split in self.task_config["splits"]
+            for split in SPLITS
         }
         return subsample_splits
 
@@ -750,7 +750,7 @@ class ResampleSubcorpuses(WorkTask):
                 task_config=self.task_config,
             )
             for sr in self.sample_rates
-            for split in self.task_config["splits"]
+            for split in SPLITS
         ]
         return resample_splits
 
