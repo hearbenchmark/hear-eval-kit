@@ -107,7 +107,7 @@ def get_download_and_extract_tasks(task_config: Dict):
     """
 
     tasks = {}
-    for urlobj in config["download_urls"]:
+    for urlobj in task_config["download_urls"]:
         name, url, md5 = urlobj["name"], urlobj["url"], urlobj["md5"]
         filename = os.path.basename(urlparse(url).path)
         task = ExtractArchive(
