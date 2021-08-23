@@ -134,7 +134,7 @@ the label metadata for them.
 
 In terms of sampling:
 * We create a 60/20/20 split if train/valid/test does not exist.
-* We cap each split at 3/1/1/ hours of audio.
+* We cap each split at 3/1/1/ hours of audio, defined as
 * If further small sampling happens, that chooses a particular
 number of audio samples per task.
 
@@ -200,14 +200,8 @@ deterministically with the following command:
 python3 -m heareval.tasks.sampler <taskname>
 ```
 
-[rewrite]
-**_NOTE_** : Each task config has `dataset_fraction`. The data in
-each split is subsampled by this fraction in the final output. This
-is not to be confused with the `--small` flag which is used to run
-the task on a small version of the dataset for development. Also
-the small version in the config has its own `dataset_fraction` which
-can be used to subsample the small dataset when the small flag is
-passed.
+**_NOTE_** : The `--small` flag which is used to run the task on a
+small version of the dataset for development.
 
 ### End to end testing
 
