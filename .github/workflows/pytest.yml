@@ -18,6 +18,7 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: apt-get
       run: |
+        sudo apt-get update
         # ffmpeg >= 4.2 for focal
         sudo apt-get install -y libsndfile-dev ffmpeg
         ## ffmpeg >= 4.2
