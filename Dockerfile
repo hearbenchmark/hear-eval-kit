@@ -1,3 +1,11 @@
+#docker pull turian/heareval
+## Or, build the docker yourself
+##docker build -t turian/heareval .
+#
+#docker run -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$DISPLAY -h $HOSTNAME -v $HOME/.Xauthority:/home/renderman/.Xauthority -it turian/heareval bash
+#
+
+
 # deepo: python3 generate.py Dockerfile pytorch tensorflow keras python==3.7
 # ==================================================================
 # module list
