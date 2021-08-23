@@ -29,4 +29,6 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
-        LUIGI_CONFIG_PATH=heareval/tasks/luigi.cfg python3 -m heareval.tasks.runner --small all 2>&1 | grep 'This progress looks :)'
+        LUIGI_CONFIG_PATH=heareval/tasks/luigi.cfg python3 -m heareval.tasks.runner --small all
+        # If we use this grep, it errs correctly but we don't see the output :(
+        #LUIGI_CONFIG_PATH=heareval/tasks/luigi.cfg python3 -m heareval.tasks.runner --small all 2>&1 | grep 'This progress looks :)'
