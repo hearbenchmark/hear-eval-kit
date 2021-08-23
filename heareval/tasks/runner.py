@@ -41,7 +41,7 @@ tasks = {
     type=int,
 )
 @click.option(
-    "--tmp-dir",
+    "--tmp_dir",
     default="_workdir",
     help="Temporary directory to save all the "
     + "intermediate tasks (will not be deleted afterwords)",

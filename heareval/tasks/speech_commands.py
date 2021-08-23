@@ -221,13 +221,13 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
 def main(
     sample_rates: List[int],
-    work_dir: str,
+    tmp_dir: str,
     tasks_dir: str,
     small: bool = False,
 ):
     if small:
         config.update(dict(config["small"]))  # type: ignore
-    config.update({"work_dir": work_dir})
+    config.update({"tmp_dir": tmp_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
     download_tasks = pipeline.get_download_and_extract_tasks(config)
