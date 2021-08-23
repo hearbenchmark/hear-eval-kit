@@ -19,7 +19,7 @@ import heareval.tasks.pipeline as pipeline
 
 logger = logging.getLogger("luigi-interface")
 
-config = {
+task_config = {
     "task_name": "dcase2016_task2",
     "version": "hear2021",
     "embedding_type": "event",
@@ -37,8 +37,6 @@ config = {
         },
     ],
     "sample_duration": 120.0,
-    "dataset_fraction": None,
-    "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
             {
@@ -53,7 +51,6 @@ config = {
             },
         ],
         "version": "hear2021-small",
-        "dataset_fraction": None,
     },
     # DCASE2016 task 2 used the segment-based total error rate as
     # their main score and then the onset only event based F1 as
@@ -119,24 +116,24 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
 def main(
     sample_rates: List[int],
-    work_dir: str,
+    tmp_dir: str,
     tasks_dir: str,
     small: bool = False,
 ):
     if small:
-        config.update(dict(config["small"]))  # type: ignore
-    config.update({"work_dir": work_dir})
+        task_config.update(dict(task_config["small"]))  # type: ignore
+    task_config.update({"tmp_dir": tmp_dir})
 
     # Build the dataset pipeline with the custom metadata configuration task
-    download_tasks = pipeline.get_download_and_extract_tasks(config)
+    download_tasks = pipeline.get_download_and_extract_tasks(task_config)
 
     configure_metadata = ExtractMetadata(
-        outfile="process_metadata.csv", data_config=config, **download_tasks
+        outfile="process_metadata.csv", task_config=task_config, **download_tasks
     )
     final_task = pipeline.FinalizeCorpus(
         sample_rates=sample_rates,
         tasks_dir=tasks_dir,
         metadata=configure_metadata,
-        data_config=config,
+        task_config=task_config,
     )
     return final_task
