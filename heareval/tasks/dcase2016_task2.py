@@ -37,7 +37,6 @@ config = {
         },
     ],
     "sample_duration": 120.0,
-    "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
             {

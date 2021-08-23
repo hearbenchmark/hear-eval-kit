@@ -257,20 +257,16 @@ class ExtractMetadata(WorkTask):
         # test and valid if not found in the metadata can be sampled
         # from the train
         assert "train" in splits_present, "Train split not found in metadata"
-        splits_to_sample = set(self.task_config["splits"]).difference(splits_present)
         print(f"Splits getting sampled with the split key are: {splits_to_sample}")
-
-        # Depending on whether valid and test are already present, the percentage can
-        # either be the predefined percentage or 0
-        valid_perc = VALIDATION_PERCENTAGE if "valid" in splits_to_sample else 0
-        test_perc = TESTING_PERCENTAGE if "test" in splits_to_sample else 0
 
         metadata[metadata["split"] == "train"] = metadata[
             metadata["split"] == "train"
         ].assign(
             split=lambda df: df["split_key"].apply(
                 # Use the which set to split the train into the required splits
-                lambda split_key: which_set(split_key, valid_perc, test_perc)
+                lambda split_key: which_set(
+                    split_key, VALIDATION_PERCENTAGE, TEST_PERCENTAGE
+                )
             )
         )
         return metadata
@@ -364,9 +360,9 @@ class SubsampleSplit(WorkTask):
     Parameters:
         split: name of the split for which subsampling has to be done
         max_files: maximum files required from the subsampling
-        metadata (ExtractMetadata): task which extracts a corpus level metadata
+        metadata (ExtractMetadata): task which extracts corpus level metadata
     Requirements:
-        metadata (ExtractMetadata): task which extracts a corpus level metadata
+        metadata (ExtractMetadata): task which extracts corpus level metadata
     """
 
     split = luigi.Parameter()
@@ -685,7 +681,7 @@ class ResampleSubcorpus(WorkTask):
     Parameters
         split(str): The split for which the resampling has to be done
         sr(int): output sampling rate
-        metadata (ExtractMetadata): task which extracts a corpus level metadata
+        metadata (ExtractMetadata): task which extracts corpus level metadata
     Requires
         data (SplitData): task which produces the split
             level corpus
@@ -721,7 +717,7 @@ class ResampleSubcorpuses(WorkTask):
     into a single task as dependencies.
 
     Parameter:
-        metadata (ExtractMetadata): task which extracts a corpus level metadata
+        metadata (ExtractMetadata): task which extracts corpus level metadata
     Requires:
         subsample_splits (list(SubsampleSplit)): task subsamples each split
     """
@@ -760,7 +756,7 @@ class FinalizeCorpus(WorkTask):
     Parameters:
         sample_rates (list(int)): The list of sampling rates in which the corpus
             is required
-        metadata (ExtractMetadata): task which extracts a corpus level metadata
+        metadata (ExtractMetadata): task which extracts corpus level metadata
     Requires:
         resample (List(ResampleSubCorpus)): list of task which resamples each split
         metadata (SplitMetadata): task which produces the split

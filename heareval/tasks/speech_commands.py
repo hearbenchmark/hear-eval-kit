@@ -40,7 +40,6 @@ config = {
         },
     ],
     "sample_duration": 1.0,
-    "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
             {
