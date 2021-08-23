@@ -171,7 +171,9 @@ class ExtractMetadata(WorkTask):
 
         The basic version here takes the filename and slugifies it.
         """
-        return f"{slugify(str(Path(relative_path).stem))}"
+        slug_text = str(Path(relative_path).stem)
+        slug_text = slug_text.replace("-", "_negative_")
+        return f"{slugify(slug_text)}"
 
     @staticmethod
     def get_stratify_key(df: DataFrame) -> Series:
@@ -291,6 +293,11 @@ class ExtractMetadata(WorkTask):
 
     def run(self):
         process_metadata = self.get_process_metadata()
+        # Check if one slug is associated with only one relpath
+        assert (
+            process_metadata.groupby("slug")["relpath"].nunique() == 1
+        ).all(), "There are duplicate slugs for one audio file"
+
         # Split the metadata to create valid and test set from train if they are not
         # created explicitly in the get process metadata
         process_metadata = self.split_train_test_val(process_metadata)
