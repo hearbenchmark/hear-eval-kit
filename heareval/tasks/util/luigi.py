@@ -198,7 +198,7 @@ def md5sum(filename):
     return d.hexdigest()
 
 
-def subsample_metadata(metadata: pd.DataFrame, max_files: int) -> pd.DataFrame:
+def subsample_labels(metadata: pd.DataFrame, max_files: int) -> pd.DataFrame:
     """
     Returns the sampled metadata
 

@@ -37,7 +37,6 @@ config = {
         },
     ],
     "sample_duration": 120.0,
-    "dataset_fraction": None,
     "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
@@ -53,7 +52,6 @@ config = {
             },
         ],
         "version": "hear2021-small",
-        "dataset_fraction": None,
     },
     # DCASE2016 task 2 used the segment-based total error rate as
     # their main score and then the onset only event based F1 as

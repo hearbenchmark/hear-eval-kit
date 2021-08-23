@@ -40,7 +40,6 @@ config = {
         },
     ],
     "sample_duration": 1.0,
-    "dataset_fraction": None,
     "splits": ["train", "test", "valid"],
     "small": {
         "download_urls": [
@@ -56,7 +55,6 @@ config = {
             },
         ],
         "version": "v0.0.2-small",
-        "dataset_fraction": None,
     },
     "evaluation": ["top1_acc"],
 }
@@ -139,7 +137,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     def slugify_file_name(relative_path: str) -> str:
         """
         For speech command each speaker might have given samples for
-        different labels. In this case, just sluggifying the file name
+        different metadata. In this case, just sluggifying the file name
         without the label would cause duplicates
         """
         # Get the foldername which is the label and the filename

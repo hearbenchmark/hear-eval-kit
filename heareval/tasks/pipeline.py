@@ -92,7 +92,7 @@ class ExtractArchive(WorkTask):
         self.mark_complete()
 
 
-def get_download_and_extract_tasks(config: Dict):
+def get_download_and_extract_tasks(task_config: Dict):
     """
     Iterates over the dowload urls and builds download and extract
     tasks for them
@@ -104,11 +104,11 @@ def get_download_and_extract_tasks(config: Dict):
         filename = os.path.basename(urlparse(url).path)
         task = ExtractArchive(
             download=DownloadCorpus(
-                url=url, outfile=filename, expected_md5=md5, data_config=config
+                url=url, outfile=filename, expected_md5=md5, task_config=task_config
             ),
             infile=filename,
             outdir=name,
-            data_config=config,
+            task_config=task_config,
         )
         tasks[name] = task
 
@@ -254,7 +254,7 @@ class ExtractMetadata(WorkTask):
         # test and valid if not found in the metadata can be sampled
         # from the train
         assert "train" in splits_present, "Train split not found in metadata"
-        splits_to_sample = set(self.data_config["splits"]).difference(splits_present)
+        splits_to_sample = set(self.task_config["splits"]).difference(splits_present)
         print(f"Splits getting sampled with the split key are: {splits_to_sample}")
 
         # Depending on whether valid and test are already present, the percentage can
@@ -278,7 +278,7 @@ class ExtractMetadata(WorkTask):
         # created explicitly in the get process metadata
         process_metadata = self.split_train_test_val(process_metadata)
 
-        if self.data_config["embedding_type"] == "event":
+        if self.task_config["embedding_type"] == "event":
             assert set(
                 [
                     "relpath",
@@ -292,7 +292,7 @@ class ExtractMetadata(WorkTask):
                     "end",
                 ]
             ).issubset(set(process_metadata.columns))
-        elif self.data_config["embedding_type"] == "scene":
+        elif self.task_config["embedding_type"] == "scene":
             assert set(
                 [
                     "relpath",
@@ -305,14 +305,14 @@ class ExtractMetadata(WorkTask):
                 ]
             ).issubset(set(process_metadata.columns))
             # Multiclass predictions should only have a single label per file
-            if self.data_config["prediction_type"] == "multiclass":
+            if self.task_config["prediction_type"] == "multiclass":
                 label_count = process_metadata.groupby("slug")["label"].aggregate(
                     lambda group: len(group)
                 )
                 assert (label_count == 1).all()
         else:
             raise ValueError(
-                "%s embedding_type unknown" % self.data_config["embedding_type"]
+                "%s embedding_type unknown" % self.task_config["embedding_type"]
             )
 
         # Filter the files which actually exists in the data
@@ -324,7 +324,7 @@ class ExtractMetadata(WorkTask):
         # regular dataset. However, in case of small dataset, this is expected and we
         # need to remove those entries from the metadata
         if sum(exists) < len(process_metadata):
-            if self.data_config["version"].split("-")[-1] == "small":
+            if self.task_config["version"].split("-")[-1] == "small":
                 print(
                     "All files in metadata donot exist in the dataset. This is "
                     "expected behavior when small task is running."
@@ -399,7 +399,10 @@ class SubsampleSplit(WorkTask):
 
         metadata = self.get_metadata()
         num_files = len(metadata)
-        if (self.dataset_fraction == 1) or (self.dataset_fraction is None):
+        sample_duration
+        max_task_duration
+        # This might round badly :\
+        if (self.max_task == 1) or (self.dataset_fraction is None):
             max_files = num_files
         else:
             max_files = int(num_files * self.dataset_fraction)
@@ -448,10 +451,10 @@ class SubsampleSplits(WorkTask):
             split: SubsampleSplit(
                 metadata=self.metadata,
                 split=split,
-                dataset_fraction=self.data_config["dataset_fraction"],
-                data_config=self.data_config,
+                dataset_fraction=self.task_config["dataset_fraction"],
+                task_config=self.task_config,
             )
-            for split in self.data_config["splits"]
+            for split in self.task_config["splits"]
         }
         return subsample_splits
 
@@ -481,7 +484,7 @@ class MonoWavTrimCorpus(WorkTask):
     def requires(self):
         return {
             "corpus": SubsampleSplits(
-                metadata=self.metadata, data_config=self.data_config
+                metadata=self.metadata, task_config=self.task_config
             )
         }
 
@@ -491,14 +494,18 @@ class MonoWavTrimCorpus(WorkTask):
         for audiofile in tqdm(list(self.requires()["corpus"].workdir.iterdir())):
             newaudiofile = self.workdir.joinpath(f"{audiofile.stem}.wav")
             audio_util.mono_wav_and_fix_duration(
-                audiofile, newaudiofile, duration=self.data_config["sample_duration"]
+                audiofile, newaudiofile, duration=self.task_config["sample_duration"]
             )
 
         self.mark_complete()
 
 
-class SplitTrainTestCorpus(WorkTask):
+class SplitData(WorkTask):
     """
+    Go over the subsampled folder and pick the audio files. The audio files are
+    saved with their slug names and hence the corresponding label can be picked
+    up from the preprocess config. (These are symlinks.)
+
     Parameters
         metadata (ExtractMetadata): task which extracts a corpus level metadata
             the metadata helps to provide the split type of each audio file
@@ -514,7 +521,7 @@ class SplitTrainTestCorpus(WorkTask):
         # audio file
         return {
             "corpus": MonoWavTrimCorpus(
-                metadata=self.metadata, data_config=self.data_config
+                metadata=self.metadata, task_config=self.task_config
             ),
             "metadata": self.metadata,
         }
@@ -526,9 +533,6 @@ class SplitTrainTestCorpus(WorkTask):
             os.path.join(meta.workdir, meta.outfile),
         )[["slug", "split"]]
 
-        # Go over the subsampled folder and pick the audio files. The audio files are
-        # saved with their slug names and hence the corresponding label can be picked
-        # up from the preprocess config
         for audiofile in tqdm(list(self.requires()["corpus"].workdir.glob("*.wav"))):
             # Compare the filename with the slug.
             # Please note that the slug doesnot has the extension of the file
@@ -541,22 +545,21 @@ class SplitTrainTestCorpus(WorkTask):
         self.mark_complete()
 
 
-class SplitTrainTestMetadata(WorkTask):
+class SplitMetadata(WorkTask):
     """
+    Splits the label dataframe.
+
     Parameters
         metadata (ExtractMetadata): task which extracts a corpus level metadata
     Requires
-        traintestcorpus(SplitTrainTestCorpus): which produces the split
-            level corpus
+        data (SplitData): which produces the split level corpus
     """
 
     metadata = luigi.TaskParameter()
 
     def requires(self):
         return {
-            "traintestcorpus": SplitTrainTestCorpus(
-                metadata=self.metadata, data_config=self.data_config
-            ),
+            "data": SplitData(metadata=self.metadata, task_config=self.task_config),
             "metadata": self.metadata,
         }
 
@@ -571,7 +574,7 @@ class SplitTrainTestMetadata(WorkTask):
     def run(self):
         labeldf = self.get_metadata()
 
-        for split_path in self.requires()["traintestcorpus"].workdir.iterdir():
+        for split_path in self.requires()["data"].workdir.iterdir():
             audiodf = pd.DataFrame(
                 [(a.stem, a.suffix) for a in list(split_path.glob("*.wav"))],
                 columns=["slug", "ext"],
@@ -588,8 +591,8 @@ class SplitTrainTestMetadata(WorkTask):
                 .drop("ext", axis=1)
             )
 
-            if self.data_config["embedding_type"] == "scene":
-                # Create a dictionary containing a list of labels keyed on the slug.
+            if self.task_config["embedding_type"] == "scene":
+                # Create a dictionary containing a list of metadata keyed on the slug.
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label"]]
                     .groupby("slug_path")["label"]
@@ -597,8 +600,8 @@ class SplitTrainTestMetadata(WorkTask):
                     .to_dict()
                 )
 
-            elif self.data_config["embedding_type"] == "event":
-                # For event labeling each file will have a list of labels
+            elif self.task_config["embedding_type"] == "event":
+                # For event labeling each file will have a list of metadata
                 audiolabel_json = (
                     audiolabel_df[["slug_path", "label", "start", "end"]]
                     .set_index("slug_path")
@@ -627,10 +630,12 @@ class SplitTrainTestMetadata(WorkTask):
 
 class MetadataVocabulary(WorkTask):
     """
+    Creates the vocabulary CSV file for a task.
+
     Parameters
         metadata (ExtractMetadata): task which extracts a corpus level metadata
     Requires
-        traintestmeta(SplitTrainTestMetadata): task which produces the split
+        splitmeta (SplitMetadata): task which produces the split
             level metadata
     """
 
@@ -638,8 +643,8 @@ class MetadataVocabulary(WorkTask):
 
     def requires(self):
         return {
-            "traintestmeta": SplitTrainTestMetadata(
-                metadata=self.metadata, data_config=self.data_config
+            "splitmeta": SplitMetadata(
+                metadata=self.metadata, task_config=self.task_config
             )
         }
 
@@ -647,9 +652,7 @@ class MetadataVocabulary(WorkTask):
         labelset = set()
         # Iterate over all the files in the traintestmeta and get the
         # split_metadata
-        for split_metadata in list(
-            self.requires()["traintestmeta"].workdir.glob("*.csv")
-        ):
+        for split_metadata in list(self.requires()["splitmeta"].workdir.glob("*.csv")):
             labeldf = pd.read_csv(split_metadata)
             json.dump(
                 labeldf["label"].value_counts().to_dict(),
@@ -675,7 +678,7 @@ class MetadataVocabulary(WorkTask):
         self.mark_complete()
 
 
-class ResampleSubCorpus(WorkTask):
+class ResampleSubcorpus(WorkTask):
     """
     Resamples the Subsampled corpus in different sampling rate
     Parameters
@@ -683,7 +686,7 @@ class ResampleSubCorpus(WorkTask):
         sr(int): output sampling rate
         metadata (ExtractMetadata): task which extracts a corpus level metadata
     Requires
-        traintestcorpus(SplitTrainTestCorpus): task which produces the split
+        data (SplitData): task which produces the split
             level corpus
     """
 
@@ -692,16 +695,10 @@ class ResampleSubCorpus(WorkTask):
     metadata = luigi.TaskParameter()
 
     def requires(self):
-        return {
-            "traintestcorpus": SplitTrainTestCorpus(
-                metadata=self.metadata, data_config=self.data_config
-            )
-        }
+        return {"data": SplitData(metadata=self.metadata, task_config=self.task_config)}
 
     def run(self):
-        original_dir = self.requires()["traintestcorpus"].workdir.joinpath(
-            str(self.split)
-        )
+        original_dir = self.requires()["data"].workdir.joinpath(str(self.split))
         resample_dir = self.workdir.joinpath(str(self.sr)).joinpath(str(self.split))
         resample_dir.mkdir(parents=True, exist_ok=True)
         for audiofile in tqdm(list(original_dir.glob("*.wav"))):
@@ -734,14 +731,14 @@ class ResampleSubcorpuses(WorkTask):
     def requires(self):
         # Perform resampling on each split and sampling rate independently
         resample_splits = [
-            ResampleSubCorpus(
+            ResampleSubcorpus(
                 sr=sr,
                 split=split,
                 metadata=self.metadata,
-                data_config=self.data_config,
+                task_config=self.task_config,
             )
             for sr in self.sample_rates
-            for split in self.data_config["splits"]
+            for split in self.task_config["splits"]
         ]
         return resample_splits
 
@@ -764,8 +761,8 @@ class FinalizeCorpus(WorkTask):
             is required
         metadata (ExtractMetadata): task which extracts a corpus level metadata
     Requires:
-        resample(List(ResampleSubCorpus)): list of task which resamples each split
-        traintestmeta(SplitTrainTestMetadata): task which produces the split
+        resample (List(ResampleSubCorpus)): list of task which resamples each split
+        metadata (SplitMetadata): task which produces the split
             level metadata
     """
 
@@ -779,13 +776,13 @@ class FinalizeCorpus(WorkTask):
             "resample": ResampleSubcorpuses(
                 sample_rates=self.sample_rates,
                 metadata=self.metadata,
-                data_config=self.data_config,
+                task_config=self.task_config,
             ),
-            "traintestmeta": SplitTrainTestMetadata(
-                metadata=self.metadata, data_config=self.data_config
+            "metadata": SplitMetadata(
+                metadata=self.metadata, task_config=self.task_config
             ),
             "vocabmeta": MetadataVocabulary(
-                metadata=self.metadata, data_config=self.data_config
+                metadata=self.metadata, task_config=self.task_config
             ),
         }
 
@@ -823,7 +820,7 @@ class FinalizeCorpus(WorkTask):
         config_out = self.workdir.joinpath("task_metadata.json")
         with open(config_out, "w") as fp:
             json.dump(
-                self.data_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
+                self.task_config, fp, indent=True, cls=luigi.parameter._DictParamEncoder
             )
 
         self.mark_complete()

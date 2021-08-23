@@ -39,7 +39,6 @@ config = {
         },
     ],
     "sample_duration": 4.0,
-    "dataset_fraction": None,
     "splits": ["train", "test", "valid"],
     "pitch_range_min": 21,
     "pitch_range_max": 108,
@@ -62,7 +61,6 @@ config = {
             },
         ],
         "version": "v2.2.3-small",
-        "dataset_fraction": None,
     },
     "evaluation": ["pitch_acc", "chroma_acc"],
 }
