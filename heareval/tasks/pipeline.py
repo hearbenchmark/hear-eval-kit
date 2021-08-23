@@ -29,7 +29,7 @@ SPLITS = ["train", "valid", "test"]
 # This percentage should not be changed as this decides
 # the data in the split and hence is not a part of the data config
 VALIDATION_PERCENTAGE = 20
-TESTING_PERCENTAGE = 20
+TEST_PERCENTAGE = 20
 
 # We want no more than 5 hours of audio per task.
 MAX_TASK_DURATION_BY_SPLIT = {
