@@ -172,6 +172,7 @@ class ExtractMetadata(WorkTask):
         The basic version here takes the filename and slugifies it.
         """
         slug_text = str(Path(relative_path).stem)
+        slug_text = slug_text.replace("-", "_negative_")
         return f"{slugify(slug_text)}"
 
     @staticmethod
@@ -222,7 +223,7 @@ class ExtractMetadata(WorkTask):
         used to ensure stable sampling for groups which are incompletely
         sampled(the last group to be part of the subsample output)
         """
-        assert "slug" in df, "relpath column not found in the dataframe"
+        assert "slug" in df, "slug column not found in the dataframe"
         return df["slug"].apply(str).apply(filename_to_int_hash)
 
     def get_process_metadata(self) -> pd.DataFrame:
@@ -323,7 +324,6 @@ class ExtractMetadata(WorkTask):
                 [
                     "relpath",
                     "slug",
-                    "stratify_key",
                     "split_key",
                     "subsample_key",
                     "split",
@@ -337,7 +337,6 @@ class ExtractMetadata(WorkTask):
                 [
                     "relpath",
                     "slug",
-                    "stratify_key",
                     "split_key",
                     "subsample_key",
                     "split",
@@ -366,7 +365,7 @@ class ExtractMetadata(WorkTask):
         if sum(exists) < len(process_metadata):
             if self.task_config["version"].split("-")[-1] == "small":
                 print(
-                    "All files in metadata donot exist in the dataset. This is "
+                    "All files in metadata do not exist in the dataset. This is "
                     "expected behavior when small task is running."
                     f"Removing {len(process_metadata) - sum(exists)} entries in the "
                     "metadata"
@@ -421,7 +420,7 @@ class SubsampleSplit(WorkTask):
             self.requires()["metadata"].workdir.joinpath(
                 self.requires()["metadata"].outfile
             )
-        )[["split", "stratify_key", "split_key", "subsample_key", "slug", "relpath"]]
+        )[["split", "split_key", "subsample_key", "slug", "relpath"]]
 
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
@@ -444,7 +443,7 @@ class SubsampleSplit(WorkTask):
         if num_files > max_files:
             print(
                 f"{num_files} audio files in corpus."
-                "Max files to subsample: {max_files}"
+                f"Max files to subsample: {max_files}"
             )
             sampled_metadata = subsample_metadata(metadata, max_files)
             print(f"Datapoints in split after resampling: {len(sampled_metadata)}")
@@ -873,9 +872,14 @@ def run(task: Union[List[luigi.Task], luigi.Task], num_workers: int):
     if isinstance(task, luigi.Task):
         task = [task]
 
-    luigi.build(
+    luigi_run_result = luigi.build(
         task,
         workers=num_workers,
         local_scheduler=True,
         log_level="INFO",
+        detailed_summary=True,
     )
+    assert luigi_run_result.status in [
+        luigi.execution_summary.LuigiStatusCode.SUCCESS,
+        luigi.execution_summary.LuigiStatusCode.SUCCESS_WITH_RETRY,
+    ], f"Received luigi_run_result.status = {luigi_run_result.status}"
