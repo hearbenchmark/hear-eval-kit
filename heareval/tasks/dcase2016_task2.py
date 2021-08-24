@@ -71,9 +71,9 @@ class ExtractMetadata(pipeline.ExtractMetadata):
     @staticmethod
     def slugify_file_name(relative_path: str):
         """
-        Overriding slugify method for dcase. Normally, slugify will remove
+        Overriding slugify method for dcase files. Normally, slugify will remove
         extra hyphens(-) and this will create ambiguity for positive and negative
-        decibles in dcase file names as they aslo have decible information in the
+        decibles in dcase file names as they also have decible information in the
         file names (example 6 and -6 will be slugified to being 6, which is not
         expected)
         """
