@@ -343,7 +343,7 @@ class ExtractMetadata(WorkTask):
         if sum(exists) < len(process_metadata):
             if self.task_config["version"].split("-")[-1] == "small":
                 print(
-                    "All files in metadata donot exist in the dataset. This is "
+                    "All files in metadata do not exist in the dataset. This is "
                     "expected behavior when small task is running."
                     f"Removing {len(process_metadata) - sum(exists)} entries in the "
                     "metadata"
