@@ -959,6 +959,8 @@ install:
   # Version of torch that is being tested -- override version installed with torchsynth
   - pip3 install $TORCH_PIP_PACKAGE --progress-bar off
 script:
+#  - TORCHSYNTH_DEBUG=True pytest
   - TORCHSYNTH_DEBUG=True python3 -m pytest
+  - python3 -m heareval.tasks.runner --small all
 after_success:
   - bash <(curl -s https://codecov.io/bash)
