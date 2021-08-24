@@ -105,7 +105,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 slug=lambda df: df.relpath.apply(self.slugify_file_name),
                 subsample_key=lambda df: self.get_subsample_key(df),
                 split=lambda df: split,
-                split_key=lambda df: self.get_split_key(df)
+                split_key=lambda df: self.get_split_key(df),
             )
 
             metadatas.append(metadata)

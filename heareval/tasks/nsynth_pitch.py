@@ -108,7 +108,7 @@ class ExtractMetadata(pipeline.ExtractMetadata):
                 slug=lambda df: df["note_str"].apply(self.slugify_file_name),
                 split=lambda df: split,
                 subsample_key=lambda df: self.get_subsample_key(df),
-                split_key=lambda df: self.get_split_key(df)
+                split_key=lambda df: self.get_split_key(df),
             )
         )
 

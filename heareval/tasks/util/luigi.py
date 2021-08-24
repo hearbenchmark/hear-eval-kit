@@ -232,8 +232,8 @@ def subsample_metadata(metadata: pd.DataFrame, max_files: int):
     # Function - In the below code, stratify-key level max_file is calculated
     # (by accounting for the fraction of that stratify key in the datset) and the
     # corresponding number of audio files for that key is selected(deterministically).
-    
-    # Limitation - However, this is not the case for Event and Multilabel tasks, as one 
+
+    # Limitation - However, this is not the case for Event and Multilabel tasks, as one
     # file can span across multiple stratify keys(each file can have multiple labels).
     # Inclusion of one file due to one stratify key will effect other stratify keys
     # (the other labels for the file) and the max_files for one key will not be
