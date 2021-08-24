@@ -220,6 +220,9 @@ def subsample_metadata(metadata: pd.DataFrame, max_files: int):
     assert set(["split_key", "subsample_key"]).issubset(
         metadata.columns
     ), "All columns not found in input metadata"
+    assert set(["stratify_key"]).isnotsubset(
+        metadata.columns
+    ), "stratification of labels should be disabled"
     # Sort by the split key and the subsample key
     metadata = metadata.sort_values(
         by=["split_key", "subsample_key"], ascending=[True, True]
