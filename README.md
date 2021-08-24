@@ -121,6 +121,23 @@ python3 -m heareval.tasks.runner all
 You can also just run individual tasks:
 python3 -m heareval.tasks.runner [speech_commands|nsynth_pitch|dcase2016_task2]
 
+Each pipeline will download and preprocess each dataset according
+to the following DAG:
+* DownloadCorpus
+* ExtractArchive
+* ExtractMetadata: Create splits over the entire corpus and find
+the label metadata for them.
+* SubsampleSplit (subsample each split) => MonoWavTrimCorpus => SplitData (symlinks)
+* SplitData => {SplitMetadata, ResampleSubcorpus}
+* SplitMetadata => MetadataVocabulary
+* FinalizeCorpus
+
+In terms of sampling:
+* We create a 60/20/20 split if train/valid/test does not exist.
+* We cap each split at 3/1/1/ hours of audio, defined as
+* If further small sampling happens, that chooses a particular
+number of audio samples per task.
+
 These commands will download and preprocess the entire dataset. An
 intermediary directory defined by the option `luigi-dir`(default
 `_workdir`) will be created, and then a final directory defined by
@@ -183,13 +200,8 @@ deterministically with the following command:
 python3 -m heareval.tasks.sampler <taskname>
 ```
 
-**_NOTE_** : Each task config has `dataset_fraction`. The data in
-each split is subsampled by this fraction in the final output. This
-is not to be confused with the `--small` flag which is used to run
-the task on a small version of the dataset for development. Also
-the small version in the config has its own `dataset_fraction` which
-can be used to subsample the small dataset when the small flag is
-passed.
+**_NOTE_** : The `--small` flag which is used to run the task on a
+small version of the dataset for development.
 
 ### End to end testing
 
