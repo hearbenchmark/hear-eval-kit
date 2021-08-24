@@ -24,6 +24,14 @@ import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
 from heareval.tasks import dcase2016_task2, nsynth_pitch, speech_commands
 
+# Currently the sampler is only allowed to run for open tasks
+# The secret tasks module will not be available for participants
+try:
+    import secret_tasks as secret_tasks
+except ModuleNotFoundError:
+    # For participants the secret_tasks_module will be None
+    secret_tasks = None
+
 logger = logging.getLogger("luigi-interface")
 
 METADATAFORMATS = [".csv", ".json", ".txt"]
@@ -53,12 +61,15 @@ configs = {
             "dev_1_ebr_6_nec_3_poly_0.wav",
         ],
     },
+    #Add the sampler config for the secrets task if the secret task config was found.
+    #Not available for participants
+    **(getattr(secret_tasks, "sampler_config") if secret_tasks else {}),
 }
 
 
 class RandomSampleOriginalDataset(luigi_util.WorkTask):
     necessary_keys = luigi.ListParameter()
-    audio_sample_size = luigi.Parameter()
+    audio_sample_size = luigi.IntParameter()
 
     def requires(self):
         return pipeline.get_download_and_extract_tasks(self.data_config)
