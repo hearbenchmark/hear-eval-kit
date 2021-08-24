@@ -302,7 +302,6 @@ class ExtractMetadata(WorkTask):
                 [
                     "relpath",
                     "slug",
-                    "stratify_key",
                     "split_key",
                     "subsample_key",
                     "split",
@@ -316,7 +315,6 @@ class ExtractMetadata(WorkTask):
                 [
                     "relpath",
                     "slug",
-                    "stratify_key",
                     "split_key",
                     "subsample_key",
                     "split",
@@ -400,7 +398,7 @@ class SubsampleSplit(WorkTask):
             self.requires()["metadata"].workdir.joinpath(
                 self.requires()["metadata"].outfile
             )
-        )[["split", "stratify_key", "split_key", "subsample_key", "slug", "relpath"]]
+        )[["split", "split_key", "subsample_key", "slug", "relpath"]]
 
         # Since event detection metadata will have duplicates, we de-dup
         # TODO: We might consider different choices of subset
