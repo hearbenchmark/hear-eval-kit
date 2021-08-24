@@ -293,12 +293,26 @@ class ExtractMetadata(WorkTask):
     def run(self):
         # Process metadata gets the final metadata to be used for the task
         process_metadata = self.get_process_metadata()
+
         # Check if one slug is associated with only one relpath.
         # Also implies there is a one to one correspondence between relpath and slug.
+        #  1. One slug to one relpath -- the bug which we were having is one slug for
+        #   two relpath(relpath with -6 as well as +6 having the same slug), groupby
+        #   by slug and see if one relpath is associated with one slug - this is done
+        #   in the assert statement.
+        #  2. One relpath to one slug -- always the case, because slugify is
+        #   a deterministic function.
+        #  3. relpath.nunique() == slug.nunique(), automatically holds if the above
+        #   two holds.
         assert (
             process_metadata.groupby("slug")["relpath"].nunique() == 1
         ).all(), "One slug is associated with more than one file"
         "Please make sure slugs are unique at a file level"
+
+        # Assertion sanity check -- one to one mapping between the relpaths and slugs
+        assert (
+            process_metadata["relpath"].nunique() == process_metadata["slug"].nunique()
+        )
 
         # Split the metadata to create valid and test set from train if they are not
         # created explicitly in the get process metadata
