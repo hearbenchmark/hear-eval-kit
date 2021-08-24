@@ -291,11 +291,14 @@ class ExtractMetadata(WorkTask):
         return metadata
 
     def run(self):
+        # Process metadata gets the final metadata to be used for the task
         process_metadata = self.get_process_metadata()
-        # Check if one slug is associated with only one relpath
+        # Check if one slug is associated with only one relpath.
+        # Also implies there is a one to one correspondence between relpath and slug.
         assert (
             process_metadata.groupby("slug")["relpath"].nunique() == 1
-        ).all(), "There are duplicate slugs for one audio file"
+        ).all(), "One slug is associated with more than one file"
+        "Please make sure slugs are unique at a file level"
 
         # Split the metadata to create valid and test set from train if they are not
         # created explicitly in the get process metadata
