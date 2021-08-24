@@ -4,6 +4,7 @@ import pytest
 from heareval.tasks.util.luigi import subsample_metadata
 
 
+@pytest.mark.skip(reason="Stratification is deactivated across tasks")
 @pytest.mark.parametrize(
     ("test_metadata", "max_files", "expected_subsampled_metadata"),
     [
