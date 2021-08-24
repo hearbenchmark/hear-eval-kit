@@ -29,8 +29,8 @@ tasks = {
     "nsynth_pitch": [nsynth_pitch],
     "dcase2016_task2": [dcase2016_task2],
     "all": [speech_commands, nsynth_pitch, dcase2016_task2],
-    #Add the task config for the secrets task if the secret task config was found.
-    #Not available for participants
+    # Add the task config for the secrets task if the secret task config was found.
+    # Not available for participants
     **(getattr(secret_tasks, "tasks") if secret_tasks else {}),
 }
 

@@ -61,8 +61,8 @@ configs = {
             "dev_1_ebr_6_nec_3_poly_0.wav",
         ],
     },
-    #Add the sampler config for the secrets task if the secret task config was found.
-    #Not available for participants
+    # Add the sampler config for the secrets task if the secret task config was found.
+    # Not available for participants
     **(getattr(secret_tasks, "sampler_config") if secret_tasks else {}),
 }
 
