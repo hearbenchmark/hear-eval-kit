@@ -1,0 +1,3 @@
+[submodule "secret_tasks"]
+	path = secret_tasks
+	url = git@github.com:turian/hear2021-secret-tasks.git
