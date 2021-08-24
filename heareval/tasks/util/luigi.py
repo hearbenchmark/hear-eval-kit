@@ -34,7 +34,7 @@ class WorkTask(luigi.Task):
     """
 
     # Class attribute sets the task name for all inheriting luigi tasks
-    data_config = luigi.DictParameter(
+    task_config = luigi.DictParameter(
         visibility=luigi.parameter.ParameterVisibility.PRIVATE
     )
 
@@ -70,7 +70,7 @@ class WorkTask(luigi.Task):
     @property
     def task_subdir(self):
         """Task specific subdirectory"""
-        return Path(self.data_config.get("luigi_dir", "_workdir")).joinpath(
+        return Path(self.task_config.get("luigi_dir", "_workdir")).joinpath(
             str(self.versioned_task_name)
         )
 
@@ -80,7 +80,7 @@ class WorkTask(luigi.Task):
         Versioned Task name contains the provided name in the
         data config and the version
         """
-        return f"{self.data_config['task_name']}-{self.data_config['version']}"
+        return f"{self.task_config['task_name']}-{self.task_config['version']}"
 
     @property
     def stage_number(self):
@@ -198,25 +198,52 @@ def md5sum(filename):
     return d.hexdigest()
 
 
-def subsample_metadata(metadata: pd.DataFrame, max_files: int) -> pd.DataFrame:
+def subsample_metadata(metadata: pd.DataFrame, max_files: int):
     """
     Returns the sampled metadata
+    Stratification is currently commented out in this function
 
-    1. Get the count required for each group.
-    2. Sort the metadata by the split_key and the subsample_key
-    3. For each group select the count required(calculated in 1) and concatenate.
-    In case the group had too few data points,
-    just select one datapoint for the group
+    Common Step -
+        1. Sort the metadata by the split_key and the subsample_key
+    If stratification is Done:
+        2. Get the max files required for each stratify key by accounting for
+            the fraction of the stratify key in the data
+        3. For all the files associated with one stratify key, select max allowed files
+            (calculated in the previous step)
+        4. In case the stratify key has percentage low enough, and not even a single
+            file is selected, select at least one file for each group
+
+    If stratification is not Done:
+        2. Select max number of files required for subsampling.
+
     """
-    assert set(["stratify_key", "split_key", "subsample_key"]).issubset(
+    assert set(["split_key", "subsample_key"]).issubset(
         metadata.columns
     ), "All columns not found in input metadata"
-    # Get group count for each group
-    grp_count = metadata["stratify_key"].value_counts() * max_files / len(metadata)
+    assert not set(["stratify_key"]).issubset(
+        metadata.columns
+    ), "stratification of labels should be disabled"
     # Sort by the split key and the subsample key
     metadata = metadata.sort_values(
         by=["split_key", "subsample_key"], ascending=[True, True]
     )
+
+    # Below code piece is for stratified subsampling.
+    # However there are certain caveats while using it for Event based and Multilabel
+    # tasks. For this reason we have disabled stratification across all the tasks.
+
+    # Function - In the below code, stratify-key level max_file is calculated
+    # (by accounting for the fraction of that stratify key in the datset) and the
+    # corresponding number of audio files for that key is selected(deterministically).
+
+    # Limitation - However, this is not the case for Event and Multilabel tasks, as one
+    # file can span across multiple stratify keys(each file can have multiple labels).
+    # Inclusion of one file due to one stratify key will effect other stratify keys
+    # (the other labels for the file) and the max_files for one key will not be
+    # maintained when selecting files for each group.
+    """
+    # Get group count for each group
+    grp_count = metadata["stratify_key"].value_counts() * max_files / len(metadata)
     # Groupby and select the required sample from each group
     sampled_metadata = pd.concat(
         [
@@ -237,5 +264,13 @@ def subsample_metadata(metadata: pd.DataFrame, max_files: int) -> pd.DataFrame:
     assert len(sampled_metadata) <= max_files + len(
         grp_count
     ), "Sampled metadata is more than the allowed max files + unique groups"
+    """
 
+    # The above code is commented and the below lines are added
+    # The lines below donot do any stratification and just select the max_file
+    # number of files, from the sorted metadata(by split key and subsample key)
+    sampled_metadata = metadata.head(max_files)
+    assert (
+        len(sampled_metadata) <= max_files
+    ), "Sampled metadata is more than the allowed max files"
     return sampled_metadata.sort_values("subsample_key")

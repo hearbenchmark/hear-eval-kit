@@ -4,6 +4,7 @@ import pytest
 from heareval.tasks.util.luigi import subsample_metadata
 
 
+@pytest.mark.skip(reason="Stratification is deactivated across tasks")
 @pytest.mark.parametrize(
     ("test_metadata", "max_files", "expected_subsampled_metadata"),
     [
@@ -26,7 +27,7 @@ from heareval.tasks.util.luigi import subsample_metadata
             id="1. Test Stratify Key",
         ),
         # Tests - Stratification during Extreme imbalance in the label distribution.
-        # Expectation - By stratification the 2 labels will be picked up from the
+        # Expectation - By stratification the 2 metadata will be picked up from the
         # l2 and since l1 just has 1 sample, that will be picked up to ensure
         # we atleast have one instance of each stratify key
         pytest.param(

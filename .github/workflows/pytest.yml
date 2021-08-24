@@ -18,7 +18,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: apt-get
       run: |
-        sudo apt-get install -y libsndfile-dev
+        sudo apt-get update
+        # ffmpeg >= 4.2 for focal ubuntu
+        sudo apt-get install -y libsndfile-dev ffmpeg
     - name: Display Python version
       run: python -c "import sys; print(sys.version)"
     - name: python dependencies
@@ -29,3 +31,4 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+        LUIGI_CONFIG_PATH=heareval/tasks/luigi.cfg python3 -m heareval.tasks.runner --small all
