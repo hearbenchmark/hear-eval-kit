@@ -34,7 +34,7 @@ class WorkTask(luigi.Task):
     """
 
     # Class attribute sets the task name for all inheriting luigi tasks
-    data_config = luigi.DictParameter(
+    task_config = luigi.DictParameter(
         visibility=luigi.parameter.ParameterVisibility.PRIVATE
     )
 
@@ -70,7 +70,7 @@ class WorkTask(luigi.Task):
     @property
     def task_subdir(self):
         """Task specific subdirectory"""
-        return Path(self.data_config.get("luigi_dir", "_workdir")).joinpath(
+        return Path(self.task_config.get("luigi_dir", "_workdir")).joinpath(
             str(self.versioned_task_name)
         )
 
@@ -80,7 +80,7 @@ class WorkTask(luigi.Task):
         Versioned Task name contains the provided name in the
         data config and the version
         """
-        return f"{self.data_config['task_name']}-{self.data_config['version']}"
+        return f"{self.task_config['task_name']}-{self.task_config['version']}"
 
     @property
     def stage_number(self):
