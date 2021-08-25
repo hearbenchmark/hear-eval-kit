@@ -34,11 +34,8 @@ setup(
         "click",
         "dcase_util",
         "intervaltree",
-        "librosa",
         "luigi",
         "more-itertools",
-        # For Numba
-        "numpy==1.20.3",
         "pandas",
         "pytorch-lightning",
         "python-slugify",
@@ -48,9 +45,6 @@ setup(
         "tensorflow",
         "torch",
         "tqdm",
-        # Following from librosa, not directly required,
-        # pinned by Snyk to avoid a vulnerability
-        "numba>=0.49.0",
         "scikit-learn>=0.24.2",
     ],
     extras_require={

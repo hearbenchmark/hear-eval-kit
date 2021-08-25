@@ -2,11 +2,8 @@ black
 boto3
 dcase_util
 intervaltree
-librosa
 luigi
 more-itertools
-# For Numba
-numpy==1.20.3
 pandas
 pre-commit
 pytest
