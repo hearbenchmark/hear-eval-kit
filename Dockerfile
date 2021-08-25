@@ -262,7 +262,8 @@ RUN cd hear-eval-kit && \
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL less
+    $APT_INSTALL less locate
+updatedb
 
 # ==================================================================
 # config & cleanup
