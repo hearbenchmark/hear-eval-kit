@@ -36,6 +36,10 @@ setup(
         "intervaltree",
         "luigi",
         "more-itertools",
+        # otherwise librosa breaks
+        "numba==0.48",
+        # tf 2.6.0
+        "numpy==1.19.2",
         "pandas",
         "pytorch-lightning",
         "python-slugify",

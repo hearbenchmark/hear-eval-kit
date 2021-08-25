@@ -5,6 +5,7 @@
 #docker run -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$DISPLAY -h $HOSTNAME -v $HOME/.Xauthority:/home/renderman/.Xauthority -it turian/heareval bash
 #
 
+# 1.19.2 numpy for tf 2.6.0
 
 
 # deepo: python3 generate.py --cuda-ver 11.0 --cudnn-ver 8 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
@@ -95,6 +96,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         setuptools \
         && \
     $PIP_INSTALL \
+        numpy==1.19.2 \
         scipy \
         pandas \
         cloudpickle \
@@ -113,6 +115,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         future \
+        numpy==1.19.2 \
         protobuf \
         enum34 \
         pyyaml \
@@ -132,6 +135,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
+        numpy==1.19.2 \
         tensorflow
 
 #        && \
@@ -252,6 +256,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
+        numpy==1.19.2 \
         hearbaseline
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
