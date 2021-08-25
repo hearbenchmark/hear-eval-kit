@@ -50,14 +50,18 @@ instances:
             mountDir: /workspace
         - name: docker
           parameters:
-            size: 20
+            size: 200
             mountDir: /docker
 
-scripts:
-  setup: |
-    bash setup.sh
-  train: |
-    bash train.sh
+# Pick SR!
+#   gsutil -m cp gs://hear2021/open-tasks/hear*tar . && for f in hear2021-task-*sr48000.tar; do tar xf "$f"; done
+#   wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
+#   python3 -m heareval.embeddings.runner hearbaseline --model naive_baseline.pt
+#scripts:
+#  setup: |
+#    bash setup.sh
+#  train: |
+#    bash train.sh
 #  tensorboard: |
 #    tensorboard --bind_all --port 6006 --logdir /workspace/project/logs
 #  jupyter: |

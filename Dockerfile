@@ -259,6 +259,11 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 RUN cd hear-eval-kit && \
     python -m pip --no-cache-dir install -e ".[dev]"
 
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $APT_INSTALL less
+
 # ==================================================================
 # config & cleanup
 # ------------------------------------------------------------------
