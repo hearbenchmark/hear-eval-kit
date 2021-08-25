@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import List
 
 import luigi
+from slugify import slugify
 import pandas as pd
 
 import heareval.tasks.pipeline as pipeline
@@ -66,6 +67,20 @@ class ExtractMetadata(pipeline.ExtractMetadata):
 
     def requires(self):
         return {"train": self.train, "test": self.test}
+
+    @staticmethod
+    def slugify_file_name(relative_path: str):
+        """
+        Overriding slugify method for dcase files. Normally, slugify will remove
+        extra hyphens(-) and this will create ambiguity for positive and negative
+        decibles in dcase file names as they also have decible information in the
+        file names (example 6 and -6 will be slugified to being 6, which is not
+        expected)
+        """
+        slug_text = str(Path(relative_path).stem)
+        # Replace all the '-' to '_negative_'
+        slug_text = slug_text.replace("-", "_negative_")
+        return f"{slugify(slug_text)}"
 
     """
     DCASE 2016 uses funny pathing, so we just hardcode the desired
