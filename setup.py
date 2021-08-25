@@ -37,8 +37,8 @@ setup(
         "librosa",
         "luigi",
         "more-itertools",
-        # Numba needs NumPy 1.20 or less
-        "numpy<=1.20",
+        # Numba needs NumPy 1.20 or less, some other package wants 1.19.5
+        "numpy==1.19.5",
         "pandas",
         "pytorch-lightning",
         "python-slugify",
