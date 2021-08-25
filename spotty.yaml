@@ -15,6 +15,9 @@ containers:
   - projectDir: /workspace/project
     #file: Dockerfile
     image: turian/heareval
+    #image: turian/heareval-v100-cu110
+    #image: turian/heareval-v100
+    #image: turian/heareval-a100
 #    ports:
 #      # TensorBoard
 #      - containerPort: 6006

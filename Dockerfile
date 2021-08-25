@@ -94,7 +94,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         setuptools \
         && \
     $PIP_INSTALL \
-        numpy==1.19.5 \
+        numpy==1.20.3 \
         scipy \
         pandas \
         cloudpickle \
@@ -113,7 +113,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         future \
-        numpy==1.19.5 \
+        numpy==1.20.3 \
         protobuf \
         enum34 \
         pyyaml \
@@ -133,7 +133,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
-        numpy==1.19.5 \
+        numpy==1.20.3 \
         tensorflow
 
 #        && \
@@ -146,6 +146,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
+        numpy==1.20.3 \
         h5py \
         keras
 
@@ -254,7 +255,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
-        numpy==1.19.5 \
+        numpy==1.20.3 \
         hearbaseline
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
