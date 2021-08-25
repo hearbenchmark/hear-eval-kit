@@ -6,7 +6,7 @@
 #
 
 
-# deepo: python3 generate.py Dockerfile pytorch tensorflow keras python==3.7
+# deepo: python3 generate.py --cuda-ver 11.0 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
 # ==================================================================
 # module list
 # ------------------------------------------------------------------
@@ -16,7 +16,7 @@
 # keras         latest (pip)
 # ==================================================================
 
-FROM ubuntu:18.04
+FROM nvidia/cuda:11.0-cudnnNone-devel-ubuntu18.04
 
 ENV LANG C.UTF-8
 
