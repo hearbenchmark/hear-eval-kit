@@ -6,7 +6,7 @@
 #
 
 
-# deepo: python3 generate.py --cuda-ver 11.0 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
+# deepo: python3 generate.py --cuda-ver 11.0 --cudnn-ver 8 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
 # ==================================================================
 # module list
 # ------------------------------------------------------------------
@@ -16,7 +16,8 @@
 # keras         latest (pip)
 # ==================================================================
 
-FROM nvidia/cuda:11.0-cudnnNone-devel-ubuntu18.04
+FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu18.04
+#FROM nvidia/cuda:11.0-cudnn8-devel-ubuntu18.04
 
 ENV LANG C.UTF-8
 
@@ -263,7 +264,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $APT_INSTALL less locate
-updatedb
+RUN updatedb
 
 # ==================================================================
 # config & cleanup

@@ -34,10 +34,12 @@ instances:
       gpu:
         type: nvidia-tesla-v100
         count: 1
-      ## A100 TODO: Try others. A100 only west3 :\
-#machineType: a2-highgpu-1g
+      ## A100. only west3 or maybe west4? :\
+      #machineType: a2-highgpu-1g
+      # https://console.cloud.google.com/compute/images?project=hear2021-evaluation
       # https://github.com/spotty-cloud/spotty/issues/102
-      imageUri: projects/ml-images/global/images/family/common-dl-gpu-debian-10
+      #imageUri: projects/ml-images/global/images/family/common-dl-gpu-debian-10
+      imageUri: projects/ml-images/global/images/c0-deeplearning-common-cu110-v20210818-debian-10
 #      spotInstance: True
 #      ports: [6006, 8888]
       dockerDataRoot: /docker
