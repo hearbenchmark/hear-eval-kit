@@ -10,6 +10,7 @@ project:
         - '*/__pycache__/*'
         - _workdir
         - embeddings
+        - .mypy_cache/
 
 containers:
   - projectDir: /workspace/project
