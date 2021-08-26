@@ -19,6 +19,7 @@ logger = logging.getLogger("luigi-interface")
 # The secret tasks module will not be available for participants
 try:
     import hearsecrettasks
+
     secret_tasks = hearsecrettasks.tasks
 except ModuleNotFoundError:
     logger.info(
