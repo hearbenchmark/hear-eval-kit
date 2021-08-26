@@ -70,6 +70,7 @@ found in the `task_metadata.json` inside every task directory.
 ```
 python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt \
     [--embeddings-dir embeddings]
+    [--gpus INT]
 ```
 
 2) Evaluate the generated predictions for the test set
