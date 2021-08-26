@@ -126,6 +126,14 @@ class AbstractPredictionModel(pl.LightningModule):
     # Implement this for each inheriting class
     # TODO: Can we combine the boilerplate for both of these?
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
+        """
+        Return at the end of every validation and test epoch.
+        :param name: "val" or "test"
+        :param outputs: Unflattened minibatches from {name}_step,
+            each with "target", "prediction", and additional metadata,
+            with a list of values for each instance in the batch.
+        :return:
+        """
         raise NotImplementedError("Implement this in children")
 
     def validation_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
