@@ -120,7 +120,7 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
                 # The subfolder name is set as the stratify key. This ensures at least
                 # one audio is selected from each subfolder in the original dataset
                 # However, the stratification key is currently removed and should
-                # not be passed. 
+                # not be passed.
                 # stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
                 # The split key is the hash of the path. This ensures the sampling is
                 # deterministic
