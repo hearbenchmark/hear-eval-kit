@@ -15,6 +15,15 @@ You can use our preprocessed datasets. Otherwise, see "Development > Preprocessi
 
 ## Evaluation
 
+The easiest way to do evaluation is to launch a Spotty GCP instance:
+```
+spotty start
+spotty sh
+```
+
+This requires the heareval Docker image, which is pre-built and
+published on Dockerhub for your convenience.
+
 ### Computing embeddings
 
 Once a set of tasks has been generated, embeddings can be computed
