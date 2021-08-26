@@ -12,6 +12,7 @@ project:
         - tasks/*
         - embeddings/*
         - .mypy_cache/*
+        - lightning_logs/*
 
 containers:
   - projectDir: /workspace/project
