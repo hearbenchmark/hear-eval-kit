@@ -191,13 +191,16 @@ class ScenePredictionModel(AbstractPredictionModel):
         end_scores = {}
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
+        if name == "test":
+            # Cache all predictions for later serialization
+            self.test_predicted_labels = prediction
+
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True)
-        return end_scores
 
 
 class EventPredictionModel(AbstractPredictionModel):
@@ -254,6 +257,11 @@ class EventPredictionModel(AbstractPredictionModel):
         end_scores = {}
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
+        if name == "test":
+            # Cache all predictions for later serialization
+            self.test_predicted_labels = prediction
+            self.test_predicted_events = predicted_events
+
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
                 predicted_events, self.target_events[name]
@@ -263,7 +271,6 @@ class EventPredictionModel(AbstractPredictionModel):
                 end_scores[f"{name}_{score}"] = 0.0
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True)
-        return end_scores
 
 
 class SplitMemmapDataset(Dataset):
@@ -512,7 +519,7 @@ def dataloader_from_split_name(
 
     print(
         f"Getting embeddings for split {split_name}, "
-        + "which has {len(split_name)} instances."
+        + f"which has {len(split_name)} instances."
     )
 
     return DataLoader(
@@ -571,8 +578,8 @@ def task_predictions_train(
         # TODO: Tune these
         monitor=target_score,
         min_delta=0.00,
-        patience=50,
-        # patience=3,
+        # patience=50,
+        patience=3,
         verbose=False,
         mode=mode,
     )
@@ -587,10 +594,12 @@ def task_predictions_train(
         "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
-    if checkpoint_callback.best_model_score:
+    if checkpoint_callback.best_model_score is not None:
         return predictor, trainer, checkpoint_callback.best_model_score.item(), mode
     else:
-        raise ValueError("No score for this model")
+        raise ValueError(
+            f"No score {checkpoint_callback.best_model_score} for this model"
+        )
 
 
 # This all needs to be cleaned up and simplified later.
@@ -678,7 +687,7 @@ def task_predictions(
             nlabels=nlabels,
             scores=scores,
         )
-        scores_and_trainers.append((best_model_score, trainer))
+        scores_and_trainers.append((best_model_score, trainer, predictor))
 
     # Pick the model with the best validation score
     scores_and_trainers.sort(key=lambda st: -st[0])
@@ -692,14 +701,29 @@ def task_predictions(
     # print(scores_and_trainers)
 
     # Use that model to compute test scores
-    best_score, best_trainer = scores_and_trainers[0]
+    best_score, best_trainer, best_predictor = scores_and_trainers[0]
     print("Best validation score", best_score)
     test_dataloader = dataloader_from_split_name(
         "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
+    assert len(test_scores) == 1, "Should have only one test dataloader"
+    test_scores = test_scores[0]
+
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_scores, indent=4)
+    )
+
+    # Cache predictions for secondary sanity-check evaluation
+    if metadata["embedding_type"] == "event":
+        json.dump(
+            best_predictor.test_predicted_events,
+            embedding_path.joinpath("test.predictions.json").open("w"),
+            indent=4,
+        )
+    pickle.dump(
+        best_predictor.test_predicted_labels,
+        open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
 
     # TODO: Do something with me
