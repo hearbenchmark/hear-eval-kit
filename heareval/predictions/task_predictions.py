@@ -104,7 +104,7 @@ class AbstractPredictionModel(pl.LightningModule):
         self.log("train_loss", loss)
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def _step(self, batch, batch_idx):
         # -> Dict[str, Union[torch.Tensor, List(str)]]:
         x, y, metadata = batch
         y_hat = self.predictor.forward_logit(x)
@@ -117,10 +117,30 @@ class AbstractPredictionModel(pl.LightningModule):
         # https://stackoverflow.com/questions/38987/how-do-i-merge-two-dictionaries-in-a-single-expression-taking-union-of-dictiona
         return {**z, **metadata}
 
+    def validation_step(self, batch, batch_idx):
+        return self._step(batch, batch_idx)
+
+    def test_step(self, batch, batch_idx):
+        return self._step(batch, batch_idx)
+
     # Implement this for each inheriting class
     # TODO: Can we combine the boilerplate for both of these?
-    def validation_epoch_end(self, outputs):
+    def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
+        """
+        Return at the end of every validation and test epoch.
+        :param name: "val" or "test"
+        :param outputs: Unflattened minibatches from {name}_step,
+            each with "target", "prediction", and additional metadata,
+            with a list of values for each instance in the batch.
+        :return:
+        """
         raise NotImplementedError("Implement this in children")
+
+    def validation_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
+        self._score_epoch_end("val", outputs)
+
+    def test_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
+        self._score_epoch_end("test", outputs)
 
     def _flatten_batched_outputs(
         self,
@@ -168,7 +188,7 @@ class ScenePredictionModel(AbstractPredictionModel):
             scores=scores,
         )
 
-    def validation_epoch_end(self, outputs):
+    def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
         flat_outputs = self._flatten_batched_outputs(
             outputs, keys=["target", "prediction", "prediction_logit"]
         )
@@ -177,14 +197,14 @@ class ScenePredictionModel(AbstractPredictionModel):
         )
 
         end_scores = {}
-        end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
+        end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         for score in self.scores:
-            end_scores[f"val_{score}"] = score(
+            end_scores[f"{name}_{score}"] = score(
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
-        for score in end_scores:
-            self.log(score, end_scores[score], prog_bar=True)
+        for score_name in end_scores:
+            self.log(score_name, end_scores[score_name], prog_bar=True)
         return end_scores
 
 
@@ -203,6 +223,7 @@ class EventPredictionModel(AbstractPredictionModel):
         prediction_type: str,
         scores: List[ScoreFunction],
         validation_target_events: Dict[str, List[Dict[str, Any]]],
+        test_target_events: Dict[str, List[Dict[str, Any]]],
     ):
         super().__init__(
             nfeatures=nfeatures,
@@ -211,9 +232,12 @@ class EventPredictionModel(AbstractPredictionModel):
             prediction_type=prediction_type,
             scores=scores,
         )
-        self.validation_target_events = validation_target_events
+        self.target_events = {
+            "val": validation_target_events,
+            "test": test_target_events,
+        }
 
-    def validation_epoch_end(self, outputs: List[Dict[str, List[Any]]]):
+    def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
         flat_outputs = self._flatten_batched_outputs(
             outputs,
             keys=["target", "prediction", "prediction_logit", "filename", "timestamp"],
@@ -236,15 +260,15 @@ class EventPredictionModel(AbstractPredictionModel):
         )
 
         end_scores = {}
-        end_scores["val_loss"] = self.predictor.logit_loss(prediction_logit, target)
+        end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         for score in self.scores:
-            end_scores[f"val_{score}"] = score(
-                predicted_events, self.validation_target_events
+            end_scores[f"{name}_{score}"] = score(
+                predicted_events, self.target_events[name]
             )
             # Weird, this can happen if precision has zero guesses
-            if math.isnan(end_scores[f"val_{score}"]):
-                end_scores[f"val_{score}"] = 0.0
+            if math.isnan(end_scores[f"{name}_{score}"]):
+                end_scores[f"{name}_{score}"] = 0.0
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True)
         return end_scores
@@ -486,16 +510,21 @@ def dataloader_from_split_name(
     embedding_type: str,
     batch_size: int = 64,
 ) -> DataLoader:
-    print(f"Getting embeddings for split: {split_name}")
+    dataset = SplitMemmapDataset(
+        embedding_path=embedding_path,
+        label_to_idx=label_to_idx,
+        nlabels=nlabels,
+        split_name=split_name,
+        embedding_type=embedding_type,
+    )
+
+    print(
+        f"Getting embeddings for split {split_name}, "
+        + "which has {len(split_name)} instances."
+    )
 
     return DataLoader(
-        SplitMemmapDataset(
-            embedding_path=embedding_path,
-            label_to_idx=label_to_idx,
-            nlabels=nlabels,
-            split_name=split_name,
-            embedding_type=embedding_type,
-        ),
+        dataset,
         batch_size=batch_size,
         # We don't shuffle because it's slow.
         # Also we want predicted labels in the same order as
@@ -511,12 +540,13 @@ def task_predictions_train(
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
-) -> torch.nn.Module:
+) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
         validation_target_events = json.load(
             embedding_path.joinpath("valid.json").open()
         )
+        test_target_events = json.load(embedding_path.joinpath("test.json").open())
         predictor = EventPredictionModel(
             nfeatures=embedding_size,
             label_to_idx=label_to_idx,
@@ -524,6 +554,7 @@ def task_predictions_train(
             prediction_type=metadata["prediction_type"],
             scores=scores,
             validation_target_events=validation_target_events,
+            test_target_events=test_target_events,
         )
     elif metadata["embedding_type"] == "scene":
         predictor = ScenePredictionModel(
@@ -549,6 +580,7 @@ def task_predictions_train(
         monitor=target_score,
         min_delta=0.00,
         patience=50,
+        # patience=3,
         verbose=False,
         mode=mode,
     )
@@ -563,7 +595,10 @@ def task_predictions_train(
         "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
-    return predictor
+    if checkpoint_callback.best_model_score:
+        return predictor, trainer, checkpoint_callback.best_model_score.item(), mode
+    else:
+        raise ValueError("No score for this model")
 
 
 # This all needs to be cleaned up and simplified later.
@@ -638,15 +673,43 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
-    # predictor =
-    task_predictions_train(
-        embedding_path=embedding_path,
-        embedding_size=embedding_size,
-        metadata=metadata,
-        label_to_idx=label_to_idx,
-        nlabels=nlabels,
-        scores=scores,
+    mode = None
+    scores_and_trainers = []
+    # Model selection
+    for i in range(3):
+        # TODO: Assert mode doesn't change?
+        predictor, trainer, best_model_score, mode = task_predictions_train(
+            embedding_path=embedding_path,
+            embedding_size=embedding_size,
+            metadata=metadata,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            scores=scores,
+        )
+        scores_and_trainers.append((best_model_score, trainer))
+
+    # Pick the model with the best validation score
+    scores_and_trainers.sort(key=lambda st: -st[0])
+    if mode == "max":
+        pass
+    elif mode == "min":
+        scores_and_trainers.reverse()
+    else:
+        raise ValueError(f"mode = {mode}")
+    # print(mode)
+    # print(scores_and_trainers)
+
+    # Use that model to compute test scores
+    best_score, best_trainer = scores_and_trainers[0]
+    print("Best validation score", best_score)
+    test_dataloader = dataloader_from_split_name(
+        "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
+    test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
+    open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
+        json.dumps(test_scores, indent=4)
+    )
+
     # TODO: Do something with me
     """
     task_predictions_test(
