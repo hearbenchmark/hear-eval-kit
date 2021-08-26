@@ -2,10 +2,12 @@ black
 boto3
 dcase_util
 intervaltree
-librosa
 luigi
 more-itertools
-numpy
+# otherwise librosa breaks
+numba==0.48
+# tf 2.6.0
+numpy==1.19.2
 pandas
 pre-commit
 pytest

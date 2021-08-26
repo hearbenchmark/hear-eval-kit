@@ -15,6 +15,15 @@ You can use our preprocessed datasets. Otherwise, see "Development > Preprocessi
 
 ## Evaluation
 
+The easiest way to do evaluation is to launch a Spotty GCP instance:
+```
+spotty start
+spotty sh
+```
+
+This requires the heareval Docker image, which is pre-built and
+published on Dockerhub for your convenience.
+
 ### Computing embeddings
 
 Once a set of tasks has been generated, embeddings can be computed
@@ -29,6 +38,10 @@ baseline](https://github.com/neuralaudio/hear-baseline):
 pip3 install hearbaseline
 wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
 ```
+
+If you want to use your pip HEAR module, substitute `hearbaseline`
+and `./naive_baseline.pt` below with your pip module name and model
+weight path.
 
 2) Compute the embeddings for all the tasks
 ```
@@ -55,7 +68,7 @@ found in the `task_metadata.json` inside every task directory.
 
 1) Train the shallow model and generate the test set predictions for each task
 ```
-python3 -m heareval.predictions.runner $module --model path/to/model \
+python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt \
     [--embeddings-dir embeddings]
 ```
 
@@ -72,8 +85,6 @@ different, the option `--embeddings-dir` can be used.
 Running the above will generate `evaluation_results.json` in the
 current working directory containing the evalution scores for each
 task.
-
-[TODO: make sure this works with pip3 install]
 
 ## Development
 
@@ -115,8 +126,8 @@ If you want to run preprocessing yourself:
 libsox-fmt-ffmpeg or [installing from
 source](https://github.com/neuralaudio/hear-eval-kit/issues/156#issuecomment-893151305).
 
-This will take about 12-16 hours for the open tasks. > 800 GB free
-disk space is required while processing. Final output is 325 GB.
+This will take about 2 user-CPU-hours for the open tasks. 100 GB free
+disk space is required while processing. Final output is 11 GB.
 
 These Luigi pipelines are used to preprocess the evaluation tasks
 into a common format for downstream evaluation.

@@ -1,0 +1,84 @@
+# You must delete disks manually on GCP :\
+# https://console.cloud.google.com/compute/disks?project=hear2021-evaluation
+
+project:
+  name: spotty-heareval
+  syncFilters:
+    - exclude:
+        - .idea/*
+        - .git/*
+        - '*/__pycache__/*'
+        - _workdir
+        - embeddings
+        - .mypy_cache/
+
+containers:
+  - projectDir: /workspace/project
+    #file: Dockerfile
+    image: turian/heareval
+    #image: turian/heareval-v100-cu110
+    #image: turian/heareval-v100
+    #image: turian/heareval-a100
+#    ports:
+#      # TensorBoard
+#      - containerPort: 6006
+#        hostPort: 6006
+#      # Jupyter
+#      - containerPort: 8888
+#        hostPort: 8888
+    volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+    runtimeParameters: ['--shm-size', '20G']
+
+instances:
+  - name: spotty-heareval-i1
+    provider: gcp
+    parameters:
+      # https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
+      zone: europe-west4-a
+      # V100 
+      machineType: n1-standard-4
+      # One CPU seems to exhaust memory and crash
+      #machineType: n1-standard-1
+      ## A100. only west3 or maybe west4? :\
+      #machineType: a2-highgpu-1g
+      gpu:
+        type: nvidia-tesla-v100
+        #type: nvidia-tesla-a100
+        count: 1
+      # https://console.cloud.google.com/compute/images?project=hear2021-evaluation
+      # https://github.com/spotty-cloud/spotty/issues/102
+      #imageUri: projects/ml-images/global/images/family/common-dl-gpu-debian-10
+      imageUri: projects/ml-images/global/images/c0-deeplearning-common-cu110-v20210818-debian-10
+#      spotInstance: True
+#      ports: [6006, 8888]
+      dockerDataRoot: /docker
+      volumes:
+        - name: workspace
+          parameters:
+            size: 250
+# Not implemented for GCP, all volumes will be retained
+#            deletionPolicy: retain
+            mountDir: /workspace
+        - name: docker
+          parameters:
+            size: 200
+            mountDir: /docker
+
+# Pick SR!
+#   gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*sr48000.tar . && for f in hear2021-task-*sr48000.tar; do tar xf "$f"; done
+#   wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
+#   python3 -m heareval.embeddings.runner hearbaseline --model naive_baseline.pt
+#   python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt
+#   python3 -m heareval.evaluation.runner
+#   
+#scripts:
+#  setup: |
+#    bash setup.sh
+#  train: |
+#    bash train.sh
+#  tensorboard: |
+#    tensorboard --bind_all --port 6006 --logdir /workspace/project/logs
+#  jupyter: |
+#    jupyter notebook --allow-root --ip 0.0.0.0 --notebook-dir=/workspace/project
