@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+import wandb
 from intervaltree import IntervalTree
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
@@ -635,7 +636,7 @@ def task_predictions_train(
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
-        return predictor, trainer, checkpoint_callback.best_model_score.item(), mode
+        return predictor, trainer, checkpoint_callback.best_model_score.detach(), mode
     else:
         raise ValueError("No score for this model")
 
@@ -701,6 +702,8 @@ def task_predictions(
 ):
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
+
+    wandb.init(project="heareval", tags=["predictions", embedding_path.name])
 
     if metadata["embedding_type"] == "scene":
         embedding_size = scene_embedding_size

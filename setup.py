@@ -49,6 +49,7 @@ setup(
         "tensorflow",
         "torch",
         "tqdm",
+        "wandb",
         "scikit-learn>=0.24.2",
     ],
     extras_require={
