@@ -713,6 +713,19 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
+    def print_scores(mode, scores_and_trainers):
+        # Pick the model with the best validation score
+        scores_and_trainers.sort(key=lambda st: -st[0])
+        if mode == "max":
+            pass
+        elif mode == "min":
+            scores_and_trainers.reverse()
+        else:
+            raise ValueError(f"mode = {mode}")
+        # print(mode)
+        for score, trainer, predictor in scores_and_trainers:
+            print(score, dict(predictor.hparams))
+
     mode = None
     scores_and_trainers = []
     # Model selection
@@ -732,21 +745,11 @@ def task_predictions(
             gpus=gpus,
         )
         scores_and_trainers.append((best_model_score, trainer, predictor))
-
-    # Pick the model with the best validation score
-    scores_and_trainers.sort(key=lambda st: -st[0])
-    if mode == "max":
-        pass
-    elif mode == "min":
-        scores_and_trainers.reverse()
-    else:
-        raise ValueError(f"mode = {mode}")
-    # print(mode)
-    for score, trainer, predictor in scores_and_trainers:
-        print(score, dict(predictor.hparams))
+        print_scores(mode, scores_and_trainers)
 
     # Use that model to compute test scores
     best_score, best_trainer, best_predictor = scores_and_trainers[0]
+    print()
     print("Best validation score", best_score, dict(best_predictor.hparams))
     test_dataloader = dataloader_from_split_name(
         "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
