@@ -8,9 +8,10 @@ project:
         - .idea/*
         - .git/*
         - '*/__pycache__/*'
-        - _workdir
-        - embeddings
-        - .mypy_cache/
+        - _workdir/*
+        - tasks/*
+        - embeddings/*
+        - .mypy_cache/*
 
 containers:
   - projectDir: /workspace/project
