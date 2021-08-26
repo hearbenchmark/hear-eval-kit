@@ -379,7 +379,7 @@ class SplitMemmapDataset(Dataset):
         # Lame special case
         if not y:
             return (
-                x,
+                np.array(x),
                 # BCEWithLogitsLoss wants float not long targets
                 torch.zeros((self.nlabels,), dtype=torch.int32).float(),
                 self.metadata[idx],
@@ -387,7 +387,7 @@ class SplitMemmapDataset(Dataset):
         # TODO: Could rewrite faster using scatter_:
         # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
         return (
-            x,
+            np.array(x),
             # BCEWithLogitsLoss wants float not long targets
             torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
             .max(axis=0)
@@ -555,7 +555,7 @@ def dataloader_from_split_name(
 
     print(
         f"Getting embeddings for split {split_name}, "
-        + f"which has {len(split_name)} instances."
+        + f"which has {len(dataset)} instances."
     )
 
     return DataLoader(
