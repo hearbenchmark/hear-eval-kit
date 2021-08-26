@@ -39,6 +39,10 @@ pip3 install hearbaseline
 wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
 ```
 
+If you want to use your pip HEAR module, substitute `hearbaseline`
+and `./naive_baseline.pt` below with your pip module name and model
+weight path.
+
 2) Compute the embeddings for all the tasks
 ```
 python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt
@@ -64,7 +68,7 @@ found in the `task_metadata.json` inside every task directory.
 
 1) Train the shallow model and generate the test set predictions for each task
 ```
-python3 -m heareval.predictions.runner $module --model path/to/model \
+python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt \
     [--embeddings-dir embeddings]
 ```
 
@@ -81,8 +85,6 @@ different, the option `--embeddings-dir` can be used.
 Running the above will generate `evaluation_results.json` in the
 current working directory containing the evalution scores for each
 task.
-
-[TODO: make sure this works with pip3 install]
 
 ## Development
 
