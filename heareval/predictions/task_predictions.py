@@ -511,7 +511,8 @@ def dataloader_from_split_name(
     )
 
     print(
-        f"Getting embeddings for split {split_name}, which has {len(split_name)} instances."
+        f"Getting embeddings for split {split_name}, "
+        + "which has {len(split_name)} instances."
     )
 
     return DataLoader(
