@@ -3,13 +3,11 @@
 Map embeddings to predictions for every downstream task and store
 test predictions to disk.
 
-NOTE: Shallow learning, later model selection, as described in our
-doc.
+Model selection over the validation score.
 
 TODO:
     * Profiling should occur here (both embedding time AFTER loading
     to GPU, and complete wall time include disk writes).
-    * TODO: Include CUDA stuff here?
     * If disk speed is the limiting factor maybe we should train
     many models simultaneously with one disk read?
 """
