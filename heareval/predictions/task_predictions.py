@@ -432,7 +432,9 @@ def create_events_from_prediction(
 
     # Create a sorted numpy matrix of frame level predictions for this file. We convert
     # to a numpy array here before applying a median filter.
-    predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
+    predictions = np.stack(
+        [prediction_dict[t].detach().cpu().numpy() for t in timestamps]
+    )
     # print("predictions", predictions)
 
     # We can apply a median filter here to smooth out events, but b/c participants
@@ -636,7 +638,12 @@ def task_predictions_train(
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
-        return predictor, trainer, checkpoint_callback.best_model_score.detach(), mode
+        return (
+            predictor,
+            trainer,
+            checkpoint_callback.best_model_score.detach().cpu(),
+            mode,
+        )
     else:
         raise ValueError("No score for this model")
 
