@@ -47,6 +47,7 @@ class OneHotToCrossEntropyLoss(torch.nn.Module):
         return self.loss(y_hat, y)
 
 
+# TODO: REMOVEME
 class RandomProjectionPrediction(torch.nn.Module):
     def __init__(self, nfeatures: int, nlabels: int, prediction_type: str):
         super().__init__()
@@ -73,6 +74,45 @@ class RandomProjectionPrediction(torch.nn.Module):
         return x
 
 
+class FullyConnectedPrediction(torch.nn.Module):
+    def __init__(self, nfeatures: int, nlabels: int, prediction_type: str):
+        super().__init__()
+
+        self.hidden = torch.nn.Linear(nfeatures, 512)
+        # Honestly, we don't really know what activation preceded
+        # us for the final embedding.
+        torch.nn.init.xavier_normal_(
+            self.hidden.weight, gain=torch.nn.init.calculate_gain("linear")
+        )
+        self.dropout = torch.nn.Dropout(0.2)
+        self.relu = torch.nn.ReLU()
+        self.projection = torch.nn.Linear(512, nlabels)
+        torch.nn.init.xavier_normal_(
+            self.projection.weight, gain=torch.nn.init.calculate_gain("relu")
+        )
+        self.logit_loss: torch.nn.Module
+        if prediction_type == "multilabel":
+            self.activation: torch.nn.Module = torch.nn.Sigmoid()
+            self.logit_loss = torch.nn.BCEWithLogitsLoss()
+        elif prediction_type == "multiclass":
+            self.activation = torch.nn.Softmax()
+            self.logit_loss = OneHotToCrossEntropyLoss()
+        else:
+            raise ValueError(f"Unknown prediction_type {prediction_type}")
+
+    def forward_logit(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.hidden(x)
+        x = self.dropout(x)
+        x = self.relu(x)
+        x = self.projection(x)
+        return x
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.forward_logit(x)
+        x = self.activation(x)
+        return x
+
+
 class AbstractPredictionModel(pl.LightningModule):
     def __init__(
         self,
@@ -84,7 +124,7 @@ class AbstractPredictionModel(pl.LightningModule):
     ):
         super().__init__()
 
-        self.predictor = RandomProjectionPrediction(nfeatures, nlabels, prediction_type)
+        self.predictor = FullyConnectedPrediction(nfeatures, nlabels, prediction_type)
         self.label_to_idx = label_to_idx
         self.idx_to_label: Dict[int, str] = {
             idx: label for (label, idx) in self.label_to_idx.items()
@@ -512,7 +552,7 @@ def dataloader_from_split_name(
 
     print(
         f"Getting embeddings for split {split_name}, "
-        + "which has {len(split_name)} instances."
+        + f"which has {len(split_name)} instances."
     )
 
     return DataLoader(
@@ -571,8 +611,8 @@ def task_predictions_train(
         # TODO: Tune these
         monitor=target_score,
         min_delta=0.00,
-        patience=50,
-        # patience=3,
+        # patience=50,
+        patience=3,
         verbose=False,
         mode=mode,
     )
@@ -587,7 +627,7 @@ def task_predictions_train(
         "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
-    if checkpoint_callback.best_model_score:
+    if checkpoint_callback.best_model_score is not None:
         return predictor, trainer, checkpoint_callback.best_model_score.item(), mode
     else:
         raise ValueError("No score for this model")
