@@ -82,6 +82,13 @@ Clone repo:
 git clone https://github.com/neuralaudio/hear2021-eval-kit
 cd hear2021-eval-kit
 ```
+Add secret task submodule:
+```
+git submodule init
+git submodule update
+```
+**_Note_**: Secret tasks are not available to the participants. They should skip the above step.
+
 Install in development mode:
 ```
 pip3 install -e ".[dev]"
