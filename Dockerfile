@@ -6,6 +6,9 @@
 
 # We downgrade from GCP CUDA 11.0 to Docker CUDA 10.2, so we can
 # install pre-built pytorch 1.9 easily
+#
+# Ah shit: TF 2.6 wants cudnn 8.1 and CUDA 11.2
+# https://www.tensorflow.org/install/source#gpu
 
 
 # deepo: python3 generate.py --cuda-ver 10.2 --cudnn-ver 7 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
