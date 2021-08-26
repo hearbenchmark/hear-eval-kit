@@ -37,12 +37,14 @@ instances:
     parameters:
       # https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
       zone: europe-west4-a
+      # V100 
       machineType: n1-standard-1
-      gpu:
-        type: nvidia-tesla-v100
-        count: 1
       ## A100. only west3 or maybe west4? :\
       #machineType: a2-highgpu-1g
+      gpu:
+        type: nvidia-tesla-v100
+        #type: nvidia-tesla-a100
+        count: 1
       # https://console.cloud.google.com/compute/images?project=hear2021-evaluation
       # https://github.com/spotty-cloud/spotty/issues/102
       #imageUri: projects/ml-images/global/images/family/common-dl-gpu-debian-10
