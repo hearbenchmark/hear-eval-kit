@@ -1,9 +1,6 @@
-#docker pull turian/heareval
-## Or, build the docker yourself
-##docker build -t turian/heareval .
-#
-#docker run -v /tmp/.X11-unix:/tmp/.X11-unix -e DISPLAY=$DISPLAY -h $HOSTNAME -v $HOME/.Xauthority:/home/renderman/.Xauthority -it turian/heareval bash
-#
+# Unfortunately, dockerhub won't integrate with github unless we
+# pay, so just run this manually each time you update the Dockerfile:
+# docker build -t turian/heareval . && docker push turian/heareval
 
 # 1.19.2 numpy for tf 2.6.0
 
