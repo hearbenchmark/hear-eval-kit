@@ -39,7 +39,8 @@ PARAM_GRID = {
     "hidden_dim": [512],
     "dropout": [0.0, 0.2, 0.4],
     "lr": [1e-3, 1e-4, 1e-5],
-    "patience": [3, 10],
+    # "patience": [3, 10],
+    "patience": [3],
     "max_epochs": [100],
 }
 GRID_POINTS = 5
@@ -718,7 +719,7 @@ def task_predictions(
     confs = list(ParameterGrid(PARAM_GRID))
     rng = random.Random(0)
     rng.shuffle(confs)
-    for conf in tqdm(confs[:GRID_POINTS]):
+    for conf in tqdm(confs[:GRID_POINTS], desc="grid"):
         # TODO: Assert mode doesn't change?
         predictor, trainer, best_model_score, mode = task_predictions_train(
             embedding_path=embedding_path,
@@ -730,7 +731,7 @@ def task_predictions(
             conf=conf,
             gpus=gpus,
         )
-        scores_and_trainers.append((best_model_score, trainer))
+        scores_and_trainers.append((best_model_score, trainer, predictor))
 
     # Pick the model with the best validation score
     scores_and_trainers.sort(key=lambda st: -st[0])
@@ -741,18 +742,22 @@ def task_predictions(
     else:
         raise ValueError(f"mode = {mode}")
     # print(mode)
-    for score, trainer in scores_and_trainers:
-        print(score, trainer.hparams)
+    for score, trainer, predictor in scores_and_trainers:
+        print(score, dict(predictor.hparams))
 
     # Use that model to compute test scores
-    best_score, best_trainer = scores_and_trainers[0]
-    print("Best validation score", best_score, best_trainer.hparams)
+    best_score, best_trainer, best_predictor = scores_and_trainers[0]
+    print("Best validation score", best_score, dict(best_predictor.hparams))
     test_dataloader = dataloader_from_split_name(
         "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_scores, indent=4)
+    )
+
+    open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
+        json.dumps(dict(best_predictor.hparams), indent=4)
     )
 
     # TODO: Do something with me

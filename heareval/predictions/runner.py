@@ -64,7 +64,7 @@ def runner(
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
     tasks = list(embeddings_dir_path.iterdir())
-    for task_path in tqdm(reversed(tasks)):
+    for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
         task_predictions(
             task_path, scene_embedding_size, timestamp_embedding_size, gpus
