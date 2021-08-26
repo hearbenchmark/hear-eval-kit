@@ -602,59 +602,6 @@ def task_predictions_train(
         )
 
 
-# This all needs to be cleaned up and simplified later.
-"""
-def task_predictions_test(
-    predictor: torch.nn.Module,
-    embedding_path: Path,
-    metadata: Dict[str, Any],
-    label_to_idx: Dict[str, int],
-    nlabels: int,
-):
-    dataloader = dataloader_from_split_name(
-        "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
-    )
-
-    all_predicted_labels = []
-    for embs, target_labels, filenames, timestamps in tqdm(dataloader):
-        predicted_labels = predictor(embs)
-        # TODO: Uses less memory to stack them one at a time
-        all_predicted_labels.append(predicted_labels)
-    predicted_labels = torch.cat(all_predicted_labels)
-
-    if metadata["embedding_type"] == "event":
-        # For event predictions we need to convert the frame-based predictions
-        # to a list of events with start and stop timestamps. These events are
-        # computed on each file independently and then saved as JSON in the same
-        # format as the ground truth events produced by the luigi pipeline.
-
-        # A list of filenames and timestamps associated with each prediction
-        file_timestamps = json.load(
-            embedding_path.joinpath("test.filename-timestamps.json").open()
-        )
-
-        # Can probably remove this stuff?
-
-        print("Creating events from predictions:")
-        # Probably don't need label_vocab any more since we have label_to_idx
-        label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
-        events = get_events_for_all_files(
-            predicted_labels, file_timestamps, label_vocab
-        )
-
-        json.dump(
-            events,
-            embedding_path.joinpath("test.predictions.json").open("w"),
-            indent=4,
-        )
-
-    pickle.dump(
-        predicted_labels,
-        open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
-    )
-"""
-
-
 def task_predictions(
     embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
 ):
@@ -725,14 +672,3 @@ def task_predictions(
         best_predictor.test_predicted_labels,
         open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
-
-    # TODO: Do something with me
-    """
-    task_predictions_test(
-        predictor=predictor,
-        embedding_path=embedding_path,
-        metadata=metadata,
-        label_to_idx=label_to_idx,
-        nlabels=nlabels,
-    )
-    """
