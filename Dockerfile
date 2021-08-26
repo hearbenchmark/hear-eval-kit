@@ -251,7 +251,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
-    $PIP_INSTALL cython
+    $PIP_INSTALL cython ipython
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
@@ -269,6 +269,17 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $APT_INSTALL less locate
+
+# THIS COMPLETE WACKNESS IS BECAUSE FUCKING dcase-util DEPENDS UPON librosa,
+# which is a gnarly PITA to install and get play nice with other packages.
+# I have no idea why we have numba==0.54.0
+# and have to do numba==0.48 since that's in the setup.py for us
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $PIP_INSTALL \
+        numba==0.48
+
 RUN updatedb
 
 # ==================================================================
