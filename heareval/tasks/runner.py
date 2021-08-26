@@ -19,14 +19,14 @@ logger = logging.getLogger("luigi-interface")
 # The secret tasks module will not be available for participants
 try:
     import hearsecrettasks
+    secret_tasks = hearsecrettasks.tasks
 except ModuleNotFoundError:
-    # For participants the secret_tasks_module will be None
     logger.info(
         "The hearsecrettask submodule is not found. "
         "If you are a participant, this is an expected behaviour as the "
         "secret tasks are not made available to you. "
     )
-    hearsecrettasks = None
+    secret_tasks = {}
 
 tasks = {
     "speech_commands": [speech_commands],
@@ -35,7 +35,7 @@ tasks = {
     "all": [speech_commands, nsynth_pitch, dcase2016_task2],
     # Add the task config for the secrets task if the secret task config was found.
     # Not available for participants
-    **(getattr(hearsecrettasks, "tasks") if hearsecrettasks else {}),
+    **secret_tasks,
 }
 
 
