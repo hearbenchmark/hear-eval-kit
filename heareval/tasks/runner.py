@@ -21,7 +21,7 @@ try:
     import hearsecrettasks
 
     secret_tasks = hearsecrettasks.tasks
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     logger.info(
         "The hearsecrettask submodule is not found. "
         "If you are a participant, this is an expected behaviour as the "

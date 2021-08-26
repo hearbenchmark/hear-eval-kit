@@ -35,7 +35,7 @@ try:
     import hearsecrettasks
 
     secret_configs = hearsecrettasks.sampler_config
-except ModuleNotFoundError:
+except ModuleNotFoundError as e:
     logger.info(
         "The hearsecrettask submodule is not found. "
         "If you are a participant, this is an expected behaviour as the "
