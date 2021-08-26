@@ -625,10 +625,15 @@ def task_predictions_train(
         mode=mode,
     )
 
+    # Try also pytorch profiler
+    # profiler = pl.profiler.AdvancedProfiler(output_filename="predictions-profile.txt")
     trainer = pl.Trainer(
         callbacks=[checkpoint_callback, early_stop_callback],
         gpus=gpus,
         max_epochs=conf["max_epochs"],
+        # profiler=profiler,
+        # profiler="pytorch",
+        profiler="simple",
     )
     train_dataloader = dataloader_from_split_name(
         "train", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
