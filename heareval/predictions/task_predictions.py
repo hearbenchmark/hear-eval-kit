@@ -195,8 +195,8 @@ class ScenePredictionModel(AbstractPredictionModel):
             end_scores[f"{name}_{score}"] = score(
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
-        for score in end_scores:
-            self.log(score, end_scores[score], prog_bar=True)
+        for score_name in end_scores:
+            self.log(score_name, end_scores[score_name], prog_bar=True)
         return end_scores
 
 
@@ -587,7 +587,10 @@ def task_predictions_train(
         "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
-    return predictor, trainer, checkpoint_callback.best_model_score.item(), mode
+    if checkpoint_callback.best_model_score:
+        return predictor, trainer, checkpoint_callback.best_model_score.item(), mode
+    else:
+        raise ValueError("No score for this model")
 
 
 # This all needs to be cleaned up and simplified later.
