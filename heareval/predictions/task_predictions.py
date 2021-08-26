@@ -46,14 +46,16 @@ PARAM_GRID = {
 GRID_POINTS = 5
 
 
-class OneHotToCrossEntropyLoss(torch.nn.Module):
+class OneHotToCrossEntropyLoss(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.loss = torch.nn.CrossEntropyLoss()
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         # One and only one label per class
-        assert torch.all(torch.sum(y, dim=1) == torch.ones(y.shape[0]))
+        assert torch.all(
+            torch.sum(y, dim=1) == torch.ones(y.shape[0], device=self.device)
+        )
         y = y.argmax(dim=1)
         return self.loss(y_hat, y)
 
