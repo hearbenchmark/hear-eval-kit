@@ -141,7 +141,7 @@ You can also just run individual tasks:
 python3 -m heareval.tasks.runner [speech_commands|nsynth_pitch|dcase2016_task2]
 ```
 Secret tasks will also follow the same pattern above. The names of the tasks are 
-not disclosed for the pariticipants.
+not disclosed for the participants.
 
 **_NOTE__**: To run the pipeline on secret tasks please ensure to initialise and 
 update the `hearsecrettasks` submodule. This repository is not available for participants.
