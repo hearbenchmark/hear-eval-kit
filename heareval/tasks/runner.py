@@ -14,15 +14,19 @@ import heareval.tasks.nsynth_pitch as nsynth_pitch
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.speech_commands as speech_commands
 
+logger = logging.getLogger("luigi-interface")
 # Currently the runner is only allowed to run for open tasks
 # The secret tasks module will not be available for participants
 try:
     import hearsecrettasks
 except ModuleNotFoundError:
     # For participants the secret_tasks_module will be None
+    logger.info(
+        "The hearsecrettask submodule is not found. "
+        "If you are a participant, this is an expected behaviour as the "
+        "secret tasks are not made available to you. "
+    )
     hearsecrettasks = None
-
-logger = logging.getLogger("luigi-interface")
 
 tasks = {
     "speech_commands": [speech_commands],
@@ -91,7 +95,7 @@ def run(
     tasks_to_run = [
         task_script.main(  # type: ignore
             sample_rates=sample_rates,
-            work_dir=tmp_dir,
+            tmp_dir=tmp_dir,
             tasks_dir=tasks_dir,
             small=small,
         )

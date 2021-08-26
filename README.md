@@ -98,7 +98,7 @@ Add secret task submodule:
 git submodule init
 git submodule update
 ```
-**_Note_**: Secret tasks are not available to the participants. They should skip the above step.
+**_NOTE_**: Secret tasks are not available to participants. They should skip the above step.
 
 Install in development mode:
 ```
@@ -138,6 +138,13 @@ python3 -m heareval.tasks.runner all
 ```
 You can also just run individual tasks:
 python3 -m heareval.tasks.runner [speech_commands|nsynth_pitch|dcase2016_task2]
+
+To run the pipeline for all secret tasks:
+```
+python3 -m heareval.tasks.runner all-secrets
+```
+**_NOTE__**: Please ensure to initialise and update the `hearsecrettasks` submodule. This repository is not available for participants.
+
 
 Each pipeline will download and preprocess each dataset according
 to the following DAG:
