@@ -122,8 +122,15 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         typing \
         && \
     $PIP_INSTALL \
-        --pre torch torchvision -f \
-        https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
+        # deepo installs nightly CPU version
+        # TODO: CUDA 11.0 only is supported by torch <= 1.7.1.
+        # We want torch 1.9.0. BUT, GCP images only seem to be 11.0.
+        # Consider also switchign spotty image to c2-deeplearning-pytorch-1-9-cu110-v20210714-debian-10 
+        torch==1.7.1+cu110 torchvision==0.8.2+cu110 \
+        -f https://download.pytorch.org/whl/torch_stable.html
+
+        #--pre torch torchvision -f \
+        #https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
 
 #        && \
 

@@ -38,7 +38,9 @@ instances:
       # https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
       zone: europe-west4-a
       # V100 
-      machineType: n1-standard-1
+      machineType: n1-standard-4
+      # One CPU seems to exhaust memory and crash
+      #machineType: n1-standard-1
       ## A100. only west3 or maybe west4? :\
       #machineType: a2-highgpu-1g
       gpu:
