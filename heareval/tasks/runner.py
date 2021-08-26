@@ -13,17 +13,17 @@ import heareval.tasks.dcase2016_task2 as dcase2016_task2
 import heareval.tasks.nsynth_pitch as nsynth_pitch
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.speech_commands as speech_commands
+import hearsecrettasks
 
 logger = logging.getLogger("luigi-interface")
 # Currently the runner is only allowed to run for open tasks
-# The secret tasks module will not be available for participants
-try:
-    import hearsecrettasks
-
+# The secret tasks module will be empty and not be available for
+# the participants
+if hasattr(hearsecrettasks, "tasks"):
     secret_tasks = hearsecrettasks.tasks
-except ModuleNotFoundError as e:
+else:
     logger.info(
-        "The hearsecrettask submodule is not found. "
+        "The hearsecrettask submodule is empty. "
         "If you are a participant, this is an expected behaviour as the "
         "secret tasks are not made available to you. "
     )
