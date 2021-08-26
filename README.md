@@ -132,18 +132,19 @@ disk space is required while processing. Final output is 11 GB.
 These Luigi pipelines are used to preprocess the evaluation tasks
 into a common format for downstream evaluation.
 
-To run the preprocessing pipeline for all open tasks:
+To run the preprocessing pipeline for all available tasks:
 ```
 python3 -m heareval.tasks.runner all
 ```
 You can also just run individual tasks:
+```
 python3 -m heareval.tasks.runner [speech_commands|nsynth_pitch|dcase2016_task2]
+```
+Secret tasks will also follow the same pattern above. The names of the tasks are 
+not disclosed for the pariticipants.
 
-To run the pipeline for all secret tasks:
-```
-python3 -m heareval.tasks.runner all-secrets
-```
-**_NOTE__**: Please ensure to initialise and update the `hearsecrettasks` submodule. This repository is not available for participants.
+**_NOTE__**: To run the pipeline on secret tasks please ensure to initialise and 
+update the `hearsecrettasks` submodule. This repository is not available for participants.
 
 
 Each pipeline will download and preprocess each dataset according
