@@ -352,8 +352,8 @@ class SplitMemmapDataset(Dataset):
         We also return the metadata as a Dict.
         """
         x = self.embedding_memmap[idx]
-        y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-        y = label_to_binary_vector(y, self.nlabels)
+        labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+        y = label_to_binary_vector(labels, self.nlabels)
         return x, y, self.metadata[idx]
 
 
