@@ -34,11 +34,12 @@ tasks = {
     "nsynth_pitch": [nsynth_pitch],
     "dcase2016_task2": [dcase2016_task2],
     "all": [speech_commands, nsynth_pitch, dcase2016_task2]
-    + secret_tasks.get("all-secrets", []),
+    + secret_tasks.pop("all-secrets", []),
     # Add the task config for the secrets task if the secret task config was found.
     # Not available for participants
-    **{task: module for task, module in secret_tasks.items() if task != "all-secrets"},
+    **secret_tasks,
 }
+print(tasks)
 
 
 @click.command()
