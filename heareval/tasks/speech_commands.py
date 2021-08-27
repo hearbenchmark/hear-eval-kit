@@ -76,7 +76,12 @@ class GenerateTrainDataset(luigi_util.WorkTask):
     def run(self):
         train_path = Path(self.requires()["train"].workdir).joinpath("train")
         background_audio = list(train_path.glob(f"{BACKGROUND_NOISE}/*.wav"))
-        assert len(background_audio) > 0
+
+        # Remove the assertion below, as background noises might not be present 
+        # in the small version of the development dataset.
+        # Since the md5 check on the downloaded dataset is already present, 
+        # removing this is not a concern on data completeness.
+        # assert len(background_audio) > 0
 
         # Read all the background audio files and split into 1 second segments,
         # save all the segments into a folder called _silence_
