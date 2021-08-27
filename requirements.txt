@@ -23,6 +23,7 @@ torch
 tqdm
 multidict==5.1.0
 yarl==1.2.3
+idna==3.2
 typing-extensions==3.7.4.3
 numba>=0.49.0 # not directly required, pinned by Snyk to avoid a vulnerability
 scikit-learn>=0.24.2 # not directly required, pinned by Snyk to avoid a vulnerability

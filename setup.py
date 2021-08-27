@@ -51,6 +51,7 @@ setup(
         "tqdm",
         "multidict==5.1.0",
         "yarl==1.2.3",
+        "idna==3.2",
         "typing-extensions==3.7.4.3",
         "scikit-learn>=0.24.2",
     ],
