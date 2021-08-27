@@ -27,16 +27,17 @@ from tqdm import tqdm
 import heareval.tasks.pipeline as pipeline
 import heareval.tasks.util.luigi as luigi_util
 from heareval.tasks import dcase2016_task2, nsynth_pitch, speech_commands
-import hearsecrettasks
 
 logger = logging.getLogger("luigi-interface")
 # Currently the sampler is only allowed to run for open tasks
 # The secret tasks module will not be available for participants
-if hasattr(hearsecrettasks, "sampler_config"):
+try:
+    import hearsecrettasks
+
     secret_config = hearsecrettasks.sampler_config
-else:
+except ModuleNotFoundError as e:
     logger.info(
-        "The hearsecrettask submodule is empty. "
+        "The hearsecrettask submodule is not installed. "
         "If you are a participant, this is an expected behaviour as the "
         "secret tasks are not made available to you. "
     )
