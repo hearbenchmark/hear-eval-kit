@@ -53,6 +53,7 @@ setup(
         "multidict==5.1.0",
         "yarl==1.2.3",
         "idna==3.2",
+        "rsa==4.7.2",
         "typing-extensions==3.7.4.3",
         "tensorboard-data-server==0.6.1",
         "tensorboard-plugin-wit==1.8.0",
