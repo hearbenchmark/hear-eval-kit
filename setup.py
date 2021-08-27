@@ -57,6 +57,10 @@ setup(
         "typing-extensions==3.7.4.3",
         "tensorboard-data-server==0.6.1",
         "tensorboard-plugin-wit==1.8.0",
+        "grpcio==1.39.0",
+        "rsa==4.7.2",
+        "Werkzeug==2.0.1",
+        "wheel==0.36.2",
         "scikit-learn>=0.24.2",
     ],
     extras_require={
