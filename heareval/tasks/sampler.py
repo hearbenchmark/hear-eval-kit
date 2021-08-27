@@ -29,6 +29,22 @@ import heareval.tasks.util.luigi as luigi_util
 from heareval.tasks import dcase2016_task2, nsynth_pitch, speech_commands
 
 logger = logging.getLogger("luigi-interface")
+# Currently the sampler is only allowed to run for open tasks
+# The secret tasks module will not be available for participants
+try:
+    import hearsecrettasks
+
+    secret_config = hearsecrettasks.sampler_config
+except ModuleNotFoundError as e:
+    print(e)
+    logger.info(
+        "The hearsecrettask submodule is not installed. "
+        "If you are a participant, this is an expected behaviour as the "
+        "secret tasks are not made available to you. "
+    )
+    secret_config = {}
+
+logger = logging.getLogger("luigi-interface")
 
 METADATAFORMATS = [".csv", ".json", ".txt"]
 AUDIOFORMATS = [".mp3", ".wav", ".ogg"]
@@ -57,12 +73,15 @@ configs = {
             "dev_1_ebr_6_nec_3_poly_0.wav",
         ],
     },
+    # Add the sampler config for the secrets task if the secret task config was found.
+    # Not available for participants
+    **secret_config,
 }
 
 
 class RandomSampleOriginalDataset(luigi_util.WorkTask):
     necessary_keys = luigi.ListParameter()
-    audio_sample_size = luigi.Parameter()
+    audio_sample_size = luigi.IntParameter()
 
     def requires(self):
         return pipeline.get_download_and_extract_tasks(self.task_config)
@@ -102,7 +121,9 @@ class RandomSampleOriginalDataset(luigi_util.WorkTask):
             audio_files_to_sample.assign(
                 # The subfolder name is set as the stratify key. This ensures at least
                 # one audio is selected from each subfolder in the original dataset
-                stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
+                # However, the stratification key is currently removed and should
+                # not be passed.
+                # stratify_key=lambda df: df.audio_path.apply(lambda path: path.parent),
                 # The split key is the hash of the path. This ensures the sampling is
                 # deterministic
                 subsample_key=lambda df: df.audio_path.apply(
