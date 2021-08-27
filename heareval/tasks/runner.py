@@ -39,7 +39,6 @@ tasks = {
     # Not available for participants
     **secret_tasks,
 }
-print(tasks)
 
 
 @click.command()
