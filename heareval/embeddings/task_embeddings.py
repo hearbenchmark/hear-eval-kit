@@ -34,11 +34,11 @@ import numpy as np
 import soundfile as sf
 import tensorflow as tf
 import torch
-import wandb
 from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
+import wandb
 from heareval.tasks.pipeline import SPLITS
 
 TORCH = "torch"
@@ -393,8 +393,10 @@ def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path)
         # have embeddings on disk, for speed
         # This estimate of batch size is crudely based upon
         # hearbaseline.wav2vec2 on V100 using dcase task.
+        # Unforunately, this is not tuned per model and is based upon the largest
+        # model and largest audio files we have.
         estimated_batch_size = int(
-            3.3 * (120 / metadata["sample_duration"]) * (16000 / embedding.sample_rate)
+            3.1 * (120 / metadata["sample_duration"]) * (16000 / embedding.sample_rate)
         )
         print(f"Estimated batch size = {estimated_batch_size}")
         split_data = json.load(split_path.open())
