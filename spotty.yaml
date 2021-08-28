@@ -8,9 +8,13 @@ project:
         - .idea/*
         - .git/*
         - '*/__pycache__/*'
-        - _workdir
-        - embeddings
-        - .mypy_cache/
+        - _workdir/*
+        - tasks/*
+        - embeddings/*
+        - .mypy_cache/*
+        - lightning_logs/*
+        - heareval.egg-info/*
+        - wandb/*
 
 containers:
   - projectDir: /workspace/project
@@ -53,7 +57,7 @@ instances:
       imageUri: projects/ml-images/global/images/c0-deeplearning-common-cu110-v20210818-debian-10
 #      spotInstance: True
 #      ports: [6006, 8888]
-      dockerDataRoot: /docker
+#      dockerDataRoot: /docker
       volumes:
         - name: workspace
           parameters:
@@ -61,10 +65,10 @@ instances:
 # Not implemented for GCP, all volumes will be retained
 #            deletionPolicy: retain
             mountDir: /workspace
-        - name: docker
-          parameters:
-            size: 200
-            mountDir: /docker
+#        - name: docker
+#          parameters:
+#            size: 200
+#            mountDir: /docker
 
 # Pick SR!
 #   gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*sr48000.tar . && for f in hear2021-task-*sr48000.tar; do tar xf "$f"; done
