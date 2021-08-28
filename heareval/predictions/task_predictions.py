@@ -241,13 +241,16 @@ class ScenePredictionModel(AbstractPredictionModel):
         end_scores = {}
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
+        if name == "test":
+            # Cache all predictions for later serialization
+            self.test_predicted_labels = prediction
+
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True)
-        return end_scores
 
 
 class EventPredictionModel(AbstractPredictionModel):
@@ -306,6 +309,11 @@ class EventPredictionModel(AbstractPredictionModel):
         end_scores = {}
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
+        if name == "test":
+            # Cache all predictions for later serialization
+            self.test_predicted_labels = prediction
+            self.test_predicted_events = predicted_events
+
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
                 predicted_events, self.target_events[name]
@@ -315,7 +323,6 @@ class EventPredictionModel(AbstractPredictionModel):
                 end_scores[f"{name}_{score}"] = 0.0
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True)
-        return end_scores
 
 
 class SplitMemmapDataset(Dataset):
@@ -566,7 +573,7 @@ def dataloader_from_split_name(
 
     print(
         f"Getting embeddings for split {split_name}, "
-        + f"which has {len(dataset)} instances."
+        + f"which has {len(split_name)} instances."
     )
 
     return DataLoader(
@@ -658,60 +665,9 @@ def task_predictions_train(
             mode,
         )
     else:
-        raise ValueError("No score for this model")
-
-
-# This all needs to be cleaned up and simplified later.
-"""
-def task_predictions_test(
-    predictor: torch.nn.Module,
-    embedding_path: Path,
-    metadata: Dict[str, Any],
-    label_to_idx: Dict[str, int],
-    nlabels: int,
-):
-    dataloader = dataloader_from_split_name(
-        "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
-    )
-
-    all_predicted_labels = []
-    for embs, target_labels, filenames, timestamps in tqdm(dataloader):
-        predicted_labels = predictor(embs)
-        # TODO: Uses less memory to stack them one at a time
-        all_predicted_labels.append(predicted_labels)
-    predicted_labels = torch.cat(all_predicted_labels)
-
-    if metadata["embedding_type"] == "event":
-        # For event predictions we need to convert the frame-based predictions
-        # to a list of events with start and stop timestamps. These events are
-        # computed on each file independently and then saved as JSON in the same
-        # format as the ground truth events produced by the luigi pipeline.
-
-        # A list of filenames and timestamps associated with each prediction
-        file_timestamps = json.load(
-            embedding_path.joinpath("test.filename-timestamps.json").open()
+        raise ValueError(
+            f"No score {checkpoint_callback.best_model_score} for this model"
         )
-
-        # Can probably remove this stuff?
-
-        print("Creating events from predictions:")
-        # Probably don't need label_vocab any more since we have label_to_idx
-        label_vocab = pd.read_csv(embedding_path.joinpath("labelvocabulary.csv"))
-        events = get_events_for_all_files(
-            predicted_labels, file_timestamps, label_vocab
-        )
-
-        json.dump(
-            events,
-            embedding_path.joinpath("test.predictions.json").open("w"),
-            indent=4,
-        )
-
-    pickle.dump(
-        predicted_labels,
-        open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
-    )
-"""
 
 
 def task_predictions(
@@ -780,6 +736,9 @@ def task_predictions(
         "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
+    assert len(test_scores) == 1, "Should have only one test dataloader"
+    test_scores = test_scores[0]
+
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_scores, indent=4)
     )
@@ -788,13 +747,14 @@ def task_predictions(
         json.dumps(dict(best_predictor.hparams), indent=4)
     )
 
-    # TODO: Do something with me
-    """
-    task_predictions_test(
-        predictor=predictor,
-        embedding_path=embedding_path,
-        metadata=metadata,
-        label_to_idx=label_to_idx,
-        nlabels=nlabels,
+    # Cache predictions for secondary sanity-check evaluation
+    if metadata["embedding_type"] == "event":
+        json.dump(
+            best_predictor.test_predicted_events,
+            embedding_path.joinpath("test.predictions.json").open("w"),
+            indent=4,
+        )
+    pickle.dump(
+        best_predictor.test_predicted_labels,
+        open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
-    """

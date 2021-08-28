@@ -68,6 +68,7 @@ def task_evaluation(task_path: Path):
     targets: Collection = []
     if embedding_type == "scene":
         predictions, targets = get_scene_based_prediction_files(task_path)
+        predictions, targets = np.array(predictions), np.array(targets)
     elif embedding_type == "event":
         predictions, targets = get_event_based_prediction_files(task_path)
     else:
@@ -81,7 +82,8 @@ def task_evaluation(task_path: Path):
         print("  -", score)
         # score_function = available_scores[score](metadata, label_to_idx)
         score_function = available_scores[score](label_to_idx=label_to_idx)
-        new_results = score_function(np.array(predictions), np.array(targets))
+        new_results = score_function(predictions, targets)
+        print("   ", new_results)
         results.update({score: new_results})
 
     return results
