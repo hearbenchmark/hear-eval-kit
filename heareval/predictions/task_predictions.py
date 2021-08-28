@@ -33,7 +33,12 @@ from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from heareval.score import ScoreFunction, available_scores, label_vocab_as_dict
+from heareval.score import (
+    ScoreFunction,
+    available_scores,
+    label_vocab_as_dict,
+    label_to_binary_vector,
+)
 
 PARAM_GRID = {
     "hidden_layers": [0, 1, 2],
@@ -391,25 +396,9 @@ class SplitMemmapDataset(Dataset):
         We also return the metadata as a Dict.
         """
         x = self.embedding_memmap[idx]
-        y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-        # Lame special case
-        if not y:
-            return (
-                np.array(x),
-                # BCEWithLogitsLoss wants float not long targets
-                torch.zeros((self.nlabels,), dtype=torch.int32).float(),
-                self.metadata[idx],
-            )
-        # TODO: Could rewrite faster using scatter_:
-        # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
-        return (
-            np.array(x),
-            # BCEWithLogitsLoss wants float not long targets
-            torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
-            .max(axis=0)
-            .values.float(),
-            self.metadata[idx],
-        )
+        labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+        y = label_to_binary_vector(labels, self.nlabels)
+        return x, y, self.metadata[idx]
 
 
 def create_events_from_prediction(
@@ -732,6 +721,11 @@ def task_predictions(
     best_score, best_trainer, best_predictor = scores_and_trainers[0]
     print()
     print("Best validation score", best_score, dict(best_predictor.hparams))
+
+    open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
+        json.dumps(dict(best_predictor.hparams), indent=4)
+    )
+
     test_dataloader = dataloader_from_split_name(
         "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
@@ -741,10 +735,6 @@ def task_predictions(
 
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_scores, indent=4)
-    )
-
-    open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
-        json.dumps(dict(best_predictor.hparams), indent=4)
     )
 
     # Cache predictions for secondary sanity-check evaluation

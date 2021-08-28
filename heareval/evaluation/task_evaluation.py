@@ -12,17 +12,19 @@ import numpy as np
 import pandas as pd
 import torch
 
-from heareval.score import available_scores, label_vocab_as_dict
+from heareval.score import available_scores, label_vocab_as_dict, label_to_binary_vector
 
 
-def get_scene_based_prediction_files(task_path: Path) -> Tuple[np.ndarray, List]:
+def get_scene_based_prediction_files(
+    task_path: Path, label_to_idx: Dict[str, str]
+) -> Tuple[np.ndarray, List]:
     # Predictions are currently torch tensors -- should we convert to np arrays before
     # pickling?
     predictions = pickle.load(
         task_path.joinpath("test.predicted-labels.pkl").open("rb")
     )
     if isinstance(predictions, torch.Tensor):
-        predictions = predictions.detach().numpy()
+        predictions = predictions.detach().cpu().numpy()
     elif isinstance(predictions, np.ndarray):
         pass
     else:
@@ -35,6 +37,16 @@ def get_scene_based_prediction_files(task_path: Path) -> Tuple[np.ndarray, List]
 
     # What other types could we receive as targets?
     assert isinstance(targets, list)
+
+    # Convert targets to binary vector
+    num_labels = len(label_to_idx)
+    binary_targets = []
+    for target in targets:
+        assert isinstance(target, list)
+        labels = [label_to_idx[str(label)] for label in target]
+        binary_targets.append(label_to_binary_vector(labels, num_labels))
+
+    targets = torch.vstack(binary_targets)
 
     # Make sure we have the same number of predictions as targets
     assert len(predictions) == len(targets)
@@ -58,6 +70,7 @@ def task_evaluation(task_path: Path):
 
     metadata = json.load(task_path.joinpath("task_metadata.json").open())
     label_vocab = pd.read_csv(task_path.joinpath("labelvocabulary.csv"))
+    label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
 
     if "evaluation" not in metadata:
         print(f"Task {task_path.name} has no evaluation config.")
@@ -67,14 +80,14 @@ def task_evaluation(task_path: Path):
     predictions: Collection = []
     targets: Collection = []
     if embedding_type == "scene":
-        predictions, targets = get_scene_based_prediction_files(task_path)
+        predictions, targets = get_scene_based_prediction_files(
+            task_path, label_to_idx=label_to_idx
+        )
         predictions, targets = np.array(predictions), np.array(targets)
     elif embedding_type == "event":
         predictions, targets = get_event_based_prediction_files(task_path)
     else:
         raise ValueError(f"Unknown embedding type received: {embedding_type}")
-
-    label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
 
     scores = metadata["evaluation"]
     results = {}
