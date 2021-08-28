@@ -4,8 +4,6 @@ dcase_util
 intervaltree
 luigi
 more-itertools
-# otherwise librosa breaks
-numba==0.48
 # tf 2.6.0
 numpy==1.19.2
 pandas
@@ -18,8 +16,11 @@ python-slugify
 requests
 sed_eval
 soundfile
-tensorflow
+tensorflow>=2.0
 torch
 tqdm
+wandb
+## otherwise librosa breaks
+#numba==0.48
 numba>=0.49.0 # not directly required, pinned by Snyk to avoid a vulnerability
 scikit-learn>=0.24.2 # not directly required, pinned by Snyk to avoid a vulnerability
