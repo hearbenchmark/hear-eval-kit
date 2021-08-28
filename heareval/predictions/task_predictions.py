@@ -33,12 +33,7 @@ from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from heareval.score import (
-    ScoreFunction,
-    available_scores,
-    label_vocab_as_dict,
-    label_to_binary_vector,
-)
+from heareval.score import ScoreFunction, available_scores, label_vocab_as_dict
 
 PARAM_GRID = {
     "hidden_layers": [0, 1, 2],

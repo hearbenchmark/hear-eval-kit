@@ -2,6 +2,7 @@
 """
 Computes embeddings on a set of tasks
 """
+import os
 from pathlib import Path
 
 import click
@@ -25,12 +26,19 @@ from heareval.embeddings.task_embeddings import Embedding, task_embeddings
     type=str,
 )
 @click.option(
+    "--task",
+    default="all",
+    help="Task to run. (Default: all)",
+    type=str,
+)
+@click.option(
     "--embeddings-dir", default="embeddings", help="Location to save task embeddings"
 )
 def runner(
     module: str,
     model: str = None,
     tasks_dir: str = "tasks",
+    task: str = "tasks",
     embeddings_dir: str = "embeddings",
 ) -> None:
 
@@ -47,7 +55,11 @@ def runner(
     # Load the embedding model
     embedding = Embedding(module, model)
 
-    tasks = list(tasks_dir_path.iterdir())
+    if task == "all":
+        tasks = list(tasks_dir_path.iterdir())
+    else:
+        tasks = [tasks_dir_path.joinpath(task)]
+        assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
         print(f"Computing embeddings for {task_path.name}")
         task_embeddings(embedding, task_path, embeddings_dir_path)
