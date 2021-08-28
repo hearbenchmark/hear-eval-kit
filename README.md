@@ -8,7 +8,8 @@ Evaluation kit for HEAR 2021 NeurIPS competition
 pip3 install heareval
 ```
 
-We have only tested on Python >= 3.7.
+Tested with Python 3.7 and 3.8. Python 3.9 is not officially supported
+because pip3 installs are very finicky, but it might work.
 
 You can use our preprocessed datasets. Otherwise, see "Development > Preprocessing"
 
@@ -93,6 +94,13 @@ Clone repo:
 git clone https://github.com/neuralaudio/hear2021-eval-kit
 cd hear2021-eval-kit
 ```
+Add secret task submodule:
+```
+git submodule init
+git submodule update
+```
+**_NOTE_**: Secret tasks are not available to participants. They should skip the above step. 
+
 Install in development mode:
 ```
 pip3 install -e ".[dev]"
@@ -125,12 +133,20 @@ disk space is required while processing. Final output is 11 GB.
 These Luigi pipelines are used to preprocess the evaluation tasks
 into a common format for downstream evaluation.
 
-To run the preprocessing pipeline for all open tasks:
+To run the preprocessing pipeline for all available tasks:
 ```
 python3 -m heareval.tasks.runner all
 ```
+
 You can also just run individual tasks:
+```
 python3 -m heareval.tasks.runner [speech_commands|nsynth_pitch|dcase2016_task2]
+```
+**_NOTE__**: To run the pipeline on secret tasks please ensure to initialise, update and install the `hearsecrettasks` submodule. This repository is not available for participants. If the submodule is set up :
+- Both the aforementioned commands will work for secret tasks as well. 
+- Running with the `all` option will trigger all the available set of open and secret tasks. 
+- To run individual tasks, please use the corresponding `task` name. The secret task names are are also hidden and listed in the `hearsecrettasks` submodule.
+
 
 Each pipeline will download and preprocess each dataset according
 to the following DAG:
