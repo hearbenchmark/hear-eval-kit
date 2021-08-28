@@ -32,7 +32,12 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from heareval.score import ScoreFunction, available_scores, label_vocab_as_dict
+from heareval.score import (
+    ScoreFunction,
+    available_scores,
+    label_vocab_as_dict,
+    label_to_binary_vector,
+)
 
 
 class OneHotToCrossEntropyLoss(torch.nn.Module):
@@ -347,25 +352,9 @@ class SplitMemmapDataset(Dataset):
         We also return the metadata as a Dict.
         """
         x = self.embedding_memmap[idx]
-        y = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-        # Lame special case
-        if not y:
-            return (
-                x,
-                # BCEWithLogitsLoss wants float not long targets
-                torch.zeros((self.nlabels,), dtype=torch.int32).float(),
-                self.metadata[idx],
-            )
-        # TODO: Could rewrite faster using scatter_:
-        # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
-        return (
-            x,
-            # BCEWithLogitsLoss wants float not long targets
-            torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
-            .max(axis=0)
-            .values.float(),
-            self.metadata[idx],
-        )
+        labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+        y = label_to_binary_vector(labels, self.nlabels)
+        return x, y, self.metadata[idx]
 
 
 def create_events_from_prediction(

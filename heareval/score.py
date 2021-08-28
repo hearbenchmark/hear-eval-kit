@@ -7,6 +7,7 @@ from typing import Any, Callable, Dict, List, Optional
 import numpy as np
 import pandas as pd
 import sed_eval
+import torch
 
 # Can we get away with not using DCase for every event-based evaluation??
 from dcase_util.containers import MetaDataContainer
@@ -26,6 +27,28 @@ def label_vocab_as_dict(df: pd.DataFrame, key: str, value: str) -> Dict:
         assert key == "idx", "key argument must be either 'label' or 'idx'"
         value = "label"
     return df.set_index(key).to_dict()[value]
+
+
+def label_to_binary_vector(label: List, num_labels: int) -> torch.Tensor:
+    """
+    Converts a list of labels into a binary vector
+    Args:
+        label: list of integer labels
+        num_labels: total number of labels
+
+    Returns:
+        A float Tensor that is multi-hot binary vector
+    """
+    # Lame special case for multilabel with no labels
+    if len(label) == 0:
+        # BCEWithLogitsLoss wants float not long targets
+        binary_labels = torch.zeros((num_labels,), dtype=torch.float)
+    else:
+        binary_labels = torch.zeros((num_labels,)).scatter(0, torch.tensor(label), 1.0)
+
+    # Validate the binary vector we just created
+    assert set(torch.where(binary_labels == 1.0)[0].numpy()) == set(label)
+    return binary_labels
 
 
 class ScoreFunction:
