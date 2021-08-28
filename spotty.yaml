@@ -71,6 +71,7 @@ instances:
 #            mountDir: /docker
 
 # Pick SR!
+#   gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*.tar . && for f in hear2021-task-*.tar; do tar xf "$f"; done
 #   gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*sr48000.tar . && for f in hear2021-task-*sr48000.tar; do tar xf "$f"; done
 #   wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
 #   python3 -m heareval.embeddings.runner hearbaseline --model naive_baseline.pt
