@@ -27,6 +27,16 @@ also ask for the `project id string`, which can be found in the project seletion
 Please refer [here](https://cloud.google.com/storage/docs/gsutil_install#install) 
 for more details on gsutil installation.
 
+### Prepare spotty.yaml file
+Copy over the `spotty.yaml.tmpl` file to generate a `spotty.yaml` file
+```
+cp spotty.yaml.tmpl spotty.yaml
+```
+
+Change the instance name in the copied file. Specifically, change `"USERNAME"` suffix 
+in `instances: name` to allow for multiple users in the same project to 
+make separate gcp instances and volumes to avoid conflicts within the project.
+
 ### Run spotty
 Run the below command:
 ```
