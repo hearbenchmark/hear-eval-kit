@@ -25,7 +25,7 @@ setup(
         "Source Code": "https://github.com/neuralaudio/hear2021-eval-kit",
     },
     packages=find_packages(exclude=("tests",)),
-    python_requires=">=3.7",
+    python_requires=">=3.7, <=3.8",
     entry_points={
         "console_scripts": ["hear2021_tasks_coughvid=heareval.tasks.coughvid:main"]
     },

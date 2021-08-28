@@ -8,7 +8,8 @@ Evaluation kit for HEAR 2021 NeurIPS competition
 pip3 install heareval
 ```
 
-We have only tested on Python >= 3.7.
+Tested with Python 3.7 and 3.8. Python 3.9 is not officially supported
+because pip3 installs are very finicky, but it might work.
 
 You can use our preprocessed datasets. Otherwise, see "Development > Preprocessing"
 
