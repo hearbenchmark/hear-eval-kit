@@ -4,8 +4,14 @@
 
 # 1.19.2 numpy for tf 2.6.0
 
+# We downgrade from GCP CUDA 11.0 to Docker CUDA 10.2, so we can
+# install pre-built pytorch 1.9 easily
+#
+# Ah shit: TF 2.6 wants cudnn 8.1 and CUDA 11.2
+# https://www.tensorflow.org/install/source#gpu
 
-# deepo: python3 generate.py --cuda-ver 11.0 --cudnn-ver 8 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
+
+# deepo: python3 generate.py --cuda-ver 10.2 --cudnn-ver 7 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
 # ==================================================================
 # module list
 # ------------------------------------------------------------------
@@ -15,7 +21,8 @@
 # keras         latest (pip)
 # ==================================================================
 
-FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu18.04
+FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
+#FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu18.04
 #FROM nvidia/cuda:11.0-cudnn8-devel-ubuntu18.04
 
 ENV LANG C.UTF-8
@@ -122,34 +129,23 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         # deepo installs nightly CPU version
         # TODO: CUDA 11.0 only is supported by torch <= 1.7.1.
         # We want torch 1.9.0. BUT, GCP images only seem to be 11.0.
-        # Consider also switchign spotty image to c2-deeplearning-pytorch-1-9-cu110-v20210714-debian-10 
-        torch==1.7.1+cu110 torchvision==0.8.2+cu110 \
-        -f https://download.pytorch.org/whl/torch_stable.html
-
-        #--pre torch torchvision -f \
-        #https://download.pytorch.org/whl/nightly/cpu/torch_nightly.html
-
-#        && \
+        # So we downgrade to CUDA 10.2 in this Docker
+        torch torchvision torchaudio
 
 # ==================================================================
 # tensorflow
 # ------------------------------------------------------------------
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $PIP_INSTALL \
-        numpy==1.19.2 \
-        tensorflow
-
-#        && \
+RUN wget https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-2.6.0-cp37-cp37m-manylinux2010_x86_64.whl && \
+        python -m pip --no-cache-dir install --upgrade tensorflow_gpu-2.6.0-cp37-cp37m-manylinux2010_x86_64.whl && \
+        rm tensorflow_gpu-2.6.0-cp37-cp37m-manylinux2010_x86_64.whl
 
 # ==================================================================
 # keras
 # ------------------------------------------------------------------
 
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         h5py \
@@ -257,7 +253,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL cython ipython
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         numpy==1.19.2
@@ -269,7 +265,13 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 RUN cd hear-baseline && \
     python -m pip --no-cache-dir install -e ".[dev]"
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $GIT_CLONE https://github.com/neuralaudio/hear-baseline.git
+RUN cd hear-baseline && \
+    python -m pip --no-cache-dir install -e ".[dev]"
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
     $GIT_CLONE https://github.com/neuralaudio/hear-eval-kit.git
 RUN cd hear-eval-kit && \

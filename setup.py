@@ -36,8 +36,6 @@ setup(
         "intervaltree",
         "luigi",
         "more-itertools",
-        # otherwise librosa breaks
-        "numba==0.48",
         # tf 2.6.0
         "numpy==1.19.2",
         "pandas",
@@ -46,11 +44,14 @@ setup(
         "requests",
         "sed_eval",
         "soundfile",
-        "tensorflow",
+        "tensorflow>=2.0",
         "torch",
         "tqdm",
         "wandb",
         "scikit-learn>=0.24.2",
+        # otherwise librosa breaks
+        # "numba==0.48",
+        "numba>=0.49.0",  # not directly required, pinned by Snyk to avoid a vulnerability
     ],
     extras_require={
         "test": [
