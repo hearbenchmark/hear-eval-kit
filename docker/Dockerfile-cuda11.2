@@ -142,8 +142,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
-        --pre torch torchvision -f \
-        https://download.pytorch.org/whl/nightly/cu112/torch_nightly.html
+        tensorflow-gpu
 
 # ==================================================================
 # keras
