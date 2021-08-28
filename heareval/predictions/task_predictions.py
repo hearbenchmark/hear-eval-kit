@@ -81,8 +81,8 @@ class FullyConnectedPrediction(torch.nn.Module):
                 hidden_modules[-1].weight,
                 gain=torch.nn.init.calculate_gain(last_activation),
             )
-            self.dropout = torch.nn.Dropout(conf["dropout"])
-            self.relu = torch.nn.ReLU()
+            hidden_modules.append(torch.nn.Dropout(conf["dropout"]))
+            hidden_modules.append(torch.nn.ReLU())
             curdim = conf["hidden_dim"]
             last_activation = "relu"
 
@@ -127,6 +127,8 @@ class AbstractPredictionModel(pl.LightningModule):
 
         self.save_hyperparameters(conf)
 
+        # Since we don't know how these embeddings are scaled
+        self.layernorm = torch.nn.LayerNorm(nfeatures)
         self.predictor = FullyConnectedPrediction(
             nfeatures, nlabels, prediction_type, conf
         )
@@ -137,7 +139,9 @@ class AbstractPredictionModel(pl.LightningModule):
         self.scores = scores
 
     def forward(self, x):
-        return self.predictor(x)
+        x = self.layernorm(x)
+        x = self.predictor(x)
+        return x
 
     def training_step(self, batch, batch_idx):
         # training_step defined the train loop.
