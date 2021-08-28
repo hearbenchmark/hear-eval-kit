@@ -34,11 +34,11 @@ import numpy as np
 import soundfile as sf
 import tensorflow as tf
 import torch
-import wandb
 from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
+import wandb
 from heareval.tasks.pipeline import SPLITS
 
 TORCH = "torch"

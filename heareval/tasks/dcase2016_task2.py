@@ -13,8 +13,8 @@ from pathlib import Path
 from typing import List
 
 import luigi
-from slugify import slugify
 import pandas as pd
+from slugify import slugify
 
 import heareval.tasks.pipeline as pipeline
 
