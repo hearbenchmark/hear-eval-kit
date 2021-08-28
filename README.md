@@ -25,6 +25,8 @@ spotty sh
 This requires the heareval Docker image, which is pre-built and
 published on Dockerhub for your convenience.
 
+Please refer to `README.spotty` for more details.
+
 ### Computing embeddings
 
 Once a set of tasks has been generated, embeddings can be computed
