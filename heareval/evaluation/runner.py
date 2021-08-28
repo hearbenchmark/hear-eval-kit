@@ -13,13 +13,22 @@ from heareval.evaluation.task_evaluation import task_evaluation
 
 
 @click.command()
+@click.argument("module", type=str, default="all")
+@click.option(
+    "--task",
+    default="all",
+    help="Task to run. (Default: all)",
+    type=str,
+)
 @click.option(
     "--embeddings-dir",
     default="embeddings",
     help="Location of task embeddings to compute evaluation on.",
     type=click.Path(exists=True),
 )
-def runner(embeddings_dir: str = "embeddings") -> None:
+def runner(
+    module: str = "all", task: str = "all", embeddings_dir: str = "embeddings"
+) -> None:
     embeddings_dir_path = Path(embeddings_dir)
     if not embeddings_dir_path.is_dir():
         raise ValueError(
@@ -27,14 +36,22 @@ def runner(embeddings_dir: str = "embeddings") -> None:
             f"Ensure that directory named {embeddings_dir_path} exists."
         )
 
-    embeddings = list(embeddings_dir_path.iterdir())
+    if module == "all":
+        embeddings = list(embeddings_dir_path.iterdir())
+    else:
+        embeddings = [embeddings_dir_path.joinpath(module)]
+        assert os.path.exists(embeddings[0]), f"{embeddings[0]} does not exist"
 
     results = {}
     for embedding in tqdm(embeddings):
         print(f"Evaluating model: {embedding.name}", flush=True)
 
-        tasks = list(embedding.iterdir())
         embedding_results = {}
+        if task == "all":
+            tasks = list(tasks_dir_path.iterdir())
+        else:
+            tasks = [tasks_dir_path.joinpath(task)]
+            assert os.path.exists(tasks[0]), f"{embeddings[0]} does not exist"
         for task_path in tqdm(tasks):
             print(f"  - Evaluating task: {task_path.name}")
             embedding_results[task_path.name] = task_evaluation(task_path)

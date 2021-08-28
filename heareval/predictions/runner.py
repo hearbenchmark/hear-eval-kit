@@ -32,6 +32,12 @@ from heareval.predictions.task_predictions import task_predictions
     type=click.Path(exists=True),
 )
 @click.option(
+    "--task",
+    default="all",
+    help="Task to run. (Default: all)",
+    type=str,
+)
+@click.option(
     "--gpus",
     default=None if not torch.cuda.is_available() else 1,
     help="Number of GPUs to use (default: 1 if any are available, none if not)",
@@ -41,6 +47,7 @@ def runner(
     module: str,
     embeddings_dir: str = "embeddings",
     model: Optional[str] = None,
+    task: str = "all",
     gpus: Optional[int] = None if not torch.cuda.is_available() else 1,
 ) -> None:
     embeddings_dir_path = Path(embeddings_dir).joinpath(module)
@@ -63,7 +70,11 @@ def runner(
     scene_embedding_size = model_obj.scene_embedding_size
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
-    tasks = list(embeddings_dir_path.iterdir())
+    if task == "all":
+        tasks = list(tasks_dir_path.iterdir())
+    else:
+        tasks = [tasks_dir_path.joinpath(task)]
+        assert os.path.exists(tasks[0]), f"{embeddings[0]} does not exist"
     for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
         task_predictions(

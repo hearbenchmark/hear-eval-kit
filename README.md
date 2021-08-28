@@ -44,10 +44,11 @@ If you want to use your pip HEAR module, substitute `hearbaseline`
 and `./naive_baseline.pt` below with your pip module name and model
 weight path.
 
-2) Compute the embeddings for all the tasks
+2) Compute the embeddings for all the tasks ("all") or one task:
 ```
 python3 -m heareval.embeddings.runner hearbaseline --model ./naive_baseline.pt
     [--tasks-dir tasks]
+    [--task task]
     [--embeddings-dir embeddings]
 ```
 
@@ -67,17 +68,22 @@ embeddings followed by task specific evaluations. The names of the
 scoring functions used for these task specific evalutions can be
 found in the `task_metadata.json` inside every task directory.
 
-1) Train the shallow model and generate the test set predictions for each task
+1) Train the shallow model and generate the test set predictions
+for all tasks or one task:
 ```
 python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt \
     [--embeddings-dir embeddings]
+    [--task task]
     [--gpus INT]
 ```
 
-2) Evaluate the generated predictions for the test set
+2) Evaluate the generated predictions for the test set for one or
+all modules and for one or all tasks:
 ```
 python3 -m heareval.evaluation.runner \
+    [module]
     [--embeddings-dir embeddings]
+    [--task task]
 ```
 
 By default, both the steps above assume a folder named `embeddings`,
