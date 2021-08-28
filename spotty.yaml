@@ -47,6 +47,7 @@ instances:
       #machineType: n1-standard-1
       ## A100. only west3 or maybe west4? :\
       #machineType: a2-highgpu-1g
+      preemptibleInstance: True
       gpu:
         type: nvidia-tesla-v100
         #type: nvidia-tesla-a100

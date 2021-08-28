@@ -78,7 +78,6 @@ class Top1Accuracy(ScoreFunction):
             if predicted_class == target_class:
                 correct += 1
 
-        print("Score Top1Accuracy", correct / len(targets), correct, len(targets))
         return correct / len(targets)
 
 
@@ -104,7 +103,6 @@ class ChromaAccuracy(ScoreFunction):
             if predicted_class % 12 == target_class % 12:
                 correct += 1
 
-        print("Score ChromaAcc", correct / len(targets), correct, len(targets))
         return correct / len(targets)
 
 
