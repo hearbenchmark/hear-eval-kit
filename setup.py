@@ -44,6 +44,7 @@ setup(
         "requests",
         "sed_eval",
         "soundfile",
+        "spotty",
         "tensorflow>=2.0",
         "torch",
         "tqdm",
