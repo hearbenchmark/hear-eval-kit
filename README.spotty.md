@@ -4,8 +4,7 @@ Instructions for using Spotty
 #### Create Project
 To use spotty, please sign up on GCP and 
 [create a project](https://console.cloud.google.com/projectcreate) if you dont have one.
-Please refer to the following link for details on 
-[GCP Account Preperation](https://spotty.cloud/docs/providers/gcp/account-preparation.html)
+Please refer [here](https://spotty.cloud/docs/providers/gcp/account-preparation.html) for more details on GCP Account Preperation for spotty.
 
 #### Service account Key
 [Create a service account](https://console.cloud.google.com/iam-admin/serviceaccounts/create) and 
@@ -16,16 +15,14 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/the/service/account/key/file.jso
 ```
 
 ### Configure gs-util:
-Ensure gsutil is installed(already present in requirements). 
-It helps to sync the local files to the instance:
+`gs-util` helps to sync the local files to the instance. Ensure gsutil is installed (already present in requirements) and configure it:
 ```
 gsutil config -f
 ```
 Running the above command will prompt to follow a link to authorise 
 with the gmail account used for google cloud. Please copy the 
 `authorisation code` from this browser back to the console. It will 
-also ask for the `project id string`, which can be found in the project seletion
-dropdown on google cloud console.
+also ask for the `project id string`, which can be found in the project seletion dropdown on google cloud console.
 
 Please follow the [Link](https://cloud.google.com/storage/docs/gsutil_install#install) 
 for more details on gsutil installation.
