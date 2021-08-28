@@ -2,6 +2,7 @@
 """
 Computes embeddings on a set of tasks
 """
+import os
 from pathlib import Path
 
 import click
@@ -58,7 +59,7 @@ def runner(
         tasks = list(tasks_dir_path.iterdir())
     else:
         tasks = [tasks_dir_path.joinpath(task)]
-        assert os.path.exists(tasks[0]), f"{embeddings[0]} does not exist"
+        assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
         print(f"Computing embeddings for {task_path.name}")
         task_embeddings(embedding, task_path, embeddings_dir_path)

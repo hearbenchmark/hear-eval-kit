@@ -4,6 +4,7 @@ Performs evaluation on embedding predictions.
 """
 
 import json
+import os
 from pathlib import Path
 
 import click
@@ -48,10 +49,10 @@ def runner(
 
         embedding_results = {}
         if task == "all":
-            tasks = list(tasks_dir_path.iterdir())
+            tasks = list(embedding.iterdir())
         else:
-            tasks = [tasks_dir_path.joinpath(task)]
-            assert os.path.exists(tasks[0]), f"{embeddings[0]} does not exist"
+            tasks = [embedding.joinpath(task)]
+            assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
         for task_path in tqdm(tasks):
             print(f"  - Evaluating task: {task_path.name}")
             embedding_results[task_path.name] = task_evaluation(task_path)

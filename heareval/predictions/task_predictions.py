@@ -25,7 +25,6 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
-import wandb
 from intervaltree import IntervalTree
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
@@ -33,6 +32,7 @@ from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
+import wandb
 from heareval.score import ScoreFunction, available_scores, label_vocab_as_dict
 
 PARAM_GRID = {

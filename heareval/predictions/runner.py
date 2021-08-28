@@ -6,6 +6,7 @@ predictions.
 TODO: Add CUDA device.
 """
 
+import os
 from importlib import import_module
 from pathlib import Path
 from typing import Optional
@@ -71,10 +72,10 @@ def runner(
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
     if task == "all":
-        tasks = list(tasks_dir_path.iterdir())
+        tasks = list(embeddings_dir_path.iterdir())
     else:
-        tasks = [tasks_dir_path.joinpath(task)]
-        assert os.path.exists(tasks[0]), f"{embeddings[0]} does not exist"
+        tasks = [embeddings_dir_path.joinpath(task)]
+        assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
         task_predictions(
