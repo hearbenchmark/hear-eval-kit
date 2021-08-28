@@ -19,7 +19,8 @@ project:
 containers:
   - projectDir: /workspace/project
     #file: docker/Dockerfile-cuda11.2
-    image: turian/heareval:cuda11.2
+    image: turian/heareval
+    #image: turian/heareval:cuda11.2
 #    ports:
 #      # TensorBoard
 #      - containerPort: 6006
