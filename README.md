@@ -16,7 +16,17 @@ You can use our preprocessed datasets. Otherwise, see "Development > Preprocessi
 
 ## Evaluation
 
-The easiest way to do evaluation is to launch a Spotty GCP instance:
+The easiest way to do evaluation is to launch a Spotty GCP instance.
+
+Prepare a `spotty.yaml` file with the provided template file:
+```
+cp spotty.yaml.tmpl spotty.yaml
+```
+Change the instance name in the copied file. Specifically, change `"USERNAME"` 
+suffix in `instances: name` to allow for multiple users in the same project 
+to make separate gcp instances and volumes to avoid conflicts within the project.
+
+Run spotty:
 ```
 spotty start
 spotty sh
@@ -24,6 +34,8 @@ spotty sh
 
 This requires the heareval Docker image, which is pre-built and
 published on Dockerhub for your convenience.
+
+Please refer to `README.spotty` for more details.
 
 ### Computing embeddings
 
