@@ -148,3 +148,6 @@ dmypy.json
 
 # vscode
 .vscode
+
+#spotty configured file
+spotty.yaml
