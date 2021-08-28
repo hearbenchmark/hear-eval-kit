@@ -24,7 +24,7 @@ with the gmail account used for google cloud. Please copy the
 `authorisation code` from this browser back to the console. It will 
 also ask for the `project id string`, which can be found in the project seletion dropdown on google cloud console.
 
-Please follow the [Link](https://cloud.google.com/storage/docs/gsutil_install#install) 
+Please refer [here](https://cloud.google.com/storage/docs/gsutil_install#install) 
 for more details on gsutil installation.
 
 ### Run spotty
@@ -38,8 +38,8 @@ It runs a tmux session, so you can always detach this session using
 later, just use the spotty sh command again.
 
 The `spotty.yaml` is configured to automatically
-- Create a gcp cloud instance by the name: `spotty-heareval-i1`
-- Associate disks to the instance
+- Create a gcp cloud instance by the name `spotty-heareval-i1`
+- Associate disks to the instance by the name `spotty-heareval-spotty-heareval-i1-workspace`
 - Setup CUDA (Without any hassle)
 - Sync the local files to the instance
 - Install the docker image for heareval
@@ -60,4 +60,4 @@ before running the below command for deleting disks:
 gcloud compute disks delete disk-name --zone=zone
 ```
 The default name of the disk created by `spotty start` here is `spotty-heareval-spotty-
-heareval-i1-workspace`, following the pattern `"{project_name}-{instance_name}-{volume_name}"`
+heareval-i1-workspace`
