@@ -24,7 +24,7 @@ def get_scene_based_prediction_files(
         task_path.joinpath("test.predicted-labels.pkl").open("rb")
     )
     if isinstance(predictions, torch.Tensor):
-        predictions = predictions.detach().numpy()
+        predictions = predictions.detach().cpu().numpy()
     elif isinstance(predictions, np.ndarray):
         pass
     else:
