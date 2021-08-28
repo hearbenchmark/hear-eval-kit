@@ -50,9 +50,9 @@ setup(
         "tqdm",
         "wandb",
         "scikit-learn>=0.24.2",
-        # otherwise librosa breaks
-        # "numba==0.48",
-        "numba>=0.49.0",  # not directly required, pinned by Snyk to avoid a vulnerability
+        # otherwise librosa breaks, which fucking dcase-util requires
+        "numba==0.48",
+        # "numba>=0.49.0",  # not directly required, pinned by Snyk to avoid a vulnerability
     ],
     extras_require={
         "test": [
