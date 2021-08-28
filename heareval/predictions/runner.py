@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 import click
+import torch
 from tqdm import tqdm
 
 from heareval.predictions.task_predictions import task_predictions
@@ -30,8 +31,17 @@ from heareval.predictions.task_predictions import task_predictions
     help="Location of model weights file",
     type=click.Path(exists=True),
 )
+@click.option(
+    "--gpus",
+    default=None if not torch.cuda.is_available() else 1,
+    help="Number of GPUs to use (default: 1 if any are available, none if not)",
+    type=click.INT,
+)
 def runner(
-    module: str, embeddings_dir: str = "embeddings", model: Optional[str] = None
+    module: str,
+    embeddings_dir: str = "embeddings",
+    model: Optional[str] = None,
+    gpus: Optional[int] = None if not torch.cuda.is_available() else 1,
 ) -> None:
     embeddings_dir_path = Path(embeddings_dir).joinpath(module)
     if not embeddings_dir_path.is_dir():
@@ -54,9 +64,11 @@ def runner(
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
     tasks = list(embeddings_dir_path.iterdir())
-    for task_path in tqdm(reversed(tasks)):
+    for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
-        task_predictions(task_path, scene_embedding_size, timestamp_embedding_size)
+        task_predictions(
+            task_path, scene_embedding_size, timestamp_embedding_size, gpus
+        )
 
 
 if __name__ == "__main__":

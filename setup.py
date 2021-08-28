@@ -44,9 +44,11 @@ setup(
         "requests",
         "sed_eval",
         "soundfile",
+        "spotty",
         "tensorflow>=2.0",
         "torch",
         "tqdm",
+        "wandb",
         "scikit-learn>=0.24.2",
         # otherwise librosa breaks
         # "numba==0.48",

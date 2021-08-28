@@ -3,13 +3,11 @@
 Map embeddings to predictions for every downstream task and store
 test predictions to disk.
 
-NOTE: Shallow learning, later model selection, as described in our
-doc.
+Model selection over the validation score.
 
 TODO:
     * Profiling should occur here (both embedding time AFTER loading
     to GPU, and complete wall time include disk writes).
-    * TODO: Include CUDA stuff here?
     * If disk speed is the limiting factor maybe we should train
     many models simultaneously with one disk read?
 """
@@ -17,42 +15,78 @@ TODO:
 import json
 import math
 import pickle
+import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, List, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Tuple
 
 import more_itertools
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+import wandb
 from intervaltree import IntervalTree
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
 from heareval.score import ScoreFunction, available_scores, label_vocab_as_dict
 
+PARAM_GRID = {
+    "hidden_layers": [0, 1, 2],
+    "hidden_dim": [512],
+    "dropout": [0.0, 0.2, 0.4],
+    "lr": [1e-3, 1e-4, 1e-5],
+    # "patience": [3, 10],
+    "patience": [3],
+    "max_epochs": [100],
+}
+GRID_POINTS = 5
 
-class OneHotToCrossEntropyLoss(torch.nn.Module):
+
+class OneHotToCrossEntropyLoss(pl.LightningModule):
     def __init__(self):
         super().__init__()
         self.loss = torch.nn.CrossEntropyLoss()
 
     def forward(self, y_hat: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         # One and only one label per class
-        assert torch.all(torch.sum(y, dim=1) == torch.ones(y.shape[0]))
+        assert torch.all(
+            torch.sum(y, dim=1) == torch.ones(y.shape[0], device=self.device)
+        )
         y = y.argmax(dim=1)
         return self.loss(y_hat, y)
 
 
-class RandomProjectionPrediction(torch.nn.Module):
-    def __init__(self, nfeatures: int, nlabels: int, prediction_type: str):
+class FullyConnectedPrediction(torch.nn.Module):
+    def __init__(self, nfeatures: int, nlabels: int, prediction_type: str, conf: Dict):
         super().__init__()
 
-        self.projection = torch.nn.Linear(nfeatures, nlabels)
-        torch.nn.init.normal_(self.projection.weight)
+        hidden_modules = []
+        curdim = nfeatures
+        # Honestly, we don't really know what activation preceded
+        # us for the final embedding.
+        last_activation = "linear"
+        for i in range(conf["hidden_layers"]):
+            hidden_modules.append(torch.nn.Linear(curdim, conf["hidden_dim"]))
+            torch.nn.init.xavier_normal_(
+                hidden_modules[-1].weight,
+                gain=torch.nn.init.calculate_gain(last_activation),
+            )
+            self.dropout = torch.nn.Dropout(conf["dropout"])
+            self.relu = torch.nn.ReLU()
+            curdim = conf["hidden_dim"]
+            last_activation = "relu"
+
+        self.hidden = torch.nn.Sequential(*hidden_modules)
+        self.projection = torch.nn.Linear(curdim, nlabels)
+
+        torch.nn.init.xavier_normal_(
+            self.projection.weight, gain=torch.nn.init.calculate_gain(last_activation)
+        )
         self.logit_loss: torch.nn.Module
         if prediction_type == "multilabel":
             self.activation: torch.nn.Module = torch.nn.Sigmoid()
@@ -64,7 +98,8 @@ class RandomProjectionPrediction(torch.nn.Module):
             raise ValueError(f"Unknown prediction_type {prediction_type}")
 
     def forward_logit(self, x: torch.Tensor) -> torch.Tensor:
-        return self.projection(x)
+        x = self.hidden(x)
+        x = self.projection(x)
         return x
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -81,10 +116,15 @@ class AbstractPredictionModel(pl.LightningModule):
         nlabels: int,
         prediction_type: str,
         scores: List[ScoreFunction],
+        conf: Dict,
     ):
         super().__init__()
 
-        self.predictor = RandomProjectionPrediction(nfeatures, nlabels, prediction_type)
+        self.save_hyperparameters(conf)
+
+        self.predictor = FullyConnectedPrediction(
+            nfeatures, nlabels, prediction_type, conf
+        )
         self.label_to_idx = label_to_idx
         self.idx_to_label: Dict[int, str] = {
             idx: label for (label, idx) in self.label_to_idx.items()
@@ -163,7 +203,7 @@ class AbstractPredictionModel(pl.LightningModule):
         return flat_outputs
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
         return optimizer
 
 
@@ -179,6 +219,7 @@ class ScenePredictionModel(AbstractPredictionModel):
         nlabels: int,
         prediction_type: str,
         scores: List[ScoreFunction],
+        conf: Dict,
     ):
         super().__init__(
             nfeatures=nfeatures,
@@ -186,6 +227,7 @@ class ScenePredictionModel(AbstractPredictionModel):
             nlabels=nlabels,
             prediction_type=prediction_type,
             scores=scores,
+            conf=conf,
         )
 
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
@@ -224,6 +266,7 @@ class EventPredictionModel(AbstractPredictionModel):
         scores: List[ScoreFunction],
         validation_target_events: Dict[str, List[Dict[str, Any]]],
         test_target_events: Dict[str, List[Dict[str, Any]]],
+        conf: Dict,
     ):
         super().__init__(
             nfeatures=nfeatures,
@@ -231,6 +274,7 @@ class EventPredictionModel(AbstractPredictionModel):
             nlabels=nlabels,
             prediction_type=prediction_type,
             scores=scores,
+            conf=conf,
         )
         self.target_events = {
             "val": validation_target_events,
@@ -344,7 +388,7 @@ class SplitMemmapDataset(Dataset):
         # Lame special case
         if not y:
             return (
-                x,
+                np.array(x),
                 # BCEWithLogitsLoss wants float not long targets
                 torch.zeros((self.nlabels,), dtype=torch.int32).float(),
                 self.metadata[idx],
@@ -352,7 +396,7 @@ class SplitMemmapDataset(Dataset):
         # TODO: Could rewrite faster using scatter_:
         # https://discuss.pytorch.org/t/what-kind-of-loss-is-better-to-use-in-multilabel-classification/32203/4
         return (
-            x,
+            np.array(x),
             # BCEWithLogitsLoss wants float not long targets
             torch.nn.functional.one_hot(torch.LongTensor(y), num_classes=self.nlabels)
             .max(axis=0)
@@ -396,7 +440,9 @@ def create_events_from_prediction(
 
     # Create a sorted numpy matrix of frame level predictions for this file. We convert
     # to a numpy array here before applying a median filter.
-    predictions = np.stack([prediction_dict[t].detach().numpy() for t in timestamps])
+    predictions = np.stack(
+        [prediction_dict[t].detach().cpu().numpy() for t in timestamps]
+    )
     # print("predictions", predictions)
 
     # We can apply a median filter here to smooth out events, but b/c participants
@@ -520,7 +566,7 @@ def dataloader_from_split_name(
 
     print(
         f"Getting embeddings for split {split_name}, "
-        + "which has {len(split_name)} instances."
+        + f"which has {len(dataset)} instances."
     )
 
     return DataLoader(
@@ -540,6 +586,8 @@ def task_predictions_train(
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
+    conf: Dict,
+    gpus: Optional[int],
 ) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
@@ -555,6 +603,7 @@ def task_predictions_train(
             scores=scores,
             validation_target_events=validation_target_events,
             test_target_events=test_target_events,
+            conf=conf,
         )
     elif metadata["embedding_type"] == "scene":
         predictor = ScenePredictionModel(
@@ -563,6 +612,7 @@ def task_predictions_train(
             nlabels=nlabels,
             prediction_type=metadata["prediction_type"],
             scores=scores,
+            conf=conf,
         )
     else:
         raise ValueError(f"Unknown embedding_type {metadata['embedding_type']}")
@@ -576,18 +626,23 @@ def task_predictions_train(
         mode = "min"
     checkpoint_callback = ModelCheckpoint(monitor=target_score, mode=mode)
     early_stop_callback = EarlyStopping(
-        # TODO: Tune these
         monitor=target_score,
         min_delta=0.00,
-        patience=50,
-        # patience=3,
+        patience=conf["patience"],
         verbose=False,
         mode=mode,
     )
 
-    # train on CPU
-    # TODO: FIXME
-    trainer = pl.Trainer(callbacks=[checkpoint_callback, early_stop_callback])
+    # Try also pytorch profiler
+    # profiler = pl.profiler.AdvancedProfiler(output_filename="predictions-profile.txt")
+    trainer = pl.Trainer(
+        callbacks=[checkpoint_callback, early_stop_callback],
+        gpus=gpus,
+        max_epochs=conf["max_epochs"],
+        # profiler=profiler,
+        # profiler="pytorch",
+        profiler="simple",
+    )
     train_dataloader = dataloader_from_split_name(
         "train", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
@@ -595,8 +650,13 @@ def task_predictions_train(
         "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
-    if checkpoint_callback.best_model_score:
-        return predictor, trainer, checkpoint_callback.best_model_score.item(), mode
+    if checkpoint_callback.best_model_score is not None:
+        return (
+            predictor,
+            trainer,
+            checkpoint_callback.best_model_score.detach().cpu(),
+            mode,
+        )
     else:
         raise ValueError("No score for this model")
 
@@ -655,10 +715,15 @@ def task_predictions_test(
 
 
 def task_predictions(
-    embedding_path: Path, scene_embedding_size: int, timestamp_embedding_size: int
+    embedding_path: Path,
+    scene_embedding_size: int,
+    timestamp_embedding_size: int,
+    gpus: Optional[int],
 ):
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
+
+    wandb.init(project="heareval", tags=["predictions", embedding_path.name])
 
     if metadata["embedding_type"] == "scene":
         embedding_size = scene_embedding_size
@@ -673,10 +738,26 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
+    def print_scores(mode, scores_and_trainers):
+        # Pick the model with the best validation score
+        scores_and_trainers.sort(key=lambda st: -st[0])
+        if mode == "max":
+            pass
+        elif mode == "min":
+            scores_and_trainers.reverse()
+        else:
+            raise ValueError(f"mode = {mode}")
+        # print(mode)
+        for score, trainer, predictor in scores_and_trainers:
+            print(score, dict(predictor.hparams))
+
     mode = None
     scores_and_trainers = []
     # Model selection
-    for i in range(3):
+    confs = list(ParameterGrid(PARAM_GRID))
+    rng = random.Random(0)
+    rng.shuffle(confs)
+    for conf in tqdm(confs[:GRID_POINTS], desc="grid"):
         # TODO: Assert mode doesn't change?
         predictor, trainer, best_model_score, mode = task_predictions_train(
             embedding_path=embedding_path,
@@ -685,29 +766,26 @@ def task_predictions(
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
+            conf=conf,
+            gpus=gpus,
         )
-        scores_and_trainers.append((best_model_score, trainer))
-
-    # Pick the model with the best validation score
-    scores_and_trainers.sort(key=lambda st: -st[0])
-    if mode == "max":
-        pass
-    elif mode == "min":
-        scores_and_trainers.reverse()
-    else:
-        raise ValueError(f"mode = {mode}")
-    # print(mode)
-    # print(scores_and_trainers)
+        scores_and_trainers.append((best_model_score, trainer, predictor))
+        print_scores(mode, scores_and_trainers)
 
     # Use that model to compute test scores
-    best_score, best_trainer = scores_and_trainers[0]
-    print("Best validation score", best_score)
+    best_score, best_trainer, best_predictor = scores_and_trainers[0]
+    print()
+    print("Best validation score", best_score, dict(best_predictor.hparams))
     test_dataloader = dataloader_from_split_name(
         "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
     )
     test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_scores, indent=4)
+    )
+
+    open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
+        json.dumps(dict(best_predictor.hparams), indent=4)
     )
 
     # TODO: Do something with me
