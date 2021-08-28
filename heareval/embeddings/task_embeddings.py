@@ -34,6 +34,7 @@ import numpy as np
 import soundfile as sf
 import tensorflow as tf
 import torch
+import wandb
 from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
@@ -366,6 +367,8 @@ def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path)
     task_name = task_path.name
     embed_task_dir = embed_dir.joinpath(task_name)
 
+    wandb.init(project="heareval", tags=["embedding", task_name])
+
     # Copy these two files to the embeddings directory,
     # so we have everything we need in embeddings for doing downstream
     # prediction and evaluation.
@@ -388,12 +391,16 @@ def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path)
 
         # TODO: We might consider skipping files that already
         # have embeddings on disk, for speed
-        # TODO: Choose batch size based upon audio file size?
-        # Or assume that the API is smart enough to do this?
-        # How do we test for memory blow up etc?
-        # e.g. that it won't explode on 10 minute audio
+        # This estimate of batch size is crudely based upon
+        # hearbaseline.wav2vec2 on V100 using dcase task.
+        estimated_batch_size = int(
+            3.3 * (120 / metadata["sample_duration"]) * (16000 / embedding.sample_rate)
+        )
+        print(f"Estimated batch size = {estimated_batch_size}")
         split_data = json.load(split_path.open())
-        dataloader = get_dataloader_for_embedding(split_data, audio_dir, embedding, 4)
+        dataloader = get_dataloader_for_embedding(
+            split_data, audio_dir, embedding, batch_size=estimated_batch_size
+        )
 
         outdir = embed_dir.joinpath(task_path.name, split)
         if not os.path.exists(outdir):
