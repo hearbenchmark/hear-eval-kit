@@ -59,16 +59,25 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q
 
+#RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+#    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+#    GIT_CLONE="git clone --depth 10" && \
+#
+#    $GIT_CLONE https://github.com/Kitware/CMake ~/cmake && \
+#    cd ~/cmake && \
+#    ./bootstrap && \
+#    make -j"$(nproc)" install
+    #make -j"$(nproc)" install && \
+    
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
-
-    $GIT_CLONE https://github.com/Kitware/CMake ~/cmake && \
-    cd ~/cmake && \
-    ./bootstrap && \
-    make -j"$(nproc)" install
-
-    #make -j"$(nproc)" install && \
+    wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
+    echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
+    apt-get update && \
+    rm /usr/share/keyrings/kitware-archive-keyring.gpg && \
+    $APT_INSTALL kitware-archive-keyring && \
+    $APT_INSTALL cmake
 
 # ==================================================================
 # python
