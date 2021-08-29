@@ -18,7 +18,7 @@ import pickle
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, List, Optional, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Tuple, Union
 
 import more_itertools
 import numpy as np
@@ -413,7 +413,7 @@ def create_events_from_prediction(
     # Like when you choose the event scoring approach, it should pick this
     # and wrap it somewhere else.
     min_duration=60.0,
-) -> List[Tuple[str, float, float]]:
+) -> List[Dict[str, Union[float, str]]]:
     """
     Takes a set of prediction tensors keyed on timestamps and generates events.
     (This is for one particular audio scene.)
@@ -483,7 +483,7 @@ def get_events_for_all_files(
     filenames: List[str],
     timestamps: torch.Tensor,
     idx_to_label: Dict[int, str],
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> Dict[str, List[Dict[str, Union[str, float]]]]:
     """
     Produces lists of events from a set of frame based label probabilities.
     The input prediction tensor may contain frame predictions from a set of different

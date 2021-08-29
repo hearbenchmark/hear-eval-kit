@@ -238,7 +238,7 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List[List
         labels_for_sound = []
         # Update the binary vector of labels with intervals for each timestamp
         for j, t in enumerate(timestamps[i]):
-            interval_labels = [interval.data for interval in tree[t]]
+            interval_labels: List[str] = [interval.data for interval in tree[t]]
             labels_for_sound.append(interval_labels)
             # If we want to store the timestamp too
             # labels_for_sound.append([float(t), interval_labels])
