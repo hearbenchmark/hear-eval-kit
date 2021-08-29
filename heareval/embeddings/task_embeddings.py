@@ -219,7 +219,8 @@ def save_timestamp_embedding_and_labels(
         json.dump(labels[i], open(f"{out_file}.target-labels.json", "w"), indent=4)
 
 
-def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
+def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List[List[str]]:
+    # TODO: Is this function redundant?
     # A list of labels present at each timestamp
     timestamp_labels = []
 
@@ -229,7 +230,8 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
         tree = IntervalTree()
         # Add all events to the label tree
         for event in label:
-            tree.addi(event["start"], event["end"], event["label"])
+            # We add 0.0001 so that the end also includes the event
+            tree.addi(event["start"], event["end"] + 0.0001, event["label"])
 
         labels_for_sound = []
         # Update the binary vector of labels with intervals for each timestamp
@@ -241,6 +243,7 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
 
         timestamp_labels.append(labels_for_sound)
 
+    assert len(timestamp_labels) == len(timestamps)
     return timestamp_labels
 
 
