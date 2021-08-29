@@ -18,15 +18,15 @@ import pickle
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, DefaultDict, Dict, List, Optional, Tuple
+from typing import Any, DefaultDict, Dict, List, Optional, Tuple, Union
 
 import more_itertools
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+import torchinfo
 import wandb
-from intervaltree import IntervalTree
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from sklearn.model_selection import ParameterGrid
@@ -45,9 +45,10 @@ PARAM_GRID = {
     "hidden_dim": [512],
     "dropout": [0.0, 0.2, 0.4],
     "lr": [1e-3, 1e-4, 1e-5],
-    # "patience": [3, 10],
     "patience": [3],
     "max_epochs": [100],
+    "check_val_every_n_epoch": [3],
+    "batch_size": [4096],
 }
 GRID_POINTS = 5
 
@@ -132,6 +133,7 @@ class AbstractPredictionModel(pl.LightningModule):
         self.predictor = FullyConnectedPrediction(
             nfeatures, nlabels, prediction_type, conf
         )
+        torchinfo.summary(self.predictor, input_size=(64, nfeatures))
         self.label_to_idx = label_to_idx
         self.idx_to_label: Dict[int, str] = {
             idx: label for (label, idx) in self.label_to_idx.items()
@@ -139,7 +141,7 @@ class AbstractPredictionModel(pl.LightningModule):
         self.scores = scores
 
     def forward(self, x):
-        x = self.layernorm(x)
+        # x = self.layernorm(x)
         x = self.predictor(x)
         return x
 
@@ -200,7 +202,7 @@ class AbstractPredictionModel(pl.LightningModule):
         # ) -> Dict[str, Union[torch.Tensor, List[str]]]:
         flat_outputs_default: DefaultDict = defaultdict(list)
         for output in outputs:
-            assert set(output.keys()) == set(keys)
+            assert set(output.keys()) == set(keys), f"{output.keys()} != {keys}"
             for key in keys:
                 flat_outputs_default[key] += output[key]
         flat_outputs = dict(flat_outputs_default)
@@ -407,12 +409,13 @@ class SplitMemmapDataset(Dataset):
 
 def create_events_from_prediction(
     prediction_dict: Dict[float, torch.Tensor],
+    idx_to_label: Dict[int, str],
     threshold: float = 0.5,
     # TODO: Honestly this stuff belongs in the scoring method
     # Like when you choose the event scoring approach, it should pick this
     # and wrap it somewhere else.
     min_duration=60.0,
-) -> IntervalTree:
+) -> List[Dict[str, Union[float, str]]]:
     """
     Takes a set of prediction tensors keyed on timestamps and generates events.
     (This is for one particular audio scene.)
@@ -425,25 +428,22 @@ def create_events_from_prediction(
         prediction_dict: A dictionary of predictions keyed on timestamp
             {timestamp -> prediction}. The prediction is a tensor of label
             probabilities.
+        idx_to_label: Index to label mapping.
         threshold: Threshold for determining whether to apply a label
         min_duration: the minimum duration in milliseconds for an
                 event to be included.
 
     Returns:
-        An IntervalTree object containing all the events from the predictions.
+        A list of dicts withs keys "label", "start", and "end"
     """
-    # print("prediction_dict", prediction_dict)
-
     # Make sure the timestamps are in the correct order
     timestamps = np.array(sorted(prediction_dict.keys()))
-    # print("timestamps", timestamps)
 
     # Create a sorted numpy matrix of frame level predictions for this file. We convert
     # to a numpy array here before applying a median filter.
     predictions = np.stack(
         [prediction_dict[t].detach().cpu().numpy() for t in timestamps]
     )
-    # print("predictions", predictions)
 
     # We can apply a median filter here to smooth out events, but b/c participants
     # can select their own timestamp interval, selecting the filter window becomes
@@ -456,24 +456,28 @@ def create_events_from_prediction(
     # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
 
-    event_tree = IntervalTree()
+    events = []
     for label in range(predictions.shape[1]):
         for group in more_itertools.consecutive_groups(
             np.where(predictions[:, label])[0]
         ):
             grouptuple = tuple(group)
+            assert (
+                tuple(sorted(grouptuple)) == grouptuple
+            ), f"{sorted(grouptuple)} != {grouptuple}"
             startidx, endidx = (grouptuple[0], grouptuple[-1])
 
             start = timestamps[startidx]
             end = timestamps[endidx]
             # Add event if greater than the minimum duration threshold
             if end - start >= min_duration:
-                # We probably don't need this interval tree and can remove it maybe
-                # from requirements
-                event_tree.addi(begin=start, end=end, data=label)
+                events.append(
+                    {"label": idx_to_label[label], "start": start, "end": end}
+                )
 
-    # Er why return an intervaltree when we immediately postprocess it to a dict?
-    return event_tree
+    # This is just for pretty output, not really necessary
+    events.sort(key=lambda k: k["start"])
+    return events
 
 
 def get_events_for_all_files(
@@ -481,7 +485,7 @@ def get_events_for_all_files(
     filenames: List[str],
     timestamps: torch.Tensor,
     idx_to_label: Dict[int, str],
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> Dict[str, List[Dict[str, Union[str, float]]]]:
     """
     Produces lists of events from a set of frame based label probabilities.
     The input prediction tensor may contain frame predictions from a set of different
@@ -524,18 +528,9 @@ def get_events_for_all_files(
     # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
     event_dict = {}
     for slug, timestamp_predictions in tqdm(event_files.items()):
-        # print(timestamp_predictions)
-        event_tree = create_events_from_prediction(timestamp_predictions)
-        events = []
-        for interval in sorted(event_tree):
-            # TODO: Do this earlier?
-            label = idx_to_label[interval.data]
-            # TODO: start and end? Let's use begin and end like interval tree?
-            events.append(
-                {"label": label, "start": interval.begin, "end": interval.end}
-            )
-
-        event_dict[slug] = events
+        event_dict[slug] = create_events_from_prediction(
+            timestamp_predictions, idx_to_label
+        )
 
     return event_dict
 
@@ -566,7 +561,7 @@ def dataloader_from_split_name(
 
     print(
         f"Getting embeddings for split {split_name}, "
-        + f"which has {len(split_name)} instances."
+        + f"which has {len(dataset)} instances."
     )
 
     return DataLoader(
@@ -629,6 +624,7 @@ def task_predictions_train(
         monitor=target_score,
         min_delta=0.00,
         patience=conf["patience"],
+        check_on_train_epoch_end=False,
         verbose=False,
         mode=mode,
     )
@@ -638,16 +634,27 @@ def task_predictions_train(
     trainer = pl.Trainer(
         callbacks=[checkpoint_callback, early_stop_callback],
         gpus=gpus,
+        check_val_every_n_epoch=conf["check_val_every_n_epoch"],
         max_epochs=conf["max_epochs"],
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
     )
     train_dataloader = dataloader_from_split_name(
-        "train", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
+        "train",
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=conf["batch_size"],
     )
     valid_dataloader = dataloader_from_split_name(
-        "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
+        "valid",
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=conf["batch_size"],
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
@@ -731,7 +738,12 @@ def task_predictions(
     )
 
     test_dataloader = dataloader_from_split_name(
-        "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
+        "test",
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=conf["batch_size"],
     )
     test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
     assert len(test_scores) == 1, "Should have only one test dataloader"

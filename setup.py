@@ -47,6 +47,7 @@ setup(
         "spotty",
         "tensorflow>=2.0",
         "torch",
+        "torchinfo",
         "tqdm",
         "wandb",
         "scikit-learn>=0.24.2",

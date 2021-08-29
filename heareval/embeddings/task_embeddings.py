@@ -196,10 +196,12 @@ def get_dataloader_for_embedding(
 
 
 def save_scene_embedding_and_labels(
-    embeddings: np.ndarray, labels: Any, filename: Tuple, outdir: Path
+    embeddings: np.ndarray, labels: List[Dict], filenames: Tuple[str], outdir: Path
 ):
-    for i, file in enumerate(filename):
-        out_file = outdir.joinpath(f"{file}")
+    assert len(embeddings) == len(filenames)
+    assert len(labels) == len(filenames)
+    for i, filename in enumerate(filenames):
+        out_file = outdir.joinpath(f"{filename}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
         json.dump(labels[i], open(f"{out_file}.target-labels.json", "w"))
 
@@ -208,7 +210,7 @@ def save_timestamp_embedding_and_labels(
     embeddings: np.ndarray,
     timestamps: np.ndarray,
     labels: np.ndarray,
-    filename: Tuple,
+    filename: Tuple[str],
     outdir: Path,
 ):
     for i, file in enumerate(filename):
@@ -220,6 +222,9 @@ def save_timestamp_embedding_and_labels(
 
 
 def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
+    # -> List[List[List[str]]]:
+    # -> List[List[str]]:
+    # TODO: Is this function redundant?
     # A list of labels present at each timestamp
     timestamp_labels = []
 
@@ -229,18 +234,20 @@ def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
         tree = IntervalTree()
         # Add all events to the label tree
         for event in label:
-            tree.addi(event["start"], event["end"], event["label"])
+            # We add 0.0001 so that the end also includes the event
+            tree.addi(event["start"], event["end"] + 0.0001, event["label"])
 
         labels_for_sound = []
         # Update the binary vector of labels with intervals for each timestamp
         for j, t in enumerate(timestamps[i]):
-            interval_labels = [interval.data for interval in tree[t]]
+            interval_labels: List[str] = [interval.data for interval in tree[t]]
             labels_for_sound.append(interval_labels)
             # If we want to store the timestamp too
             # labels_for_sound.append([float(t), interval_labels])
 
         timestamp_labels.append(labels_for_sound)
 
+    assert len(timestamp_labels) == len(timestamps)
     return timestamp_labels
 
 
