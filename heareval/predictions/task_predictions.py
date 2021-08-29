@@ -47,6 +47,8 @@ PARAM_GRID = {
     "lr": [1e-3, 1e-4, 1e-5],
     "patience": [3],
     "max_epochs": [100],
+    "check_val_every_n_epoch": [n],
+    "batch_size": [4096],
 }
 GRID_POINTS = 5
 
@@ -622,6 +624,7 @@ def task_predictions_train(
         monitor=target_score,
         min_delta=0.00,
         patience=conf["patience"],
+        check_on_train_epoch_end=False,
         verbose=False,
         mode=mode,
     )
@@ -631,16 +634,27 @@ def task_predictions_train(
     trainer = pl.Trainer(
         callbacks=[checkpoint_callback, early_stop_callback],
         gpus=gpus,
+        check_val_every_n_epoch=conf["check_val_every_n_epoch"],
         max_epochs=conf["max_epochs"],
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
     )
     train_dataloader = dataloader_from_split_name(
-        "train", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
+        "train",
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=conf["batch_size"],
     )
     valid_dataloader = dataloader_from_split_name(
-        "valid", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
+        "valid",
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=conf["batch_size"],
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
@@ -724,7 +738,12 @@ def task_predictions(
     )
 
     test_dataloader = dataloader_from_split_name(
-        "test", embedding_path, label_to_idx, nlabels, metadata["embedding_type"]
+        "test",
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=conf["batch_size"],
     )
     test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
     assert len(test_scores) == 1, "Should have only one test dataloader"
