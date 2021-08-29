@@ -221,7 +221,9 @@ def save_timestamp_embedding_and_labels(
         json.dump(labels[i], open(f"{out_file}.target-labels.json", "w"), indent=4)
 
 
-def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List[List[str]]:
+def get_labels_for_timestamps(labels: List, timestamps: np.ndarray) -> List:
+    # -> List[List[List[str]]]:
+    # -> List[List[str]]:
     # TODO: Is this function redundant?
     # A list of labels present at each timestamp
     timestamp_labels = []
