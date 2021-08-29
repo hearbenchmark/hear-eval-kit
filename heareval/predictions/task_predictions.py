@@ -27,7 +27,6 @@ import pytorch_lightning as pl
 import torch
 import torchinfo
 import wandb
-from intervaltree import IntervalTree
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from sklearn.model_selection import ParameterGrid
