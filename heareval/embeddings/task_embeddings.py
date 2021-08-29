@@ -196,10 +196,12 @@ def get_dataloader_for_embedding(
 
 
 def save_scene_embedding_and_labels(
-    embeddings: np.ndarray, labels: Any, filename: Tuple, outdir: Path
+    embeddings: np.ndarray, labels: List[Dict], filenames: Tuple[str], outdir: Path
 ):
-    for i, file in enumerate(filename):
-        out_file = outdir.joinpath(f"{file}")
+    assert len(embeddings) == len(filenames)
+    assert len(labels) == len(filenames)
+    for i, filename in enumerate(filenames):
+        out_file = outdir.joinpath(f"{filename}")
         np.save(f"{out_file}.embedding.npy", embeddings[i])
         json.dump(labels[i], open(f"{out_file}.target-labels.json", "w"))
 
@@ -208,7 +210,7 @@ def save_timestamp_embedding_and_labels(
     embeddings: np.ndarray,
     timestamps: np.ndarray,
     labels: np.ndarray,
-    filename: Tuple,
+    filename: Tuple[str],
     outdir: Path,
 ):
     for i, file in enumerate(filename):
