@@ -47,7 +47,7 @@ PARAM_GRID = {
     "lr": [1e-3, 1e-4, 1e-5],
     "patience": [3],
     "max_epochs": [100],
-    "check_val_every_n_epoch": [n],
+    "check_val_every_n_epoch": [3],
     "batch_size": [4096],
 }
 GRID_POINTS = 5
