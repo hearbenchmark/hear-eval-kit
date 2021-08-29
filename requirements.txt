@@ -19,6 +19,7 @@ soundfile
 spotty
 tensorflow>=2.0
 torch
+torchinfo
 tqdm
 wandb
 # otherwise librosa breaks, which fucking dcase-util requires

@@ -25,6 +25,7 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch
+import torchinfo
 import wandb
 from intervaltree import IntervalTree
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
@@ -131,6 +132,7 @@ class AbstractPredictionModel(pl.LightningModule):
         self.predictor = FullyConnectedPrediction(
             nfeatures, nlabels, prediction_type, conf
         )
+        torchinfo.summary(self.predictor, input_size=(64, nfeatures))
         self.label_to_idx = label_to_idx
         self.idx_to_label: Dict[int, str] = {
             idx: label for (label, idx) in self.label_to_idx.items()
