@@ -71,18 +71,19 @@ class FullyConnectedPrediction(torch.nn.Module):
     def __init__(self, nfeatures: int, nlabels: int, prediction_type: str, conf: Dict):
         super().__init__()
 
-        hidden_modules = []
+        hidden_modules: List[torch.nn.Module] = []
         curdim = nfeatures
         # Honestly, we don't really know what activation preceded
         # us for the final embedding.
         last_activation = "linear"
         if conf["hidden_layers"]:
             for i in range(conf["hidden_layers"]):
-                hidden_modules.append(torch.nn.Linear(curdim, conf["hidden_dim"]))
+                linear = torch.nn.Linear(curdim, conf["hidden_dim"])
                 torch.nn.init.xavier_normal_(
-                    hidden_modules[-1].weight,
+                    linear.weight,
                     gain=torch.nn.init.calculate_gain(last_activation),
                 )
+                hidden_modules.append(linear)
                 hidden_modules.append(torch.nn.Dropout(conf["dropout"]))
                 hidden_modules.append(torch.nn.ReLU())
                 curdim = conf["hidden_dim"]
@@ -734,10 +735,10 @@ def task_predictions(
     # Use that model to compute test scores
     best_score, best_trainer, best_predictor = scores_and_trainers[0]
     print()
-    print("Best validation score", best_score, dict(best_predictor.hparams))
+    print("Best validation score", best_score, best_predictor.hparams)
 
     open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
-        json.dumps(dict(best_predictor.hparams), indent=4)
+        json.dumps(best_predictor.hparams, indent=4)
     )
 
     test_dataloader = dataloader_from_split_name(

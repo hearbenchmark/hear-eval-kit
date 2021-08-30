@@ -7,7 +7,7 @@ import os
 import subprocess
 from collections import Counter
 from pathlib import Path
-from typing import List, Union
+from typing import List, Optional, Union
 
 import numpy as np
 import soundfile as sf
@@ -90,14 +90,17 @@ def audio_stats_wav(in_file: Union[str, Path]):
 
 
 def audio_dir_stats_wav(
-    in_dir: Union[str, Path], out_file: str, exts: List[str] = [".wav", ".mp3", ".ogg"]
+    in_dir: Union[str, Path], out_file: str, exts: Optional[List[str]] = None
 ):
     """Produce summary by recursively searching a directory for wav files"""
+    if exts is None:
+        exts = [".wav", ".mp3", ".ogg"]
 
     # Filter the files in the directory for the required extensions
     audio_paths = list(
         filter(
-            lambda audio_path: audio_path.suffix.lower() in map(str.lower, exts),
+            lambda audio_path: audio_path.suffix.lower()
+            in map(str.lower, exts),  # type: ignore
             Path(in_dir).absolute().rglob("*"),
         )
     )

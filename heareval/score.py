@@ -141,7 +141,7 @@ class SoundEventScore(ScoreFunction):
         self,
         label_to_idx: Dict[str, int],
         score: str,
-        params: Dict = {},
+        params: Dict = None,
         name: Optional[str] = None,
         maximize: bool = True,
     ):
@@ -150,6 +150,8 @@ class SoundEventScore(ScoreFunction):
         :param params: Parameters to pass to the scoring function,
                        see inheriting children for details.
         """
+        if params is None:
+            params = {}
         super().__init__(label_to_idx=label_to_idx, name=name, maximize=maximize)
         self.score = score
         self.params = params
