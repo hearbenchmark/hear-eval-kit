@@ -76,19 +76,22 @@ class FullyConnectedPrediction(torch.nn.Module):
         # Honestly, we don't really know what activation preceded
         # us for the final embedding.
         last_activation = "linear"
-        for i in range(conf["hidden_layers"]):
-            linear = torch.nn.Linear(curdim, conf["hidden_dim"])
-            torch.nn.init.xavier_normal_(
-                linear.weight,
-                gain=torch.nn.init.calculate_gain(last_activation),
-            )
-            hidden_modules.append(linear)
-            hidden_modules.append(torch.nn.Dropout(conf["dropout"]))
-            hidden_modules.append(torch.nn.ReLU())
-            curdim = conf["hidden_dim"]
-            last_activation = "relu"
+        if conf["hidden_layers"]:
+            for i in range(conf["hidden_layers"]):
+                linear = torch.nn.Linear(curdim, conf["hidden_dim"])
+                torch.nn.init.xavier_normal_(
+                    linear.weight,
+                    gain=torch.nn.init.calculate_gain(last_activation),
+                )
+                hidden_modules.append(linear)
+                hidden_modules.append(torch.nn.Dropout(conf["dropout"]))
+                hidden_modules.append(torch.nn.ReLU())
+                curdim = conf["hidden_dim"]
+                last_activation = "relu"
 
-        self.hidden = torch.nn.Sequential(*hidden_modules)
+            self.hidden = torch.nn.Sequential(*hidden_modules)
+        else:
+            self.hidden = torch.nn.Identity()
         self.projection = torch.nn.Linear(curdim, nlabels)
 
         torch.nn.init.xavier_normal_(

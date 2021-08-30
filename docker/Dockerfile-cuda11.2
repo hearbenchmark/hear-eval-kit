@@ -103,6 +103,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         setuptools \
+        pipdeptree \
         && \
     $PIP_INSTALL \
         numpy==1.19.2 \
@@ -143,6 +144,11 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         tensorflow-gpu
+
+# Hack to get tf 2.4.2 to play nice with CUDA 11.2
+# https://medium.com/mlearning-ai/tensorflow-2-4-with-cuda-11-2-gpu-training-fix-87f205215419
+RUN ln -s /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.10
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/cuda-11.2/targets/x86_64-linux/lib"
 
 # ==================================================================
 # keras

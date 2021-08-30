@@ -107,6 +107,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         setuptools \
+        pipdeptree \
         && \
     $PIP_INSTALL \
         numpy==1.19.2 \
