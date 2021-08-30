@@ -107,15 +107,16 @@ def runner(
         task_embeddings(embedding, task_path, embed_task_dir)
 
         time_elapsed = time.time() - start
-        gpu_max_mem = gpu_max_mem.measure()
+        gpu_max_mem_used = gpu_max_mem.measure()
         print(
-            f"...computed embeddings in {time_elapsed} sec (GPU max mem {gpu_max_mem}) for {task_path.name}"
+            f"...computed embeddings in {time_elapsed} sec (GPU max mem {gpu_max_mem_used}) "
+            f"for {task_path.name}"
         )
         open(embed_task_dir.joinpath("profile.embeddings.json"), "wt").write(
             json.dumps(
                 {
                     "time_elapsed": time_elapsed,
-                    "gpu_max_mem": gpu_max_mem,
+                    "gpu_max_mem": gpu_max_mem_used,
                 },
                 indent=4,
             )
