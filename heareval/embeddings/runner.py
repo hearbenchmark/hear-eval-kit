@@ -109,7 +109,8 @@ def runner(
         time_elapsed = time.time() - start
         gpu_max_mem_used = gpu_max_mem.measure()
         print(
-            f"...computed embeddings in {time_elapsed} sec (GPU max mem {gpu_max_mem_used}) "
+            f"...computed embeddings in {time_elapsed} sec "
+            f"(GPU max mem {gpu_max_mem_used}) "
             f"for {task_path.name}"
         )
         open(embed_task_dir.joinpath("profile.embeddings.json"), "wt").write(
