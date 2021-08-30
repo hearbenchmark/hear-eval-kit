@@ -28,7 +28,7 @@ import random
 import shutil
 from importlib import import_module
 from pathlib import Path
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import soundfile as sf
@@ -56,16 +56,24 @@ class Embedding:
         model_path: location to load the model from
     """
 
-    def __init__(self, module_name: str, model_path: str = None):
+    def __init__(
+        self,
+        module_name: str,
+        model_path: str = None,
+        model_options: Optional[dict] = None,
+    ):
         print(f"Importing {module_name}")
         self.module = import_module(module_name)
+
+        if model_options is None:
+            model_options = {}
 
         # Load the model using the model weights path if they were provided
         if model_path is not None:
             print(f"Loading model using: {model_path}")
-            self.model = self.module.load_model(model_path)  # type: ignore
+            self.model = self.module.load_model(model_path, **model_options)  # type: ignore
         else:
-            self.model = self.module.load_model()  # type: ignore
+            self.model = self.module.load_model(**model_options)  # type: ignore
 
         # Check to see what type of model this is: torch or tensorflow
         if isinstance(self.model, torch.nn.Module):
@@ -256,8 +264,7 @@ def memmap_embeddings(
     prng: random.Random,
     metadata: Dict,
     split_name: str,
-    embed_dir: Path,
-    task_name: str,
+    embed_task_dir: Path,
 ):
     """
     Memmap all the embeddings to one file, and pickle all the labels.
@@ -287,10 +294,10 @@ def memmap_embeddings(
             raise ValueError(f"Unknown embedding type: {metadata['embedding_type']}")
 
     open(
-        embed_dir.joinpath(task_name, f"{split_name}.embedding-dimensions.json"), "wt"
+        embed_task_dir.joinpath(f"{split_name}.embedding-dimensions.json"), "wt"
     ).write(json.dumps((nembeddings, ndim)))
     embedding_memmap = np.memmap(
-        filename=embed_dir.joinpath(task_name, f"{split_name}.embeddings.npy"),
+        filename=embed_task_dir.joinpath(f"{split_name}.embeddings.npy"),
         dtype=np.float32,
         mode="w+",
         shape=(nembeddings, ndim),
@@ -347,32 +354,25 @@ def memmap_embeddings(
     pickle.dump(
         labels,
         open(
-            embed_dir.joinpath(task_name, f"{split_name}.target-labels.pkl"),
+            embed_task_dir.joinpath(f"{split_name}.target-labels.pkl"),
             "wb",
         ),
     )
     if metadata["embedding_type"] == "event":
         assert len(labels) == len(filename_timestamps)
         open(
-            embed_dir.joinpath(task_name, f"{split_name}.filename-timestamps.json"),
+            embed_task_dir.joinpath(f"{split_name}.filename-timestamps.json"),
             "wt",
         ).write(json.dumps(filename_timestamps, indent=4))
 
 
-def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path):
+def task_embeddings(embedding: Embedding, task_path: Path, embed_task_dir: Path):
     prng = random.Random()
     prng.seed(0)
 
     metadata_path = task_path.joinpath("task_metadata.json")
     metadata = json.load(metadata_path.open())
     label_vocab_path = task_path.joinpath("labelvocabulary.csv")
-
-    # TODO: Would be good to include the version here
-    # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
-    embed_dir = embeddings_dir.joinpath(embedding.name)
-
-    task_name = task_path.name
-    embed_task_dir = embed_dir.joinpath(task_name)
 
     # wandb.init(project="heareval", tags=["embedding", task_name])
 
@@ -411,7 +411,7 @@ def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path)
             split_data, audio_dir, embedding, batch_size=estimated_batch_size
         )
 
-        outdir = embed_dir.joinpath(task_path.name, split)
+        outdir = embed_task_dir.joinpath(split)
         if not os.path.exists(outdir):
             os.makedirs(outdir)
 
@@ -438,4 +438,4 @@ def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path)
                     f"Unknown embedding type: {metadata['embedding_type']}"
                 )
 
-        memmap_embeddings(outdir, prng, metadata, split, embed_dir, task_path.name)
+        memmap_embeddings(outdir, prng, metadata, split, embed_task_dir)
