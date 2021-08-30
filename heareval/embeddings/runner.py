@@ -6,10 +6,11 @@ import os
 from pathlib import Path
 
 import click
+import tensorflow as tf
+import torch
 from tqdm import tqdm
 
 from heareval.embeddings.task_embeddings import Embedding, task_embeddings
-
 
 if torch.cuda.is_available() and not tf.test.is_gpu_available(
     cuda_only=False, min_cuda_compute_capability=None
