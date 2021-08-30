@@ -26,7 +26,8 @@ import pandas as pd
 import pytorch_lightning as pl
 import torch
 import torchinfo
-import wandb
+
+# import wandb
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
@@ -42,16 +43,21 @@ from heareval.score import (
 )
 
 PARAM_GRID = {
-    "hidden_layers": [0, 1, 2],
-    "hidden_dim": [512],
-    "dropout": [0.0, 0.2, 0.4],
-    "lr": [1e-3, 1e-4, 1e-5],
-    "patience": [3],
-    "max_epochs": [100],
-    "check_val_every_n_epoch": [3],
-    "batch_size": [4096],
+    "hidden_layers": [0, 1, 2, 3],
+    "hidden_dim": [256, 512, 1024],
+    "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
+    "patience": [6, 20],
+    "max_epochs": [500],
+    "check_val_every_n_epoch": [1, 3, 10],
+    "batch_size": [1024, 2048, 4096, 8192],
+    "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "norm_after_activation": [False, True],
+    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
+    "optim": [torch.optim.Adam, torch.optim.SGD],
 }
-GRID_POINTS = 5
+GRID_POINTS = 50
 
 
 class OneHotToCrossEntropyLoss(pl.LightningModule):
@@ -80,13 +86,17 @@ class FullyConnectedPrediction(torch.nn.Module):
         if conf["hidden_layers"]:
             for i in range(conf["hidden_layers"]):
                 linear = torch.nn.Linear(curdim, conf["hidden_dim"])
-                torch.nn.init.xavier_normal_(
+                conf["initialization"](
                     linear.weight,
                     gain=torch.nn.init.calculate_gain(last_activation),
                 )
                 hidden_modules.append(linear)
+                if not conf["norm_after_activation"]:
+                    hidden_modules.append(conf["hidden_norm"](conf["hidden_dim"]))
                 hidden_modules.append(torch.nn.Dropout(conf["dropout"]))
                 hidden_modules.append(torch.nn.ReLU())
+                if conf["norm_after_activation"]:
+                    hidden_modules.append(conf["hidden_norm"](conf["hidden_dim"]))
                 curdim = conf["hidden_dim"]
                 last_activation = "relu"
 
@@ -95,7 +105,7 @@ class FullyConnectedPrediction(torch.nn.Module):
             self.hidden = torch.nn.Identity()
         self.projection = torch.nn.Linear(curdim, nlabels)
 
-        torch.nn.init.xavier_normal_(
+        conf["initialization"](
             self.projection.weight, gain=torch.nn.init.calculate_gain(last_activation)
         )
         self.logit_loss: torch.nn.Module
@@ -134,7 +144,7 @@ class AbstractPredictionModel(pl.LightningModule):
         self.save_hyperparameters(conf)
 
         # Since we don't know how these embeddings are scaled
-        self.layernorm = torch.nn.LayerNorm(nfeatures)
+        self.layernorm = conf["embedding_norm"](nfeatures)
         self.predictor = FullyConnectedPrediction(
             nfeatures, nlabels, prediction_type, conf
         )
@@ -219,7 +229,7 @@ class AbstractPredictionModel(pl.LightningModule):
         return flat_outputs
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        optimizer = self.hparams.optim(self.parameters(), lr=self.hparams.lr)
         return optimizer
 
 
@@ -693,7 +703,7 @@ def task_predictions(
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
-    wandb.init(project="heareval", tags=["predictions", embedding_path.name])
+    # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
 
     if metadata["embedding_type"] == "scene":
         embedding_size = scene_embedding_size
@@ -742,13 +752,26 @@ def task_predictions(
         scores_and_trainers.append((best_model_score, trainer, predictor))
         print_scores(mode, scores_and_trainers)
 
+    def serialize_value(v):
+        if isinstance(v, str) or isinstance(v, float) or isinstance(v, int):
+            return v
+        else:
+            return str(v)
+
+    def hparams_to_json(hparams):
+        return {k: vstr(v) for k, v in hparams.items()}
+
+    with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
+        for score, _, predictor in scores_and_trainers:
+            w.write(json.dumps([score, hparams_to_json(predictor.hparams)]) + "\n")
+
     # Use that model to compute test scores
     best_score, best_trainer, best_predictor = scores_and_trainers[0]
     print()
     print("Best validation score", best_score, best_predictor.hparams)
 
     open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
-        json.dumps(best_predictor.hparams, indent=4)
+        json.dumps(hparams_to_json(best_predictor.hparams), indent=4)
     )
 
     test_dataloader = dataloader_from_split_name(
