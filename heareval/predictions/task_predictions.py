@@ -752,7 +752,7 @@ def task_predictions(
         scores_and_trainers.append((best_model_score, trainer, predictor))
         print_scores(mode, scores_and_trainers)
 
-    def vstr(v):
+    def serialize_value(v):
         if isinstance(v, str) or isinstance(v, float) or isinstance(v, int):
             return v
         else:
