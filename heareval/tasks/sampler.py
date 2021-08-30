@@ -15,11 +15,11 @@ it simple to scale across multiple dataset
 import logging
 import multiprocessing
 import shutil
+import sys
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
-import sys
 import click
 import luigi
 import pandas as pd

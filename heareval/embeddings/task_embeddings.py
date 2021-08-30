@@ -39,6 +39,7 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
 # import wandb
+import heareval.gpu_max_mem as gpu_max_mem
 from heareval.tasks.pipeline import SPLITS
 
 TORCH = "torch"
@@ -152,6 +153,7 @@ class Embedding:
                     audio,
                     self.model,
                 )
+                gpu_max_mem.measure()
                 embeddings = embeddings.detach().cpu().numpy()
                 timestamps = timestamps.detach().cpu().numpy()
                 return embeddings, timestamps
@@ -161,6 +163,7 @@ class Embedding:
                 audio,
                 self.model,
             )
+            gpu_max_mem.measure()
             embeddings = embeddings.numpy()
             timestamps = timestamps.numpy()
             return embeddings, timestamps

@@ -5,6 +5,7 @@ Computes embeddings on a set of tasks
 
 import json
 import os
+import time
 from pathlib import Path
 
 import click
@@ -13,6 +14,7 @@ import torch
 from slugify import slugify
 from tqdm import tqdm
 
+import heareval.gpu_max_mem as gpu_max_mem
 from heareval.embeddings.task_embeddings import Embedding, task_embeddings
 
 if torch.cuda.is_available() and not tf.test.is_gpu_available(
@@ -90,6 +92,8 @@ def runner(
         assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
         print(f"Computing embeddings for {task_path.name}")
+        start = time.time()
+        gpu_max_mem.reset()
 
         # TODO: Would be good to include the version here
         # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
@@ -101,6 +105,24 @@ def runner(
         print(embed_task_dir)
 
         task_embeddings(embedding, task_path, embed_task_dir)
+
+        time_elapsed = time.time() - start
+        gpu_max_mem_used = gpu_max_mem.measure()
+        print(
+            f"...computed embeddings in {time_elapsed} sec "
+            f"(GPU max mem {gpu_max_mem_used}) "
+            f"for {task_path.name}"
+        )
+        open(embed_task_dir.joinpath("profile.embeddings.json"), "wt").write(
+            json.dumps(
+                {
+                    "time_elapsed": time_elapsed,
+                    "gpu_max_mem": gpu_max_mem_used,
+                },
+                indent=4,
+            )
+        )
+
         # Touch this file to indicate that processing completed successfully
         open(embed_task_dir.joinpath(".done.embeddings"), "wt")
 

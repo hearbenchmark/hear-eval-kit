@@ -38,8 +38,8 @@ from tqdm.auto import tqdm
 from heareval.score import (
     ScoreFunction,
     available_scores,
-    label_vocab_as_dict,
     label_to_binary_vector,
+    label_vocab_as_dict,
 )
 
 PARAM_GRID = {
