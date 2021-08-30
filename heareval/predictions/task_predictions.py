@@ -42,14 +42,19 @@ from heareval.score import (
 )
 
 PARAM_GRID = {
-    "hidden_layers": [0, 1, 2],
-    "hidden_dim": [512],
-    "dropout": [0.0, 0.2, 0.4],
-    "lr": [1e-3, 1e-4, 1e-5],
+    "hidden_layers": [0, 1, 2, 3],
+    "hidden_dim": [256, 512, 1024],
+    "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
     "patience": [3],
     "max_epochs": [100],
     "check_val_every_n_epoch": [3],
     "batch_size": [4096],
+    "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "norm_after_activation": [False, True],
+    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
+    "optim": [torch.optim.Adam, torch.optim.SGD],
 }
 GRID_POINTS = 5
 
@@ -80,13 +85,17 @@ class FullyConnectedPrediction(torch.nn.Module):
         if conf["hidden_layers"]:
             for i in range(conf["hidden_layers"]):
                 linear = torch.nn.Linear(curdim, conf["hidden_dim"])
-                torch.nn.init.xavier_normal_(
+                conf["initialization"](
                     linear.weight,
                     gain=torch.nn.init.calculate_gain(last_activation),
                 )
                 hidden_modules.append(linear)
+                if not conf["norm_after_activation"]:
+                    hidden_modules.append(conf["hidden_norm"](conf["hidden_dim"]))
                 hidden_modules.append(torch.nn.Dropout(conf["dropout"]))
                 hidden_modules.append(torch.nn.ReLU())
+                if conf["norm_after_activation"]:
+                    hidden_modules.append(conf["hidden_norm"](conf["hidden_dim"]))
                 curdim = conf["hidden_dim"]
                 last_activation = "relu"
 
@@ -95,7 +104,7 @@ class FullyConnectedPrediction(torch.nn.Module):
             self.hidden = torch.nn.Identity()
         self.projection = torch.nn.Linear(curdim, nlabels)
 
-        torch.nn.init.xavier_normal_(
+        conf["initialization"](
             self.projection.weight, gain=torch.nn.init.calculate_gain(last_activation)
         )
         self.logit_loss: torch.nn.Module
@@ -134,7 +143,7 @@ class AbstractPredictionModel(pl.LightningModule):
         self.save_hyperparameters(conf)
 
         # Since we don't know how these embeddings are scaled
-        self.layernorm = torch.nn.LayerNorm(nfeatures)
+        self.layernorm = conf["embedding_norm"](nfeatures)
         self.predictor = FullyConnectedPrediction(
             nfeatures, nlabels, prediction_type, conf
         )
@@ -219,7 +228,7 @@ class AbstractPredictionModel(pl.LightningModule):
         return flat_outputs
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)
+        optimizer = conf["optim"](self.parameters(), lr=self.hparams.lr)
         return optimizer
 
 
