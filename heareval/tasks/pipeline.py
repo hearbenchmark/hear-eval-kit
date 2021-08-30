@@ -698,7 +698,7 @@ class MetadataVocabulary(WorkTask):
 
         # Build the label idx csv and save it
         labelcsv = pd.DataFrame(
-            [(idx, label) for (idx, label) in enumerate(sorted(list(labelset)))],
+            list(enumerate(sorted(list(labelset)))),
             columns=["idx", "label"],
         )
 
