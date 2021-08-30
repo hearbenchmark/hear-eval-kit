@@ -90,9 +90,11 @@ def audio_stats_wav(in_file: Union[str, Path]):
 
 
 def audio_dir_stats_wav(
-    in_dir: Union[str, Path], out_file: str, exts: List[str] = [".wav", ".mp3", ".ogg"]
+    in_dir: Union[str, Path], out_file: str, exts: List[str] = None
 ):
     """Produce summary by recursively searching a directory for wav files"""
+    if exts is None:
+        exts = [".wav", ".mp3", ".ogg"]
 
     # Filter the files in the directory for the required extensions
     audio_paths = list(
