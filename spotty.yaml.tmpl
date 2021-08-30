@@ -78,7 +78,9 @@ instances:
 #   python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt
 #   python3 -m heareval.evaluation.runner
 #   
-#scripts:
+scripts:
+   get: |
+     gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*.tar . && for f in hear2021-task-*.tar; do tar xf "$f"; done
 #  setup: |
 #    bash setup.sh
 #  train: |

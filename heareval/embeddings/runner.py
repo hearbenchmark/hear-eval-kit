@@ -5,6 +5,7 @@ Computes embeddings on a set of tasks
 
 import json
 import os
+import time
 from pathlib import Path
 
 import click
@@ -90,6 +91,7 @@ def runner(
         assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
         print(f"Computing embeddings for {task_path.name}")
+        start = time.time()
 
         # TODO: Would be good to include the version here
         # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
@@ -101,6 +103,13 @@ def runner(
         print(embed_task_dir)
 
         task_embeddings(embedding, task_path, embed_task_dir)
+
+        time_elapsed = time.time() - start
+        print(f"...computed embeddings in {time_elapsed} sec for {task_path.name}")
+        open(embed_task_dir.joinpath("profile.embeddings.txt"), "wt").write(
+            "%.2f" % time_elapsed
+        )
+
         # Touch this file to indicate that processing completed successfully
         open(embed_task_dir.joinpath(".done.embeddings"), "wt")
 
