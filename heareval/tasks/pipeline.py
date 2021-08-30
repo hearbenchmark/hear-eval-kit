@@ -345,9 +345,7 @@ class ExtractMetadata(WorkTask):
             ).issubset(set(process_metadata.columns))
             # Multiclass predictions should only have a single label per file
             if self.task_config["prediction_type"] == "multiclass":
-                label_count = process_metadata.groupby("slug")["label"].aggregate(
-                    len
-                )
+                label_count = process_metadata.groupby("slug")["label"].aggregate(len)
                 assert (label_count == 1).all()
         else:
             raise ValueError(

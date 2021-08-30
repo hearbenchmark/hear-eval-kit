@@ -60,7 +60,7 @@ class Embedding:
         self,
         module_name: str,
         model_path: str = None,
-        model_options: Optional[dict] = None,
+        model_options: Optional[Dict[str, Any]] = None,
     ):
         print(f"Importing {module_name}")
         self.module = import_module(module_name)

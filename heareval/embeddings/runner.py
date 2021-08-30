@@ -55,13 +55,19 @@ def runner(
     embeddings_dir: str = "embeddings",
     model_options: str = "{}",
 ) -> None:
-    model_options = json.loads(model_options)
-    if model_options:
-        options_str = "-" + "-".join(
-            ["%s=%s" % (slugify(k), slugify(v)) for k, v in model_options.items()]
-        )
+    model_options_dict = json.loads(model_options)
+    if isinstance(model_options_dict, dict):
+        if model_options_dict:
+            options_str = "-" + "-".join(
+                [
+                    "%s=%s" % (slugify(k), slugify(v))
+                    for k, v in model_options_dict.items()
+                ]
+            )
+        else:
+            options_str = ""
     else:
-        options_str = ""
+        raise ValueError(f"model_options should be a JSON dict")
 
     # Check for directory containing the tasks
     tasks_dir_path = Path(tasks_dir)
@@ -75,7 +81,7 @@ def runner(
         )
 
     # Load the embedding model
-    embedding = Embedding(module, model, model_options)
+    embedding = Embedding(module, model, model_options_dict)
 
     if task == "all":
         tasks = list(tasks_dir_path.iterdir())
