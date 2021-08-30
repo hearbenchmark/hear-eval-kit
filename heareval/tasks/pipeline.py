@@ -346,7 +346,7 @@ class ExtractMetadata(WorkTask):
             # Multiclass predictions should only have a single label per file
             if self.task_config["prediction_type"] == "multiclass":
                 label_count = process_metadata.groupby("slug")["label"].aggregate(
-                    lambda group: len(group)
+                    len
                 )
                 assert (label_count == 1).all()
         else:
