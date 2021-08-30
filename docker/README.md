@@ -1,6 +1,6 @@
-Docker files for downstream evaluation, both CUDA 11.2 and 10.2
+Docker files for downstream evaluation, CUDA 11.2.
 
-11.2 is probably the future, since it supports both latest pytorch and tensorflow.
+10.2 is deprecated and out of date.
 
 From the repository root:
 ./docker/build.sh to create and push.
