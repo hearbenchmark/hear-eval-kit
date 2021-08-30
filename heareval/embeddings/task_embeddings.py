@@ -128,10 +128,11 @@ class Embedding:
     ) -> np.ndarray:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            embeddings = self.module.get_scene_embeddings(  # type: ignore
-                audio, self.model
-            )
-            return embeddings.detach().cpu().numpy()
+            with torch.no_grad():
+                embeddings = self.module.get_scene_embeddings(  # type: ignore
+                    audio, self.model
+                )
+                return embeddings.detach().cpu().numpy()
         elif self.type == TENSORFLOW:
             embeddings = self.module.get_scene_embeddings(  # type: ignore
                 audio, self.model
@@ -145,14 +146,15 @@ class Embedding:
     ) -> Tuple[np.ndarray, np.ndarray]:
         audio = self.as_tensor(audio)
         if self.type == TORCH:
-            # flake8: noqa
-            embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
-                audio,
-                self.model,
-            )
-            embeddings = embeddings.detach().cpu().numpy()
-            timestamps = timestamps.detach().cpu().numpy()
-            return embeddings, timestamps
+            with torch.no_grad():
+                # flake8: noqa
+                embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
+                    audio,
+                    self.model,
+                )
+                embeddings = embeddings.detach().cpu().numpy()
+                timestamps = timestamps.detach().cpu().numpy()
+                return embeddings, timestamps
         elif self.type == TENSORFLOW:
             # flake8: noqa
             embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
@@ -397,13 +399,13 @@ def task_embeddings(embedding: Embedding, task_path: Path, embed_task_dir: Path)
         audio_dir = task_path.joinpath(str(embedding.sample_rate), split)
 
         # TODO: We might consider skipping files that already
-        # have embeddings on disk, for speed
-        # This estimate of batch size is crudely based upon
-        # hearbaseline.wav2vec2 on V100 using dcase task.
+        # have embeddings on disk, for speed.
+        # This was based upon futzing with various models
+        # on the dcase task.
         # Unforunately, this is not tuned per model and is based upon the largest
         # model and largest audio files we have.
         estimated_batch_size = int(
-            3.1 * (120 / metadata["sample_duration"]) * (16000 / embedding.sample_rate)
+            1 * (120 / metadata["sample_duration"]) * (16000 / embedding.sample_rate)
         )
         print(f"Estimated batch size = {estimated_batch_size}")
         split_data = json.load(split_path.open())
