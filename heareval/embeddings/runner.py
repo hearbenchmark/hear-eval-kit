@@ -101,6 +101,8 @@ def runner(
         print(embed_task_dir)
 
         task_embeddings(embedding, task_path, embed_task_dir)
+        # Touch this file to indicate that processing completed successfully
+        open(embed_task_dir.joinpath(".done.embeddings"), "wt")
 
 
 if __name__ == "__main__":
