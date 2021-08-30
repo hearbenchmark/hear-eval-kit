@@ -99,7 +99,8 @@ def audio_dir_stats_wav(
     # Filter the files in the directory for the required extensions
     audio_paths = list(
         filter(
-            lambda audio_path: audio_path.suffix.lower() in map(str.lower, exts),  # type: ignore
+            lambda audio_path: audio_path.suffix.lower()
+            in map(str.lower, exts),  # type: ignore
             Path(in_dir).absolute().rglob("*"),
         )
     )
