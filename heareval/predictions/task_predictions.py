@@ -27,6 +27,7 @@ import pytorch_lightning as pl
 import torch
 import torchinfo
 import wandb
+from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from sklearn.model_selection import ParameterGrid
@@ -640,6 +641,7 @@ def task_predictions_train(
         gpus=gpus,
         check_val_every_n_epoch=conf["check_val_every_n_epoch"],
         max_epochs=conf["max_epochs"],
+        deterministic=True,
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
@@ -680,6 +682,14 @@ def task_predictions(
     timestamp_embedding_size: int,
     gpus: Optional[int],
 ):
+    # By setting workers=True in seed_everything(), Lightning derives
+    # unique seeds across all dataloader workers and processes for
+    # torch, numpy and stdlib random number generators. When turned
+    # on, it ensures that e.g. data augmentations are not repeated
+    # across workers.
+    # This means we should keep dataloader workers consistent.
+    seed_everything(42, workers=False)
+
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
