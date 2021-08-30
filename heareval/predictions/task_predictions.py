@@ -50,7 +50,7 @@ PARAM_GRID = {
     "patience": [6, 20],
     "max_epochs": [500],
     "check_val_every_n_epoch": [1, 3, 10],
-    "batch_size": [4096],
+    "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "norm_after_activation": [False, True],
     "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
