@@ -60,7 +60,7 @@ def runner(
         if model_options_dict:
             options_str = "-" + "-".join(
                 [
-                    "%s=%s" % (slugify(k), slugify(v))
+                    "%s=%s" % (slugify(k), slugify(str(v)))
                     for k, v in model_options_dict.items()
                 ]
             )
