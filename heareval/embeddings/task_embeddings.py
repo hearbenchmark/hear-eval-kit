@@ -38,7 +38,7 @@ from intervaltree import IntervalTree
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-import wandb
+# import wandb
 from heareval.tasks.pipeline import SPLITS
 
 TORCH = "torch"
@@ -374,7 +374,7 @@ def task_embeddings(embedding: Embedding, task_path: Path, embeddings_dir: Path)
     task_name = task_path.name
     embed_task_dir = embed_dir.joinpath(task_name)
 
-    wandb.init(project="heareval", tags=["embedding", task_name])
+    # wandb.init(project="heareval", tags=["embedding", task_name])
 
     # Copy these two files to the embeddings directory,
     # so we have everything we need in embeddings for doing downstream
