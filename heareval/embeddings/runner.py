@@ -67,7 +67,7 @@ def runner(
         else:
             options_str = ""
     else:
-        raise ValueError(f"model_options should be a JSON dict")
+        raise ValueError("model_options should be a JSON dict")
 
     # Check for directory containing the tasks
     tasks_dir_path = Path(tasks_dir)

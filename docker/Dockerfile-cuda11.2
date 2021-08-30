@@ -266,12 +266,13 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
-        numpy==1.19.2 \
-        hearbaseline
+        numpy==1.19.2
+#        hearbaseline \
+#        hearvalidator
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
-    $GIT_CLONE https://github.com/neuralaudio/hear-baseline.git
+    $GIT_CLONE -b torchopenl3cat https://github.com/neuralaudio/hear-baseline.git
 RUN cd hear-baseline && \
     python -m pip --no-cache-dir install -e ".[dev]"
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
