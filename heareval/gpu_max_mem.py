@@ -3,6 +3,8 @@
 Profile GPU maximum memory usage.
 """
 
+from typing import Optional
+
 import torch
 from pynvml import nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlInit
 
@@ -16,7 +18,7 @@ def reset():
     max_memory_used = None
 
 
-def measure() -> float:
+def measure() -> Optional[float]:
     global max_memory_used
     if torch.cuda.is_available():
         h = nvmlDeviceGetHandleByIndex(0)
