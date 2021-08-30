@@ -10,7 +10,7 @@ from pynvml import nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlInit
 
 nvmlInit()
 
-max_memory_used = None
+max_memory_used: Optional[float] = None
 
 
 def reset():
@@ -23,6 +23,8 @@ def measure() -> Optional[float]:
     if torch.cuda.is_available():
         h = nvmlDeviceGetHandleByIndex(0)
         info = nvmlDeviceGetMemoryInfo(h)
-        if info.used > max_memory_used:
-            max_memory_used = info.used
+        # Convert to GB
+        memory_used: float = info.used / 1024 / 1024 / 1024
+        if max_memory_used is None or memory_used > max_memory_used:
+            max_memory_used = memory_used
     return max_memory_used
