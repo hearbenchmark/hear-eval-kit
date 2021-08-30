@@ -15,7 +15,7 @@ from heareval.embeddings.task_embeddings import Embedding, task_embeddings
 if torch.cuda.is_available() and not tf.test.is_gpu_available(
     cuda_only=False, min_cuda_compute_capability=None
 ):
-    raise ValueError("GPUs not available in tensorflow")
+    raise ValueError("GPUs not available in tensorflow, but found by pytorch")
 
 
 @click.command()
