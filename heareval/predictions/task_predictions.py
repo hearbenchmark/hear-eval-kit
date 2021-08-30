@@ -759,7 +759,7 @@ def task_predictions(
             return str(v)
 
     def hparams_to_json(hparams):
-        return {k: vstr(v) for k, v in hparams.items()}
+        return {k: serialize_value(v) for k, v in hparams.items()}
 
     with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
         for score, _, predictor in scores_and_trainers:

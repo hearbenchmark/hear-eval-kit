@@ -2,12 +2,15 @@
 """
 Computes embeddings on a set of tasks
 """
+
+import json
 import os
 from pathlib import Path
 
 import click
 import tensorflow as tf
 import torch
+from slugify import slugify
 from tqdm import tqdm
 
 from heareval.embeddings.task_embeddings import Embedding, task_embeddings
@@ -41,17 +44,35 @@ if torch.cuda.is_available() and not tf.test.is_gpu_available(
 @click.option(
     "--embeddings-dir", default="embeddings", help="Location to save task embeddings"
 )
+@click.option(
+    "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
+)
 def runner(
     module: str,
     model: str = None,
     tasks_dir: str = "tasks",
     task: str = "tasks",
     embeddings_dir: str = "embeddings",
+    model_options: str = "{}",
 ) -> None:
+    model_options_dict = json.loads(model_options)
+    if isinstance(model_options_dict, dict):
+        if model_options_dict:
+            options_str = "-" + "-".join(
+                [
+                    "%s=%s" % (slugify(k), slugify(str(v)))
+                    for k, v in model_options_dict.items()
+                ]
+            )
+        else:
+            options_str = ""
+    else:
+        raise ValueError("model_options should be a JSON dict")
 
     # Check for directory containing the tasks
     tasks_dir_path = Path(tasks_dir)
     embeddings_dir_path = Path(embeddings_dir)
+    print(embeddings_dir_path)
     if not tasks_dir_path.is_dir():
         raise ValueError(
             "Cannot locate directory containing tasks. "
@@ -60,7 +81,7 @@ def runner(
         )
 
     # Load the embedding model
-    embedding = Embedding(module, model)
+    embedding = Embedding(module, model, model_options_dict)
 
     if task == "all":
         tasks = list(tasks_dir_path.iterdir())
@@ -69,7 +90,17 @@ def runner(
         assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
         print(f"Computing embeddings for {task_path.name}")
-        task_embeddings(embedding, task_path, embeddings_dir_path)
+
+        # TODO: Would be good to include the version here
+        # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
+        embed_dir = embeddings_dir_path.joinpath(embedding.name + options_str)
+
+        task_name = task_path.name
+        embed_task_dir = embed_dir.joinpath(task_name)
+
+        print(embed_task_dir)
+
+        task_embeddings(embedding, task_path, embed_task_dir)
 
 
 if __name__ == "__main__":
