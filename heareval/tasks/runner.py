@@ -22,7 +22,7 @@ try:
 
     secret_tasks = hearsecrettasks.tasks
 
-except ModuleNotFoundError as e:
+except ImportError as e:
     print(e)
     logger.info(
         "The hearsecrettask submodule is not installed. "
