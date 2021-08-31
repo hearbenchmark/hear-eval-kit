@@ -8,6 +8,7 @@ more-itertools
 numpy==1.19.2
 pandas
 pre-commit
+pynvml
 pytest
 pytest-cov
 pytest-env
@@ -21,7 +22,7 @@ tensorflow>=2.0
 torch
 torchinfo
 tqdm
-wandb
+#wandb
 # otherwise librosa breaks, which fucking dcase-util requires
 numba==0.48
 #numba>=0.49.0 # not directly required, pinned by Snyk to avoid a vulnerability
