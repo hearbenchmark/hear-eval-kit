@@ -44,14 +44,32 @@ from heareval.predictions.task_predictions import task_predictions
     help="Number of GPUs to use (default: 1 if any are available, none if not)",
     type=click.INT,
 )
+@click.option(
+    "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
+)
 def runner(
     module: str,
     embeddings_dir: str = "embeddings",
     model: Optional[str] = None,
     task: str = "all",
     gpus: Optional[int] = None if not torch.cuda.is_available() else 1,
+    model_options: str = "{}",
 ) -> None:
-    embeddings_dir_path = Path(embeddings_dir).joinpath(module)
+    model_options_dict = json.loads(model_options)
+    if isinstance(model_options_dict, dict):
+        if model_options_dict:
+            options_str = "-" + "-".join(
+                [
+                    "%s=%s" % (slugify(k), slugify(str(v)))
+                    for k, v in model_options_dict.items()
+                ]
+            )
+        else:
+            options_str = ""
+    else:
+        raise ValueError("model_options should be a JSON dict")
+
+    embeddings_dir_path = Path(embeddings_dir).joinpath(module + options_str)
     if not embeddings_dir_path.is_dir():
         raise ValueError(
             "Cannot locate directory containing embeddings. "
@@ -65,9 +83,9 @@ def runner(
     # Load the model using the model weights path if they were provided
     if model is not None:
         print(f"Loading model using: {model}")
-        model_obj = module_clr.load_model(model)  # type: ignore
+        model_obj = module_clr.load_model(model, **model_options)  # type: ignore
     else:
-        model_obj = module_clr.load_model()  # type: ignore
+        model_obj = module_clr.load_model(**model_options)  # type: ignore
     scene_embedding_size = model_obj.scene_embedding_size
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
