@@ -19,10 +19,10 @@ logger = logging.getLogger("luigi-interface")
 # Currently the runner is only allowed to run for open tasks
 # The secret tasks module will be not be available for the participants
 try:
-    sys.path.append("heareval/tasks/secrettasks")
-    import hearsecrettasks
+    from heareval.tasks.secrettasks import hearsecrettasks
 
     secret_tasks = hearsecrettasks.tasks
+
 except ModuleNotFoundError as e:
     print(e)
     logger.info(
