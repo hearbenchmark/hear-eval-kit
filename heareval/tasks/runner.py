@@ -5,7 +5,6 @@ Runs a luigi pipeline to build a dataset
 
 import logging
 import multiprocessing
-import sys
 from typing import Optional
 
 import click
