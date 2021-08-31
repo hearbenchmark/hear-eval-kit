@@ -33,7 +33,7 @@ def measure() -> Optional[float]:
             memory_used: float = info.used / 1024 / 1024 / 1024
             if max_memory_used is None or memory_used > max_memory_used:
                 max_memory_used = memory_used
-        except pynvml.NVMLError:
+        except NVMLError:
             # Happens on Ubuntu 20.04 running on WSL2.
             pass
     return max_memory_used
