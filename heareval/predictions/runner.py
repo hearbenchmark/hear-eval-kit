@@ -6,6 +6,7 @@ predictions.
 TODO: Add CUDA device.
 """
 
+import json
 import os
 from importlib import import_module
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing import Optional
 
 import click
 import torch
+from slugify import slugify
 from tqdm import tqdm
 
 from heareval.predictions.task_predictions import task_predictions
@@ -83,9 +85,9 @@ def runner(
     # Load the model using the model weights path if they were provided
     if model is not None:
         print(f"Loading model using: {model}")
-        model_obj = module_clr.load_model(model, **model_options)  # type: ignore
+        model_obj = module_clr.load_model(model, **model_options_dict)  # type: ignore
     else:
-        model_obj = module_clr.load_model(**model_options)  # type: ignore
+        model_obj = module_clr.load_model(**model_options_dict)  # type: ignore
     scene_embedding_size = model_obj.scene_embedding_size
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 

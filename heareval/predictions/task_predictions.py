@@ -678,19 +678,34 @@ def task_predictions_train(
     if checkpoint_callback.best_model_score is not None:
         sys.stdout.flush()
         print(
-            "\n\n\nGRID POINT", embedding_path, score, dict(predictor.hparams), "\n\n\n"
+            "\n\n\nGRID POINT",
+            embedding_path,
+            checkpoint_callback.best_model_score.detach().cpu().item(),
+            hparams_to_json(predictor.hparams),
+            "\n\n\n",
         )
         sys.stdout.flush()
         return (
             predictor,
             trainer,
-            checkpoint_callback.best_model_score.detach().cpu(),
+            checkpoint_callback.best_model_score.detach().cpu().item(),
             mode,
         )
     else:
         raise ValueError(
             f"No score {checkpoint_callback.best_model_score} for this model"
         )
+
+
+def serialize_value(v):
+    if isinstance(v, str) or isinstance(v, float) or isinstance(v, int):
+        return v
+    else:
+        return str(v)
+
+
+def hparams_to_json(hparams):
+    return {k: serialize_value(v) for k, v in hparams.items()}
 
 
 def task_predictions(
@@ -759,15 +774,6 @@ def task_predictions(
         )
         scores_and_trainers.append((best_model_score, trainer, predictor))
         print_scores(mode, scores_and_trainers)
-
-    def serialize_value(v):
-        if isinstance(v, str) or isinstance(v, float) or isinstance(v, int):
-            return v
-        else:
-            return str(v)
-
-    def hparams_to_json(hparams):
-        return {k: serialize_value(v) for k, v in hparams.items()}
 
     with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
         for score, _, predictor in scores_and_trainers:
