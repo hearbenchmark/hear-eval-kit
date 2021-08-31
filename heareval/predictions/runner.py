@@ -87,7 +87,7 @@ def runner(
         print(f"Loading model using: {model}")
         model_obj = module_clr.load_model(model, **model_options_dict)  # type: ignore
     else:
-        model_obj = module_clr.load_model(model="", **model_options_dict)  # type: ignore
+        model_obj = module_clr.load_model("", **model_options_dict)  # type: ignore
     scene_embedding_size = model_obj.scene_embedding_size
     timestamp_embedding_size = model_obj.timestamp_embedding_size
 
