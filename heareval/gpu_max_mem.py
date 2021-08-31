@@ -7,10 +7,10 @@ from typing import Optional
 
 import torch
 from pynvml import (
+    NVMLError,
     nvmlDeviceGetHandleByIndex,
     nvmlDeviceGetMemoryInfo,
     nvmlInit,
-    NVMLError,
 )
 
 nvmlInit()
