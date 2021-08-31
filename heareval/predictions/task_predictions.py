@@ -16,6 +16,7 @@ import json
 import math
 import pickle
 import random
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Tuple, Union
@@ -47,8 +48,8 @@ PARAM_GRID = {
     "hidden_dim": [256, 512, 1024],
     "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
     "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
-    "patience": [6, 20],
-    "max_epochs": [500],
+    "patience": [2, 6, 20],
+    "max_epochs": [100, 500],
     "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
@@ -57,7 +58,8 @@ PARAM_GRID = {
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
     "optim": [torch.optim.Adam, torch.optim.SGD],
 }
-GRID_POINTS = 50
+# GRID_POINTS = 50
+GRID_POINTS = 1
 
 
 class OneHotToCrossEntropyLoss(pl.LightningModule):
@@ -674,6 +676,11 @@ def task_predictions_train(
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
+        sys.stdout.flush()
+        print(
+            "\n\n\nGRID POINT", embedding_path, score, dict(predictor.hparams), "\n\n\n"
+        )
+        sys.stdout.flush()
         return (
             predictor,
             trainer,
@@ -698,7 +705,7 @@ def task_predictions(
     # on, it ensures that e.g. data augmentations are not repeated
     # across workers.
     # This means we should keep dataloader workers consistent.
-    seed_everything(42, workers=False)
+    #    seed_everything(42, workers=False)
 
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
@@ -735,7 +742,8 @@ def task_predictions(
     scores_and_trainers = []
     # Model selection
     confs = list(ParameterGrid(PARAM_GRID))
-    rng = random.Random(0)
+    #    rng = random.Random(0)
+    rng = random.Random()
     rng.shuffle(confs)
     for conf in tqdm(confs[:GRID_POINTS], desc="grid"):
         # TODO: Assert mode doesn't change?

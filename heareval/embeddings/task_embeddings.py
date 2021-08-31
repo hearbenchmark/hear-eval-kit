@@ -408,7 +408,7 @@ def task_embeddings(embedding: Embedding, task_path: Path, embed_task_dir: Path)
         # Unforunately, this is not tuned per model and is based upon the largest
         # model and largest audio files we have.
         estimated_batch_size = int(
-            1 * (120 / metadata["sample_duration"]) * (16000 / embedding.sample_rate)
+            0.9 * (120 / metadata["sample_duration"]) * (16000 / embedding.sample_rate)
         )
         print(f"Estimated batch size = {estimated_batch_size}")
         split_data = json.load(split_path.open())
