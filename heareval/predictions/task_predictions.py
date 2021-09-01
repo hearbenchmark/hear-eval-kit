@@ -602,7 +602,7 @@ def get_events_for_all_files(
                 timestamp_predictions, idx_to_label, **dict(postprocess)
             )
     else:
-        for median_filter_ms in [0.0, 60.0, 150.0]:
+        for median_filter_ms in [0.0, 60.0, 150.0, 250.0]:
             for min_duration in [0.0, 60.0, 150.0, 250.0]:
                 postprocess = (
                     ("median_filter_ms", median_filter_ms),
