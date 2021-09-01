@@ -772,7 +772,7 @@ def task_predictions(
         predictor, trainer, best_model_score, mode = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
-            timestamp_embedding_size=timestamp_embedding_size,
+            grid_points=grid_points,
             metadata=metadata,
             label_to_idx=label_to_idx,
             nlabels=nlabels,

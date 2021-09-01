@@ -44,7 +44,7 @@ from heareval.predictions.task_predictions import task_predictions
     default=1,
     help="Number of grid points for randomized grid search "
     "model selection. (Default: 1)",
-    type=click.Int,
+    type=click.INT,
 )
 @click.option(
     "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
@@ -61,7 +61,7 @@ from heareval.predictions.task_predictions import task_predictions
     "--deterministic",
     default=True,
     help="Deterministic or non-deterministic. (Default: True)",
-    type=click.Bool,
+    type=click.BOOL,
 )
 def runner(
     module: str,
