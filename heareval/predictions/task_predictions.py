@@ -33,6 +33,7 @@ import torchinfo
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
@@ -46,18 +47,27 @@ from heareval.score import (
 
 PARAM_GRID = {
     "hidden_layers": [0, 1, 2, 3],
-    "hidden_dim": [256, 512, 1024],
+    # "hidden_dim": [256, 512, 1024],
+    "hidden_dim": [1024, 512],
     "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-    "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
-    "patience": [2, 6, 20],
-    "max_epochs": [50, 150, 500],
+    # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
+    "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
+    "patience": [20],
+    "max_epochs": [500],
     "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "norm_after_activation": [False, True],
     "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
-    "optim": [torch.optim.Adam, torch.optim.SGD],
+    "optim": [torch.optim.Adam],
+    # "optim": [torch.optim.Adam, torch.optim.SGD],
+}
+
+# These are good for dcase, change for other event-based secret tasks
+EVENT_POSTPROCESSING_GRID = {
+    "median_filter_ms": [0.0, 60.0, 150.0, 250.0],
+    "min_duration": [0.0, 60.0, 150.0, 250.0],
 }
 
 
@@ -103,7 +113,7 @@ class FullyConnectedPrediction(torch.nn.Module):
 
             self.hidden = torch.nn.Sequential(*hidden_modules)
         else:
-            self.hidden = torch.nn.Identity()
+            self.hidden = torch.nn.Identity()  # type: ignore
         self.projection = torch.nn.Linear(curdim, nlabels)
 
         conf["initialization"](
@@ -310,6 +320,8 @@ class EventPredictionModel(AbstractPredictionModel):
             "val": validation_target_events,
             "test": test_target_events,
         }
+        # For each epoch, what postprocessing parameters were best
+        self.epoch_best_postprocessing: Dict[int, Tuple[Tuple[str, Any], ...]] = {}
 
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
         flat_outputs = self._flatten_batched_outputs(
@@ -329,14 +341,48 @@ class EventPredictionModel(AbstractPredictionModel):
             ]
         )
 
-        predicted_events = get_events_for_all_files(
-            prediction, filename, timestamp, self.idx_to_label
+        if name == "val":
+            # During training, the epoch is one behind the value that will
+            # be stored as the "best" epoch
+            epoch = self.current_epoch + 1
+            postprocessing = None
+        elif name == "test":
+            epoch = self.current_epoch
+            postprocessing = self.epoch_best_postprocessing[epoch]
+        else:
+            raise ValueError
+        # print("\n\n\n", epoch)
+
+        predicted_events_by_postprocessing = get_events_for_all_files(
+            prediction, filename, timestamp, self.idx_to_label, postprocessing
         )
+
+        score_and_postprocessing = []
+        for postprocessing in predicted_events_by_postprocessing:
+            predicted_events = predicted_events_by_postprocessing[postprocessing]
+            primary_score_fn = self.scores[0]
+            primary_score = primary_score_fn(
+                # predicted_events, self.target_events[name]
+                predicted_events,
+                self.target_events[name],
+            )
+            if np.isnan(primary_score):
+                primary_score = 0.0
+            score_and_postprocessing.append((primary_score, postprocessing))
+        score_and_postprocessing.sort(reverse=True)
+
+        # for vs in score_and_postprocessing:
+        #    print(vs)
+
+        best_postprocessing = score_and_postprocessing[0][1]
+        self.epoch_best_postprocessing[epoch] = best_postprocessing
+        predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
         end_scores = {}
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         if name == "test":
+            # print("test epoch", self.current_epoch)
             # Cache all predictions for later serialization
             self.test_predicted_labels = prediction
             self.test_predicted_events = predicted_events
@@ -348,6 +394,7 @@ class EventPredictionModel(AbstractPredictionModel):
             # Weird, this can happen if precision has zero guesses
             if math.isnan(end_scores[f"{name}_{score}"]):
                 end_scores[f"{name}_{score}"] = 0.0
+
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True)
 
@@ -427,18 +474,17 @@ def create_events_from_prediction(
     prediction_dict: Dict[float, torch.Tensor],
     idx_to_label: Dict[int, str],
     threshold: float = 0.5,
-    # TODO: Honestly this stuff belongs in the scoring method
-    # Like when you choose the event scoring approach, it should pick this
-    # and wrap it somewhere else.
-    min_duration=60.0,
+    median_filter_ms: float = 150,
+    min_duration: float = 60.0,
 ) -> List[Dict[str, Union[float, str]]]:
     """
     Takes a set of prediction tensors keyed on timestamps and generates events.
     (This is for one particular audio scene.)
     We convert the prediction tensor to a binary label based on the threshold value. Any
     events occurring at adjacent timestamps are considered to be part of the same event.
-    This loops through and creates events for each label class. Disregards events that
-    are less than the min_duration milliseconds.
+    This loops through and creates events for each label class.
+    We optionally apply median filtering to predictions.
+    We disregard events that are less than the min_duration milliseconds.
 
     Args:
         prediction_dict: A dictionary of predictions keyed on timestamp
@@ -461,13 +507,12 @@ def create_events_from_prediction(
         [prediction_dict[t].detach().cpu().numpy() for t in timestamps]
     )
 
-    # We can apply a median filter here to smooth out events, but b/c participants
-    # can select their own timestamp interval, selecting the filter window becomes
-    # challenging and could give an unfair advantage -- so we leave out for now.
-    # This could look something like this:
-    # ts_diff = timestamps[1] - timestamps[0]
-    # filter_width = int(round(median_filter_ms / ts_diff))
-    # predictions = median_filter(predictions, size=(filter_width, 1))
+    # Optionally apply a median filter here to smooth out events.
+    ts_diff = np.mean(np.diff(timestamps))
+    if median_filter_ms:
+        filter_width = int(round(median_filter_ms / ts_diff))
+        if filter_width:
+            predictions = median_filter(predictions, size=(filter_width, 1))
 
     # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
@@ -501,7 +546,8 @@ def get_events_for_all_files(
     filenames: List[str],
     timestamps: torch.Tensor,
     idx_to_label: Dict[int, str],
-) -> Dict[str, List[Dict[str, Union[str, float]]]]:
+    postprocessing: Optional[Tuple[Tuple[str, Any], ...]] = None,
+) -> Dict[Tuple[Tuple[str, Any], ...], Dict[str, List[Dict[str, Union[str, float]]]]]:
     """
     Produces lists of events from a set of frame based label probabilities.
     The input prediction tensor may contain frame predictions from a set of different
@@ -511,6 +557,13 @@ def get_events_for_all_files(
     We split the predictions into separate tensors based on the filename and compute
     events based on those individually.
 
+    If no postprocessing is specified (during training), we try a
+    variety of ways of postprocessing the predictions into events,
+    including median filtering and minimum event length.
+
+    If postprocessing is specified (during test, chosen at the best
+    validation epoch), we use this postprocessing.
+
     Args:
         predictions: a tensor of frame based multi-label predictions.
         filenames: a list of filenames where each entry corresponds
@@ -518,8 +571,10 @@ def get_events_for_all_files(
         timestamps: a list of timestamps where each entry corresponds
             to a frame in the predictions tensor.
         idx_to_label: Index to label mapping.
+        postprocessing: See above.
 
     Returns:
+        A dictionary from filtering params to the following values:
         A dictionary of lists of events keyed on the filename slug.
         The event list is of dicts of the following format:
             {"label": str, "start": float ms, "end": float ms}
@@ -542,11 +597,25 @@ def get_events_for_all_files(
     # Create events for all the different files. Store all the events as a dictionary
     # with the same format as the ground truth from the luigi pipeline.
     # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
-    event_dict = {}
-    for slug, timestamp_predictions in tqdm(event_files.items()):
-        event_dict[slug] = create_events_from_prediction(
-            timestamp_predictions, idx_to_label
-        )
+    event_dict: Dict[
+        Tuple[Tuple[str, Any], ...], Dict[str, List[Dict[str, Union[float, str]]]]
+    ] = {}
+    if postprocessing:
+        postprocess = postprocessing
+        event_dict[postprocess] = {}
+        for slug, timestamp_predictions in tqdm(event_files.items()):
+            event_dict[postprocess][slug] = create_events_from_prediction(
+                timestamp_predictions, idx_to_label, **dict(postprocess)
+            )
+    else:
+        postprocessing_confs = list(ParameterGrid(EVENT_POSTPROCESSING_GRID))
+        for postprocess_dict in postprocessing_confs:
+            postprocess = tuple(postprocess_dict.items())
+            event_dict[postprocess] = {}
+            for slug, timestamp_predictions in tqdm(event_files.items()):
+                event_dict[postprocess][slug] = create_events_from_prediction(
+                    timestamp_predictions, idx_to_label, **postprocess_dict
+                )
 
     return event_dict
 
@@ -601,7 +670,9 @@ def task_predictions_train(
     conf: Dict,
     gpus: Any,
     deterministic: bool,
-) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
+) -> Tuple[
+    str, int, Dict[str, Any], Tuple[Tuple[str, Any], ...], pl.Trainer, float, str
+]:
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
@@ -681,18 +752,26 @@ def task_predictions_train(
         sys.stdout.flush()
         end = time.time()
         epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
+        if metadata["embedding_type"] == "event":
+            best_postprocessing = predictor.epoch_best_postprocessing[epoch]
+        else:
+            best_postprocessing = []
         print(
             "\n\n\nGRID POINT",
             embedding_path,
             checkpoint_callback.best_model_score.detach().cpu().item(),
+            json.dumps(best_postprocessing),
             "epoch %d" % epoch,
             "time_in_min %.2f" % ((end - start) / 60),
-            hparams_to_json(predictor.hparams),
+            json.dumps(hparams_to_json(predictor.hparams)),
             "\n\n\n",
         )
         sys.stdout.flush()
         return (
-            predictor,
+            checkpoint_callback.best_model_path,
+            epoch,
+            dict(predictor.hparams),
+            best_postprocessing,
             trainer,
             checkpoint_callback.best_model_score.detach().cpu().item(),
             mode,
@@ -759,8 +838,8 @@ def task_predictions(
         else:
             raise ValueError(f"mode = {mode}")
         # print(mode)
-        for score, trainer, predictor in scores_and_trainers:
-            print(score, dict(predictor.hparams))
+        for score, _, epoch, _, hparams, postprocessing in scores_and_trainers:
+            print(score, epoch, hparams, postprocessing)
 
     mode = None
     scores_and_trainers = []
@@ -769,7 +848,15 @@ def task_predictions(
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         # TODO: Assert mode doesn't change?
-        predictor, trainer, best_model_score, mode = task_predictions_train(
+        (
+            model_path,
+            epoch,
+            hparams,
+            postprocessing,
+            trainer,
+            best_model_score,
+            mode,
+        ) = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             grid_points=grid_points,
@@ -781,20 +868,33 @@ def task_predictions(
             gpus=gpus,
             deterministic=deterministic,
         )
-        scores_and_trainers.append((best_model_score, trainer, predictor))
+        scores_and_trainers.append(
+            (best_model_score, model_path, epoch, trainer, hparams, postprocessing)
+        )
         print_scores(mode, scores_and_trainers)
 
-    with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
-        for score, _, predictor in scores_and_trainers:
-            w.write(json.dumps([score, hparams_to_json(predictor.hparams)]) + "\n")
+    with open(embedding_path.joinpath("valid.hparams.jsonl"), "wt") as w:
+        for score, _, _, _, hparams, _ in scores_and_trainers:
+            w.write(json.dumps([score, hparams_to_json(hparams)]) + "\n")
+    with open(embedding_path.joinpath("valid.postprocessing.jsonl"), "wt") as w:
+        for score, _, _, _, _, postprocessing in scores_and_trainers:
+            w.write(json.dumps([score, postprocessing]) + "\n")
 
     # Use that model to compute test scores
-    best_score, best_trainer, best_predictor = scores_and_trainers[0]
+    (
+        best_score,
+        best_model_path,
+        best_model_epoch,
+        best_trainer,
+        best_hparams,
+        best_postprocessing,
+    ) = scores_and_trainers[0]
     print()
-    print("Best validation score", best_score, best_predictor.hparams)
+    print("Best validation score", best_score, best_hparams)
+    print(best_model_path)
 
     open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
-        json.dumps(hparams_to_json(best_predictor.hparams), indent=4)
+        json.dumps([hparams_to_json(best_hparams), best_postprocessing], indent=4)
     )
 
     test_dataloader = dataloader_from_split_name(
@@ -805,7 +905,13 @@ def task_predictions(
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
     )
-    test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
+    # This hack is necessary because we use the best validation epoch to
+    # choose the event postprocessing
+    best_trainer.fit_loop.current_epoch = best_model_epoch
+
+    test_scores = best_trainer.test(
+        ckpt_path=best_model_path, test_dataloaders=test_dataloader
+    )
     assert len(test_scores) == 1, "Should have only one test dataloader"
     test_scores = test_scores[0]
 
@@ -813,6 +919,9 @@ def task_predictions(
         json.dumps(test_scores, indent=4)
     )
 
+    # We no longer have best_predictor, the predictor is
+    # loaded by trainer.test and then disappears
+    """
     # Cache predictions for secondary sanity-check evaluation
     if metadata["embedding_type"] == "event":
         json.dump(
@@ -824,3 +933,4 @@ def task_predictions(
         best_predictor.test_predicted_labels,
         open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
+    """
