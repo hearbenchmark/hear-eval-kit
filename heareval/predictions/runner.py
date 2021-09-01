@@ -2,8 +2,6 @@
 """
 Downstream training, using embeddings as input features and learning
 predictions.
-
-TODO: Add CUDA device.
 """
 
 import json
@@ -42,6 +40,13 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 @click.option(
+    "--grid-points",
+    default=1,
+    help="Number of grid points for randomized grid search "
+    "model selection. (Default: 1)",
+    type=click.Int,
+)
+@click.option(
     "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
 )
 @click.option(
@@ -63,6 +68,7 @@ def runner(
     embeddings_dir: str = "embeddings",
     model: Optional[str] = None,
     task: str = "all",
+    grid_points: int = 1,
     model_options: str = "{}",
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     deterministic: bool = True,
@@ -118,6 +124,7 @@ def runner(
             task_path,
             scene_embedding_size,
             timestamp_embedding_size,
+            grid_points,
             gpus,
             deterministic,
         )

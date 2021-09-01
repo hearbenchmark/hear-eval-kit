@@ -59,8 +59,6 @@ PARAM_GRID = {
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
     "optim": [torch.optim.Adam, torch.optim.SGD],
 }
-# GRID_POINTS = 50
-GRID_POINTS = 1
 
 
 class OneHotToCrossEntropyLoss(pl.LightningModule):
@@ -595,12 +593,13 @@ def dataloader_from_split_name(
 def task_predictions_train(
     embedding_path: Path,
     embedding_size: int,
+    grid_points: int,
     metadata: Dict[str, Any],
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
     conf: Dict,
-    gpus: Optional[int],
+    gpus: Any,
     deterministic: bool,
 ) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
     start = time.time()
@@ -766,7 +765,7 @@ def task_predictions(
     # Model selection
     confs = list(ParameterGrid(PARAM_GRID))
     random.shuffle(confs)
-    for conf in tqdm(confs[:GRID_POINTS], desc="grid"):
+    for conf in tqdm(confs[:grid_points], desc="grid"):
         # TODO: Assert mode doesn't change?
         predictor, trainer, best_model_score, mode = task_predictions_train(
             embedding_path=embedding_path,
