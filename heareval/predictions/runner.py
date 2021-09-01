@@ -42,6 +42,9 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 @click.option(
+    "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
+)
+@click.option(
     "--gpus",
     default=None if not torch.cuda.is_available() else "[0]",
     help='GPUs to use, as JSON string (default: "[0]" if any '
@@ -50,15 +53,19 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 @click.option(
-    "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
+    "--deterministic",
+    default=True,
+    help="Deterministic or non-deterministic. (Default: True)",
+    type=click.Bool,
 )
 def runner(
     module: str,
     embeddings_dir: str = "embeddings",
     model: Optional[str] = None,
     task: str = "all",
-    gpus: Any = None if not torch.cuda.is_available() else "[0]",
     model_options: str = "{}",
+    gpus: Any = None if not torch.cuda.is_available() else "[0]",
+    deterministic: bool = True,
 ) -> None:
     if gpus is not None:
         gpus = json.loads(gpus)
@@ -108,7 +115,11 @@ def runner(
     for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
         task_predictions(
-            task_path, scene_embedding_size, timestamp_embedding_size, gpus
+            task_path,
+            scene_embedding_size,
+            timestamp_embedding_size,
+            gpus,
+            deterministic,
         )
 
 

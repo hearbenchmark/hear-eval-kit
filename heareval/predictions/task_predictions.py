@@ -30,7 +30,7 @@ import torch
 import torchinfo
 
 # import wandb
-# from pytorch_lightning import seed_everything
+from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from sklearn.model_selection import ParameterGrid
@@ -601,6 +601,7 @@ def task_predictions_train(
     scores: List[ScoreFunction],
     conf: Dict,
     gpus: Optional[int],
+    deterministic: bool,
 ) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
     start = time.time()
     predictor: AbstractPredictionModel
@@ -655,7 +656,7 @@ def task_predictions_train(
         gpus=gpus,
         check_val_every_n_epoch=conf["check_val_every_n_epoch"],
         max_epochs=conf["max_epochs"],
-        deterministic=True,
+        deterministic=deterministic,
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
@@ -726,7 +727,8 @@ def task_predictions(
     # on, it ensures that e.g. data augmentations are not repeated
     # across workers.
     # This means we should keep dataloader workers consistent.
-    #    seed_everything(42, workers=False)
+    if deterministic:
+        seed_everything(42, workers=False)
 
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
@@ -763,9 +765,7 @@ def task_predictions(
     scores_and_trainers = []
     # Model selection
     confs = list(ParameterGrid(PARAM_GRID))
-    #    rng = random.Random(0)
-    rng = random.Random()
-    rng.shuffle(confs)
+    random.shuffle(confs)
     for conf in tqdm(confs[:GRID_POINTS], desc="grid"):
         # TODO: Assert mode doesn't change?
         predictor, trainer, best_model_score, mode = task_predictions_train(
