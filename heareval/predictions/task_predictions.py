@@ -350,7 +350,7 @@ class EventPredictionModel(AbstractPredictionModel):
             postprocessing = self.epoch_best_postprocessing[epoch]
         else:
             raise ValueError
-        print("\n\n\n", epoch)
+        # print("\n\n\n", epoch)
 
         predicted_events_by_postprocessing = get_events_for_all_files(
             prediction, filename, timestamp, self.idx_to_label, postprocessing
@@ -370,8 +370,8 @@ class EventPredictionModel(AbstractPredictionModel):
             score_and_postprocessing.append((primary_score, postprocessing))
         score_and_postprocessing.sort(reverse=True)
 
-        for vs in score_and_postprocessing:
-            print(vs)
+        # for vs in score_and_postprocessing:
+        #    print(vs)
 
         best_postprocessing = score_and_postprocessing[0][1]
         self.epoch_best_postprocessing[epoch] = best_postprocessing
@@ -381,7 +381,7 @@ class EventPredictionModel(AbstractPredictionModel):
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         if name == "test":
-            print("test epoch", self.current_epoch)
+            # print("test epoch", self.current_epoch)
             # Cache all predictions for later serialization
             self.test_predicted_labels = prediction
             self.test_predicted_events = predicted_events
@@ -749,8 +749,8 @@ def task_predictions_train(
         sys.stdout.flush()
         end = time.time()
         epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
-        print(epoch, checkpoint_callback.best_model_path)
-        print(predictor.epoch_best_preprocessing)
+        # print(epoch, checkpoint_callback.best_model_path)
+        # print(predictor.epoch_best_preprocessing)
         if metadata["embedding_type"] == "event":
             best_preprocessing = json.dumps(predictor.epoch_best_preprocessing[epoch])
         else:
