@@ -344,7 +344,6 @@ class EventPredictionModel(AbstractPredictionModel):
             postprocessing = self.epoch_best_preprocessing[epoch]
         else:
             raise ValueError
-        # BUG: Only for validation
         print("\n\n\n", epoch)
 
         predicted_events_by_postprocessing = get_events_for_all_files(
@@ -358,7 +357,7 @@ class EventPredictionModel(AbstractPredictionModel):
             score = primary_score(
                 # predicted_events, self.target_events[name]
                 predicted_events,
-                self.target_events["val"],
+                self.target_events[name],
             )
             if np.isnan(score):
                 score = 0.0
@@ -375,7 +374,6 @@ class EventPredictionModel(AbstractPredictionModel):
         end_scores = {}
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
-        # BUG: We can't optimize on test!!!
         if name == "test":
             print("test epoch", self.current_epoch)
             # Cache all predictions for later serialization
@@ -767,15 +765,6 @@ def task_predictions_train(
             "\n\n\n",
         )
         sys.stdout.flush()
-        # test_scores = trainer.test(ckpt_path="best", test_dataloaders=valid_dataloader)
-        # BUG: Test
-        #        print("trainer.fit_loop.current_epoch", trainer.fit_loop.current_epoch)
-        #        print("trainer.current_epoch", trainer.current_epoch)
-        #        trainer.fit_loop.current_epoch = epoch
-        #        print("trainer.fit_loop.current_epoch", trainer.fit_loop.current_epoch)
-        #        print("trainer.current_epoch", trainer.current_epoch)
-        #        test_scores = trainer.test(ckpt_path=checkpoint_callback.best_model_path, test_dataloaders=valid_dataloader)
-        #        print("this test", test_scores)
         return (
             checkpoint_callback.best_model_path,
             epoch,
@@ -901,42 +890,20 @@ def task_predictions(
     )
 
     test_dataloader = dataloader_from_split_name(
-        # "test",
-        "valid",
+        "test",
         embedding_path,
         label_to_idx,
         nlabels,
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
     )
-    # test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
-    # TODO: Load predictor
-    """
-    best_model = torch.load(best_model_path)
-    print(best_model)
-    print(best_model.keys())
-    import IPython
-    ipshell = IPython.embed
-    ipshell(banner1='ipshell')
-    if metadata["embedding_type"] == "event":
-        best_model =EventPredictionModel.load_from_checkpoint(best_model_path)
-    elif metadata["embedding_type"] == "scene":
-        best_model =ScenePredictionModel.load_from_checkpoint(best_model_path)
-    else:
-        raise ValueError(metadata["embedding_type"])
-    """
-    #    best_trainer = pl.Trainer(resume_from_checkpoint=best_model_path)
+    # This hack is necessary because we use the best validation epoch to
+    # choose the event postprocessing
     best_trainer.fit_loop.current_epoch = best_model_epoch
-    #    print("best_model_epoch", best_model_epoch)
-
-    # TODO: Check on val too!
 
     test_scores = best_trainer.test(
         ckpt_path=best_model_path, test_dataloaders=test_dataloader
     )
-    # test_scores = best_trainer.test(model=best_predictor, test_dataloaders=test_dataloader)
-    # test_scores = best_trainer.test(model=best_predictor, test_dataloaders=test_dataloader)
-    # test_scores = best_trainer.test(ckpt_path=best_model_path, test_dataloaders=test_dataloader)
     assert len(test_scores) == 1, "Should have only one test dataloader"
     test_scores = test_scores[0]
 
