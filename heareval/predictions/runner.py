@@ -44,8 +44,9 @@ from heareval.predictions.task_predictions import task_predictions
 @click.option(
     "--gpus",
     default=None if not torch.cuda.is_available() else "[0]",
-    help='GPUs to use, as JSON string (default: "[0]" if any are available, none if not). '
-    "See https://pytorch-lightning.readthedocs.io/en/stable/advanced/multi_gpu.html#select-gpu-devices",  # no-qa
+    help='GPUs to use, as JSON string (default: "[0]" if any '
+    "are available, none if not). "
+    "See https://pytorch-lightning.readthedocs.io/en/stable/advanced/multi_gpu.html#select-gpu-devices",  # noqa
     type=str,
 )
 @click.option(

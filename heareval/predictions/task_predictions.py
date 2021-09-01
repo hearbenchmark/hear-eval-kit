@@ -30,7 +30,7 @@ import torch
 import torchinfo
 
 # import wandb
-from pytorch_lightning import seed_everything
+# from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from sklearn.model_selection import ParameterGrid
