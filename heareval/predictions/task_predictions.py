@@ -16,6 +16,8 @@ import json
 import math
 import pickle
 import random
+import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Tuple, Union
@@ -47,8 +49,8 @@ PARAM_GRID = {
     "hidden_dim": [256, 512, 1024],
     "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
     "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
-    "patience": [6, 20],
-    "max_epochs": [500],
+    "patience": [2, 6, 20],
+    "max_epochs": [50, 150, 500],
     "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
@@ -57,7 +59,6 @@ PARAM_GRID = {
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
     "optim": [torch.optim.Adam, torch.optim.SGD],
 }
-GRID_POINTS = 50
 
 
 class OneHotToCrossEntropyLoss(pl.LightningModule):
@@ -592,13 +593,16 @@ def dataloader_from_split_name(
 def task_predictions_train(
     embedding_path: Path,
     embedding_size: int,
+    grid_points: int,
     metadata: Dict[str, Any],
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
     conf: Dict,
-    gpus: Optional[int],
+    gpus: Any,
+    deterministic: bool,
 ) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
+    start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
         validation_target_events = json.load(
@@ -651,7 +655,7 @@ def task_predictions_train(
         gpus=gpus,
         check_val_every_n_epoch=conf["check_val_every_n_epoch"],
         max_epochs=conf["max_epochs"],
-        deterministic=True,
+        deterministic=deterministic,
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
@@ -674,10 +678,23 @@ def task_predictions_train(
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
+        sys.stdout.flush()
+        end = time.time()
+        epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
+        print(
+            "\n\n\nGRID POINT",
+            embedding_path,
+            checkpoint_callback.best_model_score.detach().cpu().item(),
+            "epoch %d" % epoch,
+            "time_in_min %.2f" % ((end - start) / 60),
+            hparams_to_json(predictor.hparams),
+            "\n\n\n",
+        )
+        sys.stdout.flush()
         return (
             predictor,
             trainer,
-            checkpoint_callback.best_model_score.detach().cpu(),
+            checkpoint_callback.best_model_score.detach().cpu().item(),
             mode,
         )
     else:
@@ -686,11 +703,24 @@ def task_predictions_train(
         )
 
 
+def serialize_value(v):
+    if isinstance(v, str) or isinstance(v, float) or isinstance(v, int):
+        return v
+    else:
+        return str(v)
+
+
+def hparams_to_json(hparams):
+    return {k: serialize_value(v) for k, v in hparams.items()}
+
+
 def task_predictions(
     embedding_path: Path,
     scene_embedding_size: int,
     timestamp_embedding_size: int,
+    grid_points: int,
     gpus: Optional[int],
+    deterministic: bool,
 ):
     # By setting workers=True in seed_everything(), Lightning derives
     # unique seeds across all dataloader workers and processes for
@@ -698,7 +728,8 @@ def task_predictions(
     # on, it ensures that e.g. data augmentations are not repeated
     # across workers.
     # This means we should keep dataloader workers consistent.
-    seed_everything(42, workers=False)
+    if deterministic:
+        seed_everything(42, workers=False)
 
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
@@ -735,31 +766,23 @@ def task_predictions(
     scores_and_trainers = []
     # Model selection
     confs = list(ParameterGrid(PARAM_GRID))
-    rng = random.Random(0)
-    rng.shuffle(confs)
-    for conf in tqdm(confs[:GRID_POINTS], desc="grid"):
+    random.shuffle(confs)
+    for conf in tqdm(confs[:grid_points], desc="grid"):
         # TODO: Assert mode doesn't change?
         predictor, trainer, best_model_score, mode = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
+            grid_points=grid_points,
             metadata=metadata,
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
             conf=conf,
             gpus=gpus,
+            deterministic=deterministic,
         )
         scores_and_trainers.append((best_model_score, trainer, predictor))
         print_scores(mode, scores_and_trainers)
-
-    def serialize_value(v):
-        if isinstance(v, str) or isinstance(v, float) or isinstance(v, int):
-            return v
-        else:
-            return str(v)
-
-    def hparams_to_json(hparams):
-        return {k: serialize_value(v) for k, v in hparams.items()}
 
     with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
         for score, _, predictor in scores_and_trainers:
