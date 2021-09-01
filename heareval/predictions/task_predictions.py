@@ -64,6 +64,7 @@ PARAM_GRID = {
     # "optim": [torch.optim.Adam, torch.optim.SGD],
 }
 
+# These are good for dcase, change for other event-based secret tasks
 EVENT_POSTPROCESSING_GRID = {
     "median_filter_ms": [0.0, 60.0, 150.0, 250.0],
     "min_duration": [0.0, 60.0, 150.0, 250.0],
@@ -669,7 +670,9 @@ def task_predictions_train(
     conf: Dict,
     gpus: Any,
     deterministic: bool,
-) -> Tuple[str, int, Dict[str, Any], pl.Trainer, float, str]:
+) -> Tuple[
+    str, int, Dict[str, Any], Tuple[Tuple[str, Any], ...], pl.Trainer, float, str
+]:
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
@@ -749,17 +752,15 @@ def task_predictions_train(
         sys.stdout.flush()
         end = time.time()
         epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
-        # print(epoch, checkpoint_callback.best_model_path)
-        # print(predictor.epoch_best_preprocessing)
         if metadata["embedding_type"] == "event":
-            best_preprocessing = json.dumps(predictor.epoch_best_preprocessing[epoch])
+            best_postprocessing = predictor.epoch_best_postprocessing[epoch]
         else:
-            best_preprocessing = ""
+            best_postprocessing = []
         print(
             "\n\n\nGRID POINT",
             embedding_path,
             checkpoint_callback.best_model_score.detach().cpu().item(),
-            best_preprocessing,
+            json.dumps(best_postprocessing),
             "epoch %d" % epoch,
             "time_in_min %.2f" % ((end - start) / 60),
             json.dumps(hparams_to_json(predictor.hparams)),
@@ -770,6 +771,7 @@ def task_predictions_train(
             checkpoint_callback.best_model_path,
             epoch,
             dict(predictor.hparams),
+            best_postprocessing,
             trainer,
             checkpoint_callback.best_model_score.detach().cpu().item(),
             mode,
@@ -836,8 +838,8 @@ def task_predictions(
         else:
             raise ValueError(f"mode = {mode}")
         # print(mode)
-        for score, model_path, epoch, trainer, hparams in scores_and_trainers:
-            print(score, hparams)
+        for score, _, epoch, _, hparams, postprocessing in scores_and_trainers:
+            print(score, epoch, hparams, postprocessing)
 
     mode = None
     scores_and_trainers = []
@@ -850,6 +852,7 @@ def task_predictions(
             model_path,
             epoch,
             hparams,
+            postprocessing,
             trainer,
             best_model_score,
             mode,
@@ -866,13 +869,16 @@ def task_predictions(
             deterministic=deterministic,
         )
         scores_and_trainers.append(
-            (best_model_score, model_path, epoch, trainer, hparams)
+            (best_model_score, model_path, epoch, trainer, hparams, postprocessing)
         )
         print_scores(mode, scores_and_trainers)
 
-    with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
-        for score, _, _, _, predictor in scores_and_trainers:
+    with open(embedding_path.joinpath("valid.hparams.jsonl"), "wt") as w:
+        for score, _, _, _, hparams, _ in scores_and_trainers:
             w.write(json.dumps([score, hparams_to_json(hparams)]) + "\n")
+    with open(embedding_path.joinpath("valid.postprocessing.jsonl"), "wt") as w:
+        for score, _, _, _, _, postprocessing in scores_and_trainers:
+            w.write(json.dumps([score, postprocessing]) + "\n")
 
     # Use that model to compute test scores
     (
@@ -881,13 +887,14 @@ def task_predictions(
         best_model_epoch,
         best_trainer,
         best_hparams,
+        best_postprocessing,
     ) = scores_and_trainers[0]
     print()
     print("Best validation score", best_score, best_hparams)
     print(best_model_path)
 
     open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
-        json.dumps(hparams_to_json(best_hparams), indent=4)
+        json.dumps([hparams_to_json(best_hparams), best_postprocessing], indent=4)
     )
 
     test_dataloader = dataloader_from_split_name(
