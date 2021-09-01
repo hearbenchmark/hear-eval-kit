@@ -121,7 +121,7 @@ def runner(
     for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
         task_predictions(
-            task_path=task_path,
+            embedding_path=task_path,
             scene_embedding_size=scene_embedding_size,
             timestamp_embedding_size=timestamp_embedding_size,
             grid_points=grid_points,
