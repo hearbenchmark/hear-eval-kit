@@ -33,6 +33,7 @@ import torchinfo
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
@@ -48,16 +49,19 @@ PARAM_GRID = {
     "hidden_layers": [0, 1, 2, 3],
     "hidden_dim": [256, 512, 1024],
     "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-    "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
+    # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
+    "lr": [1e0],
     "patience": [2, 6, 20],
-    "max_epochs": [50, 150, 500],
+    # "max_epochs": [50, 150, 500],
+    "max_epochs": [5],
     "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "norm_after_activation": [False, True],
     "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
-    "optim": [torch.optim.Adam, torch.optim.SGD],
+    "optim": [torch.optim.Adam],
+    # "optim": [torch.optim.Adam, torch.optim.SGD],
 }
 
 
@@ -310,6 +314,7 @@ class EventPredictionModel(AbstractPredictionModel):
             "val": validation_target_events,
             "test": test_target_events,
         }
+        self.epoch_best_preprocessing = {}
 
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
         flat_outputs = self._flatten_batched_outputs(
@@ -329,14 +334,50 @@ class EventPredictionModel(AbstractPredictionModel):
             ]
         )
 
-        predicted_events = get_events_for_all_files(
-            prediction, filename, timestamp, self.idx_to_label
+        if name == "val":
+            # During training, the epoch is one behind the value that will
+            # be stored as the "best" epoch
+            epoch = self.current_epoch + 1
+            postprocessing = None
+        elif name == "test":
+            epoch = self.current_epoch
+            postprocessing = self.epoch_best_preprocessing[epoch]
+        else:
+            raise ValueError
+        # BUG: Only for validation
+        print("\n\n\n", epoch)
+
+        predicted_events_by_postprocessing = get_events_for_all_files(
+            prediction, filename, timestamp, self.idx_to_label, postprocessing
         )
+
+        score_and_postprocessing = []
+        for postprocessing in predicted_events_by_postprocessing:
+            predicted_events = predicted_events_by_postprocessing[postprocessing]
+            primary_score = self.scores[0]
+            score = primary_score(
+                # predicted_events, self.target_events[name]
+                predicted_events,
+                self.target_events["val"],
+            )
+            if np.isnan(score):
+                score = 0.0
+            score_and_postprocessing.append((score, postprocessing))
+        score_and_postprocessing.sort(reverse=True)
+
+        for vs in score_and_postprocessing:
+            print(vs)
+
+        best_postprocessing = score_and_postprocessing[0][1]
+        self.epoch_best_preprocessing[epoch] = best_postprocessing
+        predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
         end_scores = {}
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
+        # BUG: We can't optimize on test!!!
         if name == "test":
+            print("test epoch", self.current_epoch)
             # Cache all predictions for later serialization
             self.test_predicted_labels = prediction
             self.test_predicted_events = predicted_events
@@ -348,6 +389,7 @@ class EventPredictionModel(AbstractPredictionModel):
             # Weird, this can happen if precision has zero guesses
             if math.isnan(end_scores[f"{name}_{score}"]):
                 end_scores[f"{name}_{score}"] = 0.0
+
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True)
 
@@ -427,18 +469,17 @@ def create_events_from_prediction(
     prediction_dict: Dict[float, torch.Tensor],
     idx_to_label: Dict[int, str],
     threshold: float = 0.5,
-    # TODO: Honestly this stuff belongs in the scoring method
-    # Like when you choose the event scoring approach, it should pick this
-    # and wrap it somewhere else.
-    min_duration=60.0,
+    median_filter_ms: float = 150,
+    min_duration: float = 60.0,
 ) -> List[Dict[str, Union[float, str]]]:
     """
     Takes a set of prediction tensors keyed on timestamps and generates events.
     (This is for one particular audio scene.)
     We convert the prediction tensor to a binary label based on the threshold value. Any
     events occurring at adjacent timestamps are considered to be part of the same event.
-    This loops through and creates events for each label class. Disregards events that
-    are less than the min_duration milliseconds.
+    This loops through and creates events for each label class.
+    We optionally apply median filtering to predictions.
+    We disregard events that are less than the min_duration milliseconds.
 
     Args:
         prediction_dict: A dictionary of predictions keyed on timestamp
@@ -461,13 +502,12 @@ def create_events_from_prediction(
         [prediction_dict[t].detach().cpu().numpy() for t in timestamps]
     )
 
-    # We can apply a median filter here to smooth out events, but b/c participants
-    # can select their own timestamp interval, selecting the filter window becomes
-    # challenging and could give an unfair advantage -- so we leave out for now.
-    # This could look something like this:
-    # ts_diff = timestamps[1] - timestamps[0]
-    # filter_width = int(round(median_filter_ms / ts_diff))
-    # predictions = median_filter(predictions, size=(filter_width, 1))
+    # Optionally apply a median filter here to smooth out events.
+    ts_diff = np.mean(np.diff(timestamps))
+    if median_filter_ms:
+        filter_width = int(round(median_filter_ms / ts_diff))
+        if filter_width:
+            predictions = median_filter(predictions, size=(filter_width, 1))
 
     # Convert probabilities to binary vectors based on threshold
     predictions = (predictions > threshold).astype(np.int8)
@@ -501,7 +541,8 @@ def get_events_for_all_files(
     filenames: List[str],
     timestamps: torch.Tensor,
     idx_to_label: Dict[int, str],
-) -> Dict[str, List[Dict[str, Union[str, float]]]]:
+    postprocessing: Optional[Tuple] = None,
+) -> Dict[Tuple[Tuple], Dict[str, List[Dict[str, Union[str, float]]]]]:
     """
     Produces lists of events from a set of frame based label probabilities.
     The input prediction tensor may contain frame predictions from a set of different
@@ -511,6 +552,13 @@ def get_events_for_all_files(
     We split the predictions into separate tensors based on the filename and compute
     events based on those individually.
 
+    If no postprocessing is specified (during training), we try a
+    variety of ways of postprocessing the predictions into events,
+    including median filtering and minimum event length.
+
+    If postprocessing is specified (during test, chosen at the best
+    validation epoch), we use this postprocessing.
+
     Args:
         predictions: a tensor of frame based multi-label predictions.
         filenames: a list of filenames where each entry corresponds
@@ -518,8 +566,10 @@ def get_events_for_all_files(
         timestamps: a list of timestamps where each entry corresponds
             to a frame in the predictions tensor.
         idx_to_label: Index to label mapping.
+        postprocessing: See above.
 
     Returns:
+        A dictionary from filtering params to the following values:
         A dictionary of lists of events keyed on the filename slug.
         The event list is of dicts of the following format:
             {"label": str, "start": float ms, "end": float ms}
@@ -543,10 +593,29 @@ def get_events_for_all_files(
     # with the same format as the ground truth from the luigi pipeline.
     # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
     event_dict = {}
-    for slug, timestamp_predictions in tqdm(event_files.items()):
-        event_dict[slug] = create_events_from_prediction(
-            timestamp_predictions, idx_to_label
-        )
+    if postprocessing:
+        postprocess = postprocessing
+        event_dict[postprocess] = {}
+        for slug, timestamp_predictions in tqdm(event_files.items()):
+            event_dict[postprocess][slug] = create_events_from_prediction(
+                timestamp_predictions, idx_to_label, **dict(postprocess)
+            )
+
+    else:
+        for median_filter_ms in [0.0, 60.0, 150.0]:
+            for min_duration in [0.0, 60.0, 150.0, 250.0]:
+                postprocess = (
+                    ("median_filter_ms", median_filter_ms),
+                    ("min_duration", min_duration),
+                )
+                event_dict[postprocess] = {}
+                for slug, timestamp_predictions in tqdm(event_files.items()):
+                    event_dict[postprocess][slug] = create_events_from_prediction(
+                        timestamp_predictions,
+                        idx_to_label,
+                        median_filter_ms=median_filter_ms,
+                        min_duration=min_duration,
+                    )
 
     return event_dict
 
@@ -681,17 +750,35 @@ def task_predictions_train(
         sys.stdout.flush()
         end = time.time()
         epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
+        print(epoch, checkpoint_callback.best_model_path)
+        print(predictor.epoch_best_preprocessing)
+        if metadata["embedding_type"] == "event":
+            best_preprocessing = json.dumps(predictor.epoch_best_preprocessing[epoch])
+        else:
+            best_preprocessing = ""
         print(
             "\n\n\nGRID POINT",
             embedding_path,
             checkpoint_callback.best_model_score.detach().cpu().item(),
+            best_preprocessing,
             "epoch %d" % epoch,
             "time_in_min %.2f" % ((end - start) / 60),
-            hparams_to_json(predictor.hparams),
+            json.dumps(hparams_to_json(predictor.hparams)),
             "\n\n\n",
         )
         sys.stdout.flush()
+        # test_scores = trainer.test(ckpt_path="best", test_dataloaders=valid_dataloader)
+        # BUG: Test
+        #        print("trainer.fit_loop.current_epoch", trainer.fit_loop.current_epoch)
+        #        print("trainer.current_epoch", trainer.current_epoch)
+        #        trainer.fit_loop.current_epoch = epoch
+        #        print("trainer.fit_loop.current_epoch", trainer.fit_loop.current_epoch)
+        #        print("trainer.current_epoch", trainer.current_epoch)
+        #        test_scores = trainer.test(ckpt_path=checkpoint_callback.best_model_path, test_dataloaders=valid_dataloader)
+        #        print("this test", test_scores)
         return (
+            checkpoint_callback.best_model_path,
+            epoch,
             predictor,
             trainer,
             checkpoint_callback.best_model_score.detach().cpu().item(),
@@ -759,7 +846,7 @@ def task_predictions(
         else:
             raise ValueError(f"mode = {mode}")
         # print(mode)
-        for score, trainer, predictor in scores_and_trainers:
+        for score, model_path, epoch, trainer, predictor in scores_and_trainers:
             print(score, dict(predictor.hparams))
 
     mode = None
@@ -769,7 +856,14 @@ def task_predictions(
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         # TODO: Assert mode doesn't change?
-        predictor, trainer, best_model_score, mode = task_predictions_train(
+        (
+            model_path,
+            epoch,
+            predictor,
+            trainer,
+            best_model_score,
+            mode,
+        ) = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             grid_points=grid_points,
@@ -781,31 +875,68 @@ def task_predictions(
             gpus=gpus,
             deterministic=deterministic,
         )
-        scores_and_trainers.append((best_model_score, trainer, predictor))
+        scores_and_trainers.append(
+            (best_model_score, model_path, epoch, trainer, predictor)
+        )
         print_scores(mode, scores_and_trainers)
 
     with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
-        for score, _, predictor in scores_and_trainers:
+        for score, _, _, _, predictor in scores_and_trainers:
             w.write(json.dumps([score, hparams_to_json(predictor.hparams)]) + "\n")
 
     # Use that model to compute test scores
-    best_score, best_trainer, best_predictor = scores_and_trainers[0]
+    (
+        best_score,
+        best_model_path,
+        best_model_epoch,
+        best_trainer,
+        best_predictor,
+    ) = scores_and_trainers[0]
     print()
     print("Best validation score", best_score, best_predictor.hparams)
+    print(best_model_path)
 
     open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
         json.dumps(hparams_to_json(best_predictor.hparams), indent=4)
     )
 
     test_dataloader = dataloader_from_split_name(
-        "test",
+        # "test",
+        "valid",
         embedding_path,
         label_to_idx,
         nlabels,
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
     )
-    test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
+    # test_scores = best_trainer.test(ckpt_path="best", test_dataloaders=test_dataloader)
+    # TODO: Load predictor
+    """
+    best_model = torch.load(best_model_path)
+    print(best_model)
+    print(best_model.keys())
+    import IPython
+    ipshell = IPython.embed
+    ipshell(banner1='ipshell')
+    if metadata["embedding_type"] == "event":
+        best_model =EventPredictionModel.load_from_checkpoint(best_model_path)
+    elif metadata["embedding_type"] == "scene":
+        best_model =ScenePredictionModel.load_from_checkpoint(best_model_path)
+    else:
+        raise ValueError(metadata["embedding_type"])
+    """
+    #    best_trainer = pl.Trainer(resume_from_checkpoint=best_model_path)
+    best_trainer.fit_loop.current_epoch = best_model_epoch
+    #    print("best_model_epoch", best_model_epoch)
+
+    # TODO: Check on val too!
+
+    test_scores = best_trainer.test(
+        ckpt_path=best_model_path, test_dataloaders=test_dataloader
+    )
+    # test_scores = best_trainer.test(model=best_predictor, test_dataloaders=test_dataloader)
+    # test_scores = best_trainer.test(model=best_predictor, test_dataloaders=test_dataloader)
+    # test_scores = best_trainer.test(ckpt_path=best_model_path, test_dataloaders=test_dataloader)
     assert len(test_scores) == 1, "Should have only one test dataloader"
     test_scores = test_scores[0]
 
