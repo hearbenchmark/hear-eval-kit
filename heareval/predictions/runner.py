@@ -8,6 +8,7 @@ TODO: Add CUDA device.
 
 import json
 import os
+import random
 from importlib import import_module
 from pathlib import Path
 from typing import Optional
@@ -42,9 +43,10 @@ from heareval.predictions.task_predictions import task_predictions
 )
 @click.option(
     "--gpus",
-    default=None if not torch.cuda.is_available() else 1,
-    help="Number of GPUs to use (default: 1 if any are available, none if not)",
-    type=click.INT,
+    default=None if not torch.cuda.is_available() else "[0]",
+    help='GPUs to use, as JSON string (default: "[0]" if any are available, none if not). '
+    "See https://pytorch-lightning.readthedocs.io/en/stable/advanced/multi_gpu.html#select-gpu-devices",  # no-qa
+    type=str,
 )
 @click.option(
     "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
@@ -54,9 +56,11 @@ def runner(
     embeddings_dir: str = "embeddings",
     model: Optional[str] = None,
     task: str = "all",
-    gpus: Optional[int] = None if not torch.cuda.is_available() else 1,
+    gpus: Optional[str] = None if not torch.cuda.is_available() else "[0]",
     model_options: str = "{}",
 ) -> None:
+    if gpus is not None:
+        gpus = json.loads(gpus)
     model_options_dict = json.loads(model_options)
     if isinstance(model_options_dict, dict):
         if model_options_dict:
@@ -84,18 +88,22 @@ def runner(
     module_clr = import_module(module)
     # Load the model using the model weights path if they were provided
     if model is not None:
-        print(f"Loading model using: {model}")
+        print(f"Loading {module} using: {model}, {model_options_dict}")
         model_obj = module_clr.load_model(model, **model_options_dict)  # type: ignore
     else:
+        print(f"Loading {module} using: {model}, {model_options_dict}")
         model_obj = module_clr.load_model("", **model_options_dict)  # type: ignore
     scene_embedding_size = model_obj.scene_embedding_size
     timestamp_embedding_size = model_obj.timestamp_embedding_size
+    # Free model obj
+    model_obj = None
 
     if task == "all":
         tasks = list(embeddings_dir_path.iterdir())
     else:
         tasks = [embeddings_dir_path.joinpath(task)]
         assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
+    random.shuffle(tasks)
     for task_path in tqdm(tasks):
         print(f"Computing predictions for {task_path.name}")
         task_predictions(

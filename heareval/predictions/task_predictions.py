@@ -17,6 +17,7 @@ import math
 import pickle
 import random
 import sys
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, DefaultDict, Dict, List, Optional, Tuple, Union
@@ -49,7 +50,7 @@ PARAM_GRID = {
     "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
     "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
     "patience": [2, 6, 20],
-    "max_epochs": [100, 500],
+    "max_epochs": [50, 150, 500],
     "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
@@ -601,6 +602,7 @@ def task_predictions_train(
     conf: Dict,
     gpus: Optional[int],
 ) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
+    start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
         validation_target_events = json.load(
@@ -677,10 +679,14 @@ def task_predictions_train(
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
         sys.stdout.flush()
+        end = time.time()
+        epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
         print(
             "\n\n\nGRID POINT",
             embedding_path,
             checkpoint_callback.best_model_score.detach().cpu().item(),
+            "epoch %d" % epoch,
+            "time_in_min %.2f" % ((end - start) / 60),
             hparams_to_json(predictor.hparams),
             "\n\n\n",
         )
