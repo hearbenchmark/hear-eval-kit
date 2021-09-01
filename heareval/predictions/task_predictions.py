@@ -668,7 +668,7 @@ def task_predictions_train(
     conf: Dict,
     gpus: Any,
     deterministic: bool,
-) -> Tuple[torch.nn.Module, pl.Trainer, float, str]:
+) -> Tuple[str, int, Dict[str, Any], pl.Trainer, float, str]:
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
@@ -768,7 +768,7 @@ def task_predictions_train(
         return (
             checkpoint_callback.best_model_path,
             epoch,
-            predictor,
+            dict(predictor.hparams),
             trainer,
             checkpoint_callback.best_model_score.detach().cpu().item(),
             mode,
@@ -835,8 +835,8 @@ def task_predictions(
         else:
             raise ValueError(f"mode = {mode}")
         # print(mode)
-        for score, model_path, epoch, trainer, predictor in scores_and_trainers:
-            print(score, dict(predictor.hparams))
+        for score, model_path, epoch, trainer, hparams in scores_and_trainers:
+            print(score, hparams)
 
     mode = None
     scores_and_trainers = []
@@ -848,7 +848,7 @@ def task_predictions(
         (
             model_path,
             epoch,
-            predictor,
+            hparams,
             trainer,
             best_model_score,
             mode,
@@ -865,13 +865,13 @@ def task_predictions(
             deterministic=deterministic,
         )
         scores_and_trainers.append(
-            (best_model_score, model_path, epoch, trainer, predictor)
+            (best_model_score, model_path, epoch, trainer, hparams)
         )
         print_scores(mode, scores_and_trainers)
 
     with open(embedding_path.joinpath("valid.grid.jsonl"), "wt") as w:
         for score, _, _, _, predictor in scores_and_trainers:
-            w.write(json.dumps([score, hparams_to_json(predictor.hparams)]) + "\n")
+            w.write(json.dumps([score, hparams_to_json(hparams)]) + "\n")
 
     # Use that model to compute test scores
     (
@@ -879,14 +879,14 @@ def task_predictions(
         best_model_path,
         best_model_epoch,
         best_trainer,
-        best_predictor,
+        best_hparams,
     ) = scores_and_trainers[0]
     print()
-    print("Best validation score", best_score, best_predictor.hparams)
+    print("Best validation score", best_score, best_hparams)
     print(best_model_path)
 
     open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
-        json.dumps(hparams_to_json(best_predictor.hparams), indent=4)
+        json.dumps(hparams_to_json(best_hparams), indent=4)
     )
 
     test_dataloader = dataloader_from_split_name(
@@ -911,6 +911,9 @@ def task_predictions(
         json.dumps(test_scores, indent=4)
     )
 
+    # We no longer have best_predictor, the predictor is
+    # loaded by trainer.test and then disappears
+    """
     # Cache predictions for secondary sanity-check evaluation
     if metadata["embedding_type"] == "event":
         json.dump(
@@ -922,3 +925,4 @@ def task_predictions(
         best_predictor.test_predicted_labels,
         open(embedding_path.joinpath("test.predicted-labels.pkl"), "wb"),
     )
+    """
