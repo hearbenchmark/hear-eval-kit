@@ -11,7 +11,7 @@ import os
 import random
 from importlib import import_module
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 import torch
@@ -57,7 +57,7 @@ def runner(
     embeddings_dir: str = "embeddings",
     model: Optional[str] = None,
     task: str = "all",
-    gpus: Optional[str] = None if not torch.cuda.is_available() else "[0]",
+    gpus: Any = None if not torch.cuda.is_available() else "[0]",
     model_options: str = "{}",
 ) -> None:
     if gpus is not None:
