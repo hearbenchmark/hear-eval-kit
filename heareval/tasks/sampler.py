@@ -15,7 +15,6 @@ it simple to scale across multiple dataset
 import logging
 import multiprocessing
 import shutil
-import sys
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -33,8 +32,7 @@ logger = logging.getLogger("luigi-interface")
 # Currently the sampler is only allowed to run for open tasks
 # The secret tasks module will not be available for participants
 try:
-    sys.path.append("heareval/tasks/secrettasks")
-    import hearsecrettasks
+    from heareval.tasks.secrettasks import hearsecrettasks
 
     secret_config = hearsecrettasks.sampler_config
 except ModuleNotFoundError as e:
