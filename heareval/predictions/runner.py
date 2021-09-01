@@ -123,7 +123,7 @@ def runner(
         task_predictions(
             task_path=task_path,
             scene_embedding_size=scene_embedding_size,
-            timestamp_embedding_size=timestamp_embeding_size,
+            timestamp_embedding_size=timestamp_embedding_size,
             grid_points=grid_points,
             gpus=gpus,
             deterministic=deterministic,
