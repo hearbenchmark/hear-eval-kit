@@ -107,7 +107,7 @@ class FullyConnectedPrediction(torch.nn.Module):
 
             self.hidden = torch.nn.Sequential(*hidden_modules)
         else:
-            self.hidden = torch.nn.Identity()
+            self.hidden = torch.nn.Identity()  # type: ignore
         self.projection = torch.nn.Linear(curdim, nlabels)
 
         conf["initialization"](
@@ -314,7 +314,8 @@ class EventPredictionModel(AbstractPredictionModel):
             "val": validation_target_events,
             "test": test_target_events,
         }
-        self.epoch_best_preprocessing = {}
+        # For each epoch, what postprocessing parameters were best
+        self.epoch_best_postprocessing: Dict[int, Tuple[Tuple[str, Any], ...]] = {}
 
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
         flat_outputs = self._flatten_batched_outputs(
@@ -341,7 +342,7 @@ class EventPredictionModel(AbstractPredictionModel):
             postprocessing = None
         elif name == "test":
             epoch = self.current_epoch
-            postprocessing = self.epoch_best_preprocessing[epoch]
+            postprocessing = self.epoch_best_postprocessing[epoch]
         else:
             raise ValueError
         print("\n\n\n", epoch)
@@ -353,22 +354,22 @@ class EventPredictionModel(AbstractPredictionModel):
         score_and_postprocessing = []
         for postprocessing in predicted_events_by_postprocessing:
             predicted_events = predicted_events_by_postprocessing[postprocessing]
-            primary_score = self.scores[0]
-            score = primary_score(
+            primary_score_fn = self.scores[0]
+            primary_score = primary_score_fn(
                 # predicted_events, self.target_events[name]
                 predicted_events,
                 self.target_events[name],
             )
-            if np.isnan(score):
-                score = 0.0
-            score_and_postprocessing.append((score, postprocessing))
+            if np.isnan(primary_score):
+                primary_score = 0.0
+            score_and_postprocessing.append((primary_score, postprocessing))
         score_and_postprocessing.sort(reverse=True)
 
         for vs in score_and_postprocessing:
             print(vs)
 
         best_postprocessing = score_and_postprocessing[0][1]
-        self.epoch_best_preprocessing[epoch] = best_postprocessing
+        self.epoch_best_postprocessing[epoch] = best_postprocessing
         predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
         end_scores = {}
@@ -539,8 +540,8 @@ def get_events_for_all_files(
     filenames: List[str],
     timestamps: torch.Tensor,
     idx_to_label: Dict[int, str],
-    postprocessing: Optional[Tuple] = None,
-) -> Dict[Tuple[Tuple], Dict[str, List[Dict[str, Union[str, float]]]]]:
+    postprocessing: Optional[Tuple[Tuple[str, Any], ...]] = None,
+) -> Dict[Tuple[Tuple[str, Any], ...], Dict[str, List[Dict[str, Union[str, float]]]]]:
     """
     Produces lists of events from a set of frame based label probabilities.
     The input prediction tensor may contain frame predictions from a set of different
@@ -590,7 +591,9 @@ def get_events_for_all_files(
     # Create events for all the different files. Store all the events as a dictionary
     # with the same format as the ground truth from the luigi pipeline.
     # Ex) { slug -> [{"label" : "woof", "start": 0.0, "end": 2.32}, ...], ...}
-    event_dict = {}
+    event_dict: Dict[
+        Tuple[Tuple[str, Any], ...], Dict[str, List[Dict[str, Union[float, str]]]]
+    ] = {}
     if postprocessing:
         postprocess = postprocessing
         event_dict[postprocess] = {}
@@ -598,7 +601,6 @@ def get_events_for_all_files(
             event_dict[postprocess][slug] = create_events_from_prediction(
                 timestamp_predictions, idx_to_label, **dict(postprocess)
             )
-
     else:
         for median_filter_ms in [0.0, 60.0, 150.0]:
             for min_duration in [0.0, 60.0, 150.0, 250.0]:
