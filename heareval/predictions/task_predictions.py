@@ -609,12 +609,12 @@ def get_events_for_all_files(
             )
     else:
         postprocessing_confs = list(ParameterGrid(EVENT_POSTPROCESSING_GRID))
-        for postprocess in postprocessing_confs:
-            postprocess = tuple(postprocess.items())
+        for postprocess_dict in postprocessing_confs:
+            postprocess = tuple(postprocess_dict.items())
             event_dict[postprocess] = {}
             for slug, timestamp_predictions in tqdm(event_files.items()):
                 event_dict[postprocess][slug] = create_events_from_prediction(
-                    timestamp_predictions, idx_to_label, **dict(postprocess)
+                    timestamp_predictions, idx_to_label, **postprocess_dict
                 )
 
     return event_dict
