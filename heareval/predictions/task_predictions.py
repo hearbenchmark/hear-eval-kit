@@ -64,6 +64,11 @@ PARAM_GRID = {
     # "optim": [torch.optim.Adam, torch.optim.SGD],
 }
 
+EVENT_POSTPROCESSING_GRID = {
+    "median_filter_ms": [0.0, 60.0, 150.0, 250.0],
+    "min_duration": [0.0, 60.0, 150.0, 250.0],
+}
+
 
 class OneHotToCrossEntropyLoss(pl.LightningModule):
     def __init__(self):
@@ -602,20 +607,14 @@ def get_events_for_all_files(
                 timestamp_predictions, idx_to_label, **dict(postprocess)
             )
     else:
-        for median_filter_ms in [0.0, 60.0, 150.0, 250.0]:
-            for min_duration in [0.0, 60.0, 150.0, 250.0]:
-                postprocess = (
-                    ("median_filter_ms", median_filter_ms),
-                    ("min_duration", min_duration),
+        postprocessing_confs = list(ParameterGrid(EVENT_POSTPROCESSING_GRID))
+        for postprocess in postprocessing_confs:
+            postprocess = tuple(postprocess.items())
+            event_dict[postprocess] = {}
+            for slug, timestamp_predictions in tqdm(event_files.items()):
+                event_dict[postprocess][slug] = create_events_from_prediction(
+                    timestamp_predictions, idx_to_label, **dict(postprocess)
                 )
-                event_dict[postprocess] = {}
-                for slug, timestamp_predictions in tqdm(event_files.items()):
-                    event_dict[postprocess][slug] = create_events_from_prediction(
-                        timestamp_predictions,
-                        idx_to_label,
-                        median_filter_ms=median_filter_ms,
-                        min_duration=min_duration,
-                    )
 
     return event_dict
 
