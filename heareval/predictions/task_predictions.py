@@ -718,7 +718,9 @@ def task_predictions(
     embedding_path: Path,
     scene_embedding_size: int,
     timestamp_embedding_size: int,
+    grid_points: int,
     gpus: Optional[int],
+    deterministic: bool,
 ):
     # By setting workers=True in seed_everything(), Lightning derives
     # unique seeds across all dataloader workers and processes for
@@ -770,12 +772,14 @@ def task_predictions(
         predictor, trainer, best_model_score, mode = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
+            timestamp_embedding_size=timestamp_embedding_size,
             metadata=metadata,
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
             conf=conf,
             gpus=gpus,
+            deterministic=deterministic,
         )
         scores_and_trainers.append((best_model_score, trainer, predictor))
         print_scores(mode, scores_and_trainers)
