@@ -32,7 +32,7 @@ setup(
         "dcase_util",
         "intervaltree",
         "more-itertools",
-        # tf 2.6.0
+        # for tf 2.6.0
         "numpy==1.19.2",
         "pandas",
         "pynvml",
