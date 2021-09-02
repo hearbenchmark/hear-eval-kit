@@ -27,7 +27,6 @@ setup(
     packages=find_packages(exclude=("tests",)),
     python_requires=">=3.7",
     install_requires=[
-        "boto3",
         "click",
         "dcase_util",
         "intervaltree",

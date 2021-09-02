@@ -1,5 +1,4 @@
 black
-boto3
 dcase_util
 intervaltree
 luigi
