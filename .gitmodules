@@ -1,3 +1,0 @@
-[submodule "heareval/tasks/secrettasks"]
-	path = heareval/tasks/secrettasks
-	url = git@github.com:neuralaudio/hear2021-secret-tasks

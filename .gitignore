@@ -131,9 +131,6 @@ dmypy.json
 # No notebooks
 *.ipynb
 
-# Working directory for luigi pipelines
-*_workdir/
-
 # vim
 *.sw?
 
@@ -152,7 +149,7 @@ dmypy.json
 #spotty configured file
 spotty.yaml
 
-embeddings/
+./embeddings/
+./tasks/
 lightning_logs/
-tasks/
 wandb/

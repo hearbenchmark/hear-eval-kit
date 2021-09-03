@@ -1,10 +1,9 @@
 black
-boto3
 dcase_util
 intervaltree
 luigi
 more-itertools
-# tf 2.6.0
+# for tf 2.6.0
 numpy==1.19.2
 pandas
 pre-commit
@@ -14,7 +13,6 @@ pytest-cov
 pytest-env
 pytorch-lightning
 python-slugify
-requests
 sed_eval
 soundfile
 spotty
