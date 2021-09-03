@@ -23,15 +23,13 @@ FROM nvidia/cuda:11.2.0-cudnn8-devel-ubuntu18.04
 
 ENV LANG C.UTF-8
 
-RUN rm -rf /var/lib/apt/lists/* \
-           /etc/apt/sources.list.d/cuda.list \
-           /etc/apt/sources.list.d/nvidia-ml.list && \
-    apt-get update
-    #   apt-get update && \
-
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
+    rm -rf /var/lib/apt/lists/* \
+           /etc/apt/sources.list.d/cuda.list \
+           /etc/apt/sources.list.d/nvidia-ml.list && \
+    apt-get update && \
 
 # ==================================================================
 # tools
@@ -41,20 +39,18 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         build-essential \
         apt-utils \
         ca-certificates \
+        bc \
         wget \
         git \
         vim \
         libssl-dev \
-        curl
+        curl \
+        unzip \
+        unrar && \
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
-        unzip unrar
+    echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q && \
 
-RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q
-
+# Build cmake from scratch
 #RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 #    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
 #    GIT_CLONE="git clone --depth 10" && \
@@ -65,23 +61,17 @@ RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selectio
 #    make -j"$(nproc)" install
     #make -j"$(nproc)" install && \
     
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
     wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null && \
     echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null && \
     apt-get update && \
     rm /usr/share/keyrings/kitware-archive-keyring.gpg && \
     $APT_INSTALL kitware-archive-keyring && \
-    $APT_INSTALL cmake
+    $APT_INSTALL cmake && \
 
 # ==================================================================
 # python
 # ------------------------------------------------------------------
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
     DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
         software-properties-common \
         && \
@@ -96,11 +86,8 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         https://bootstrap.pypa.io/get-pip.py && \
     python3.7 ~/get-pip.py && \
     ln -s /usr/bin/python3.7 /usr/local/bin/python3 && \
-    ln -s /usr/bin/python3.7 /usr/local/bin/python
+    ln -s /usr/bin/python3.7 /usr/local/bin/python && \
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         setuptools \
         pipdeptree \
@@ -114,15 +101,12 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         scikit-learn \
         matplotlib \
         Cython \
-        tqdm
+        tqdm && \
 
 # ==================================================================
 # pytorch
 # ------------------------------------------------------------------
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         future \
         numpy==1.19.2 \
@@ -133,80 +117,62 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         && \
     $PIP_INSTALL \
         --pre torch torchvision -f \
-        https://download.pytorch.org/whl/nightly/cu112/torch_nightly.html
+        https://download.pytorch.org/whl/nightly/cu112/torch_nightly.html && \
 
 # ==================================================================
 # tensorflow
 # ------------------------------------------------------------------
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
-        tensorflow-gpu
+        tensorflow-gpu && \
 
 # Hack to get tf 2.4.2 to play nice with CUDA 11.2
 # https://medium.com/mlearning-ai/tensorflow-2-4-with-cuda-11-2-gpu-training-fix-87f205215419
-RUN ln -s /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.10
-ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/cuda-11.2/targets/x86_64-linux/lib"
+    ln -s /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.10 && \
 
 # ==================================================================
 # keras
 # ------------------------------------------------------------------
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL \
         h5py \
-        keras
-
-#        && \
+        keras && \
 
 # ==================================================================
 # heareval
 # ------------------------------------------------------------------
 
 ## workaround readline fallback
-#RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q
+    echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q && \
 
-RUN apt update
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    apt update && \
+    $APT_INSTALL software-properties-common && \
+    apt update && \
+    apt upgrade -y && \
+    APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL software-properties-common
-RUN apt update
-RUN apt upgrade -y
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL sox
+    $APT_INSTALL sox && \
 
 # h5
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL pkg-config libhdf5-100 libhdf5-dev
+    $APT_INSTALL pkg-config libhdf5-100 libhdf5-dev && \
 
 # LLVM >= 9.0
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
     $APT_INSTALL --reinstall python3-apt && \
-    $APT_INSTALL gpg-agent
-RUN wget --no-check-certificate -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add -
-# Might need to change python version: nano /usr/bin/add-apt-repository
-#RUN add-apt-repository 'deb http://apt.llvm.org/bionic/   llvm-toolchain-bionic-10  main'
-RUN add-apt-repository 'deb http://apt.llvm.org/bionic/   llvm-toolchain-bionic-11  main'
-RUN apt update
-#RUN $APT_INSTALL llvm-10 lldb-10 llvm-10-dev libllvm10 llvm-10-runtime
-#RUN update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-10 10
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    $APT_INSTALL gpg-agent && \
+    wget --no-check-certificate -O - https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - && \
+# Might need to change python version: nano /usr/bin/add-apt-repository && \
+#add-apt-repository 'deb http://apt.llvm.org/bionic/   llvm-toolchain-bionic-10  main' && \
+    add-apt-repository 'deb http://apt.llvm.org/bionic/   llvm-toolchain-bionic-11  main' && \
+    apt update && \
+#$APT_INSTALL llvm-10 lldb-10 llvm-10-dev libllvm10 llvm-10-runtime
+#update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-10 10
+    APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL llvm-11 lldb-11 llvm-11-dev libllvm11 llvm-11-runtime
-RUN update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-11 11
-RUN update-alternatives --config llvm-config
+    $APT_INSTALL llvm-11 lldb-11 llvm-11-dev libllvm11 llvm-11-runtime && \
+    update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-11 11 && \
+    update-alternatives --config llvm-config && \
 
 
 ## Need this crap to get python 3.7 (or 3.8)
@@ -227,12 +193,9 @@ RUN update-alternatives --config llvm-config
 # For ffmpeg >= 4.2
 # Could also build from source:
 # https://github.com/jrottenberg/ffmpeg/blob/master/docker-images/4.3/ubuntu1804/Dockerfile
-RUN add-apt-repository ppa:jonathonf/ffmpeg-4
-RUN apt-get update
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL ffmpeg
+    add-apt-repository ppa:jonathonf/ffmpeg-4 && \
+    apt-get update && \
+    $APT_INSTALL ffmpeg && \
 
 ## add to bashrc:
 #alias python3=python3.7
@@ -245,18 +208,25 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 
 # gsutil
 # https://cloud.google.com/storage/docs/gsutil_install#deb
-RUN echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list && \
+    $APT_INSTALL apt-transport-https ca-certificates gnupg && \
+    wget -O - https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add - && \
+    apt-get update && \
+    APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL apt-transport-https ca-certificates gnupg
-RUN wget -O - https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
-RUN apt-get update
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL google-cloud-sdk
+    $APT_INSTALL google-cloud-sdk && \
 #gcloud init
+
+# Cleanup this image
+    apt-get clean && \
+    apt-get autoremove && \
+    rm -rf /var/lib/apt/lists/* /tmp/* ~/*
+
+# ==================================================================================
+# ==================================================================================
+
+RUN apt-get update
 
 # Install heareval pypi dependencies first, and after get the github versions,
 # because this makes it faster
@@ -266,6 +236,9 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL hearbaseline hearvalidator
 
+# ==================================================================================
+
+RUN echo "hi"
 
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
@@ -318,5 +291,7 @@ RUN \
     apt-get clean && \
     apt-get autoremove && \
     rm -rf /var/lib/apt/lists/* /tmp/* ~/*
+
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/cuda-11.2/targets/x86_64-linux/lib"
 
 EXPOSE 6006
