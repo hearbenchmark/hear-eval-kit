@@ -63,6 +63,12 @@ from heareval.predictions.task_predictions import task_predictions
     help="Deterministic or non-deterministic. (Default: True)",
     type=click.BOOL,
 )
+@click.option(
+    "--grid",
+    default="default",
+    help='Grid to use: ["default", "fast", "faster"]',
+    type=str,
+)
 def runner(
     module: str,
     embeddings_dir: str = "embeddings",
@@ -72,6 +78,7 @@ def runner(
     model_options: str = "{}",
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     deterministic: bool = True,
+    grid: str = "default",
 ) -> None:
     if gpus is not None:
         gpus = json.loads(gpus)
@@ -127,6 +134,7 @@ def runner(
             grid_points=grid_points,
             gpus=gpus,
             deterministic=deterministic,
+            grid=grid,
         )
 
 
