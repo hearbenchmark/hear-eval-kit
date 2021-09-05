@@ -915,9 +915,16 @@ def task_predictions(
     assert len(test_scores) == 1, "Should have only one test dataloader"
     test_scores = test_scores[0]
 
+    test_scores.update(
+        {
+            "validation": best_score,
+            "postprocessing": best_postprocessing,
+        }
+    )
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_scores, indent=4)
     )
+    print("TEST SCORES", json.dumps(test_scores))
 
     # We no longer have best_predictor, the predictor is
     # loaded by trainer.test and then disappears
