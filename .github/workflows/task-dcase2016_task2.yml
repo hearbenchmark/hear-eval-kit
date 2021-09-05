@@ -1,4 +1,4 @@
-name: dcase2016_task2
+name: Task dcase2016_task2
 
 on: [pull_request]
 
@@ -20,6 +20,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Display Python version
       run: python -c "import sys; print(sys.version)"
+    - name: apt-get
+      run: |
+        sudo apt-get install -y libsndfile1-dev
     - name: python dependencies
       run: |
         python -m pip install --upgrade pip
