@@ -87,7 +87,10 @@ python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt 
     [--embeddings-dir embeddings]
     [--task task]
     [--gpus INT]
+    [--in-memory False]
 ```
+`--in-memory False` will memmap the embeddings from disk, which
+will use less standard memory, but also be slower.
 
 2) Evaluate the generated predictions for the test set for one or
 all modules and for one or all tasks:

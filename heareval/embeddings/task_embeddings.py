@@ -40,10 +40,11 @@ from tqdm.auto import tqdm
 
 # import wandb
 import heareval.gpu_max_mem as gpu_max_mem
-from heareval.tasks.pipeline import SPLITS
 
 TORCH = "torch"
 TENSORFLOW = "tf"
+
+SPLITS = ["train", "valid", "test"]
 
 
 class Embedding:

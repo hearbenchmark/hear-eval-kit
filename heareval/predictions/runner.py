@@ -58,6 +58,12 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 @click.option(
+    "--in-memory",
+    default=True,
+    help="Load embeddings in memory, or memmap them from disk. (Default: True)",
+    type=click.BOOL,
+)
+@click.option(
     "--deterministic",
     default=True,
     help="Deterministic or non-deterministic. (Default: True)",
@@ -71,6 +77,7 @@ def runner(
     grid_points: int = 1,
     model_options: str = "{}",
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
+    in_memory: bool = True,
     deterministic: bool = True,
 ) -> None:
     if gpus is not None:
@@ -126,6 +133,7 @@ def runner(
             timestamp_embedding_size=timestamp_embedding_size,
             grid_points=grid_points,
             gpus=gpus,
+            in_memory=in_memory,
             deterministic=deterministic,
         )
 

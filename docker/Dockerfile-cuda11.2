@@ -242,6 +242,17 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 ##pip3 install cython
 ##pip3 install -e ".[dev]"
 
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $PIP_INSTALL cython ipython
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $PIP_INSTALL \
+        numpy==1.19.2 \
+        pynvml
+
 
 # gsutil
 # https://cloud.google.com/storage/docs/gsutil_install#deb
@@ -266,19 +277,8 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL hearbaseline hearvalidator
 
+RUN echo 20210905
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $PIP_INSTALL cython ipython
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $PIP_INSTALL \
-        numpy==1.19.2 \
-        pynvml
-#        hearbaseline \
-#        hearvalidator
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
