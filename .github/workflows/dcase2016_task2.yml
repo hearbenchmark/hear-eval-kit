@@ -1,0 +1,38 @@
+name: dcase2016_task2
+
+on: [pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8]
+#        python-version: [3.7, 3.8, 3.9]
+
+    steps:
+    - uses: actions/checkout@master
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@master
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: apt-get
+      run: |
+        sudo apt-get update
+        # ffmpeg >= 4.2 for focal ubuntu
+        sudo apt-get install -y libsndfile-dev ffmpeg
+    - name: Display Python version
+      run: python -c "import sys; print(sys.version)"
+    - name: python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    - name: wget
+      run: |
+        wget https://storage.googleapis.com/hear2021/small/hear-20210906-2021.0.2-dcase2016_task2-hear2021-small-44100.tar.gz
+        tar zxvf hear-20210906-2021.0.2-dcase2016_task2-hear2021-small-44100.tar.gz
+    - name: Downstream
+      run: |
+        python -m heareval.embeddings.runner hearbaseline --tasks-dir hear-20210906-2021.0.2/tasks/
+        python -m heareval.predictions.runner

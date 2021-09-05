@@ -12,6 +12,7 @@ TODO:
     many models simultaneously with one disk read?
 """
 
+import copy
 import json
 import math
 import pickle
@@ -63,6 +64,18 @@ PARAM_GRID = {
     "optim": [torch.optim.Adam],
     # "optim": [torch.optim.Adam, torch.optim.SGD],
 }
+
+# For fast training
+FAST_PARAM_GRID = copy.deepcopy(PARAM_GRID)
+FAST_PARAM_GRID.update(
+    {
+        "hidden_layers": [0, 1],
+        "hidden_dim": [64, 128],
+        "patience": [1, 3],
+        "max_epochs": [3, 10],
+        "check_val_every_n_epoch": [1, 3],
+    }
+)
 
 # These are good for dcase, change for other event-based secret tasks
 EVENT_POSTPROCESSING_GRID = {
@@ -800,6 +813,7 @@ def task_predictions(
     grid_points: int,
     gpus: Optional[int],
     deterministic: bool,
+    fast: bool,
 ):
     # By setting workers=True in seed_everything(), Lightning derives
     # unique seeds across all dataloader workers and processes for
@@ -844,7 +858,11 @@ def task_predictions(
     mode = None
     scores_and_trainers = []
     # Model selection
-    confs = list(ParameterGrid(PARAM_GRID))
+    confs = (
+        list(ParameterGrid(PARAM_GRID))
+        if not fast
+        else list(ParameterGrid(FAST_PARAM_GRID))
+    )
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         # TODO: Assert mode doesn't change?
