@@ -435,7 +435,7 @@ class SplitMemmapDataset(Dataset):
         )
         if in_memory:
             self.embeddings = torch.stack(
-                [torch.tensor(e, device="cpu") for e in tqdm(self.embeddings)]
+                [torch.tensor(e) for e in tqdm(self.embeddings)]
             )
         self.labels = pickle.load(
             open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
@@ -463,12 +463,12 @@ class SplitMemmapDataset(Dataset):
         This allows us to have tensors that are all the same shape.
         Later we reduce this with an argmax to get the vocabulary indices.
         """
-        self.y = []
+        ys = []
         for idx in tqdm(range(len(self.labels))):
             labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-            y = label_to_binary_vector(labels, self.nlabels)
-            self.y.append(y)
-        self.y = torch.tensor(np.vstack(self.y), device="cpu")
+            y = torch.tensor(label_to_binary_vector(labels, self.nlabels))
+            ys.append(y)
+        self.y = torch.stack(ys)
         assert self.y.shape == (len(self.labels), self.nlabels)
 
     def __len__(self) -> int:
