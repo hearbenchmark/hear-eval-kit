@@ -414,6 +414,7 @@ class SplitMemmapDataset(Dataset):
         split_name: str,
         embedding_type: str,
         in_memory: bool,
+        metadata: bool,
     ):
         self.embedding_path = embedding_path
         self.label_to_idx = label_to_idx
@@ -433,14 +434,16 @@ class SplitMemmapDataset(Dataset):
             shape=self.dim,
         )
         if in_memory:
-            self.embeddings = np.array(self.embeddings)
+            self.embeddings = torch.stack(
+                [torch.tensor(e, device="cpu") for e in tqdm(self.embeddings)]
+            )
         self.labels = pickle.load(
             open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
         )
-        # Only used for event-based prediction
+        # Only used for event-based prediction, for validation and test scoring,
         # For timestamp (event) embedding tasks,
         # the metadata for each instance is {filename: , timestamp: }.
-        if self.embedding_type == "event":
+        if self.embedding_type == "event" and metadata:
             filename_timestamps_json = embedding_path.joinpath(
                 f"{split_name}.filename-timestamps.json"
             )
@@ -455,22 +458,24 @@ class SplitMemmapDataset(Dataset):
         assert len(self.labels) == len(self.metadata)
         assert self.embeddings[0].shape[0] == self.dim[1]
 
-    def __len__(self) -> int:
-        return self.dim[0]
-
-    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, Any]]:
         """
         For all labels, return a multi or one-hot vector.
         This allows us to have tensors that are all the same shape.
         Later we reduce this with an argmax to get the vocabulary indices.
-            We also include the filename and timestamp, which we need
-        for evaluation of timestamp (event) tasks.
-        We also return the metadata as a Dict.
         """
-        x = self.embeddings[idx]
-        labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-        y = label_to_binary_vector(labels, self.nlabels)
-        return x, y, self.metadata[idx]
+        self.y = []
+        for idx in tqdm(range(len(self.labels))):
+            labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+            y = label_to_binary_vector(labels, self.nlabels)
+            self.y.append(y)
+        self.y = torch.tensor(np.vstack(self.y), device="cpu")
+        assert self.y.shape == (len(self.labels), self.nlabels)
+
+    def __len__(self) -> int:
+        return self.dim[0]
+
+    def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, Any]]:
+        return self.embeddings[idx], self.y[idx], self.metadata[idx]
 
 
 def create_events_from_prediction(
@@ -638,6 +643,7 @@ def dataloader_from_split_name(
     nlabels: int,
     embedding_type: str,
     in_memory: bool,
+    metadata: bool = True,
     batch_size: int = 64,
 ) -> DataLoader:
     dataset = SplitMemmapDataset(
@@ -647,6 +653,7 @@ def dataloader_from_split_name(
         split_name=split_name,
         embedding_type=embedding_type,
         in_memory=in_memory,
+        metadata=metadata,
     )
 
     print(
@@ -662,6 +669,7 @@ def dataloader_from_split_name(
         # Also we want predicted labels in the same order as
         # target labels, for validation and test.
         shuffle=False,
+        pin_memory=True,
     )
 
 
@@ -746,6 +754,7 @@ def task_predictions_train(
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
         in_memory=in_memory,
+        metadata=False,
     )
     valid_dataloader = dataloader_from_split_name(
         "valid",
