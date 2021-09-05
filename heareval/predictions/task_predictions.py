@@ -770,6 +770,7 @@ def task_predictions_train(
         return (
             checkpoint_callback.best_model_path,
             epoch,
+            time_in_min,
             dict(predictor.hparams),
             best_postprocessing,
             trainer,
@@ -838,7 +839,7 @@ def task_predictions(
         else:
             raise ValueError(f"mode = {mode}")
         # print(mode)
-        for score, _, epoch, _, hparams, postprocessing in scores_and_trainers:
+        for score, _, epoch, _, _, hparams, postprocessing in scores_and_trainers:
             print(score, epoch, hparams, postprocessing)
 
     mode = None
@@ -851,6 +852,7 @@ def task_predictions(
         (
             model_path,
             epoch,
+            time_in_min,
             hparams,
             postprocessing,
             trainer,
@@ -869,15 +871,23 @@ def task_predictions(
             deterministic=deterministic,
         )
         scores_and_trainers.append(
-            (best_model_score, model_path, epoch, trainer, hparams, postprocessing)
+            (
+                best_model_score,
+                model_path,
+                epoch,
+                time_in_min,
+                trainer,
+                hparams,
+                postprocessing,
+            )
         )
         print_scores(mode, scores_and_trainers)
 
     with open(embedding_path.joinpath("valid.hparams.jsonl"), "wt") as w:
-        for score, _, _, _, hparams, _ in scores_and_trainers:
+        for score, _, _, _, _, hparams, _ in scores_and_trainers:
             w.write(json.dumps([score, hparams_to_json(hparams)]) + "\n")
     with open(embedding_path.joinpath("valid.postprocessing.jsonl"), "wt") as w:
-        for score, _, _, _, _, postprocessing in scores_and_trainers:
+        for score, _, _, _, _, _, postprocessing in scores_and_trainers:
             w.write(json.dumps([score, postprocessing]) + "\n")
 
     # Use that model to compute test scores
@@ -885,6 +895,7 @@ def task_predictions(
         best_score,
         best_model_path,
         best_model_epoch,
+        best_time_in_min,
         best_trainer,
         best_hparams,
         best_postprocessing,
@@ -919,6 +930,9 @@ def task_predictions(
         {
             "validation": best_score,
             "postprocessing": best_postprocessing,
+            "hparams": best_hparams,
+            "epoch": best_epoch,
+            "time_in_min": best_time_in_min,
         }
     )
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
