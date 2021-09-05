@@ -12,6 +12,7 @@ TODO:
     many models simultaneously with one disk read?
 """
 
+import copy
 import json
 import math
 import pickle
@@ -63,6 +64,25 @@ PARAM_GRID = {
     "optim": [torch.optim.Adam],
     # "optim": [torch.optim.Adam, torch.optim.SGD],
 }
+
+FAST_PARAM_GRID = copy.deepcopy(PARAM_GRID)
+FAST_PARAM_GRID.update(
+    {
+        "max_epochs": [10, 50],
+        "check_val_every_n_epoch": [3, 10],
+    }
+)
+
+FASTER_PARAM_GRID = copy.deepcopy(PARAM_GRID)
+FASTER_PARAM_GRID.update(
+    {
+        "hidden_layers": [0, 1],
+        "hidden_dim": [64, 128],
+        "patience": [1, 3],
+        "max_epochs": [3, 10],
+        "check_val_every_n_epoch": [1, 3],
+    }
+)
 
 # These are good for dcase, change for other event-based secret tasks
 EVENT_POSTPROCESSING_GRID = {
@@ -800,6 +820,7 @@ def task_predictions(
     grid_points: int,
     gpus: Optional[int],
     deterministic: bool,
+    grid: str,
 ):
     # By setting workers=True in seed_everything(), Lightning derives
     # unique seeds across all dataloader workers and processes for
@@ -844,7 +865,14 @@ def task_predictions(
     mode = None
     scores_and_trainers = []
     # Model selection
-    confs = list(ParameterGrid(PARAM_GRID))
+    if grid == "default":
+        confs = list(ParameterGrid(PARAM_GRID))
+    elif grid == "fast":
+        confs = list(ParameterGrid(FAST_PARAM_GRID))
+    elif grid == "faster":
+        confs = list(ParameterGrid(FASTER_PARAM_GRID))
+    else:
+        raise ValueError(f"grid {grid} unknown")
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         # TODO: Assert mode doesn't change?
