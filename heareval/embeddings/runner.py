@@ -5,6 +5,7 @@ Computes embeddings on a set of tasks
 
 import json
 import os
+import shutil
 import time
 from pathlib import Path
 
