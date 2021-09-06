@@ -967,7 +967,7 @@ def task_predictions(
             "epoch": best_grid_point.epoch,
             "time_in_min": best_grid_point.time_in_min,
             "score_mode": best_grid_point.score_mode,
-            "embedding_path": embedding_path,
+            "embedding_path": str(embedding_path),
         }
     )
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
