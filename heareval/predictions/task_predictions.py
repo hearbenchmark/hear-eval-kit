@@ -879,7 +879,11 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
-    def print_scores(grid_point_results: List[GridPointResult]):
+    def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
+        """
+        Sort grid point results in place, so that the first result
+        is the best.
+        """
         # TODO: Assert all score modes are the same?
         mode = grid_point_results[0].score_mode
         # Pick the model with the best validation score
@@ -890,7 +894,9 @@ def task_predictions(
             grid_point_results.reverse()
         else:
             raise ValueError(f"mode = {mode}")
-        # print(mode)
+
+    def print_scores(grid_point_results: List[GridPointResult]):
+        sort_grid_points(grid_point_results)
         for g in grid_point_results:
             print(g.validation_score, g.epoch, g.hparams, g.postprocessing)
 
@@ -923,7 +929,8 @@ def task_predictions(
         grid_point_results.append(grid_point_result)
         print_scores(grid_point_results)
 
-    # Use that model to compute test scores
+    # Use the best model to compute test scores
+    sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
     print()
     print(
