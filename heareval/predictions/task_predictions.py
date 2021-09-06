@@ -970,6 +970,7 @@ def task_predictions(
             "embedding_path": embedding_path,
         }
     )
+    print(test_results)
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
