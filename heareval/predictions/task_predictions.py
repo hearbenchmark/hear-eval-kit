@@ -962,7 +962,7 @@ def task_predictions(
     test_results.update(
         {
             "validation_score": best_grid_point.validation_score,
-            "hparams": best_grid_point.hparams,
+            "hparams": hparams_to_json(best_grid_point.hparams),
             "postprocessing": best_grid_point.postprocessing,
             "epoch": best_grid_point.epoch,
             "time_in_min": best_grid_point.time_in_min,
@@ -970,7 +970,6 @@ def task_predictions(
             "embedding_path": embedding_path,
         }
     )
-    print(test_results)
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
