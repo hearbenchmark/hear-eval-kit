@@ -682,8 +682,8 @@ def dataloader_from_split_name(
 class GridPointResult:
     def __init__(
         self,
-        model_path: Path,
-        best_epoch: int,
+        model_path: str,
+        epoch: int,
         time_in_min: float,
         hparams: Dict[str, Any],
         postprocessing: Tuple[Tuple[str, Any], ...],
@@ -692,7 +692,7 @@ class GridPointResult:
         score_mode: str,
     ):
         self.model_path = model_path
-        self.best_epoch = best_epoch
+        self.epoch = epoch
         self.time_in_min = time_in_min
         self.hparams = hparams
         self.postprocessing = postprocessing
@@ -799,7 +799,7 @@ def task_predictions_train(
             best_postprocessing = []
         return GridPointResult(
             model_path=checkpoint_callback.best_model_path,
-            best_epoch=epoch,
+            epoch=epoch,
             time_in_min=time_in_min,
             hparams=dict(predictor.hparams),
             postprocessing=best_postprocessing,
@@ -860,7 +860,9 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
-    def print_scores(mode: str, grid_point_results: List[GridPointResult]):
+    def print_scores(grid_point_results: List[GridPointResult]):
+        # TODO: Assert all score modes are the same?
+        mode = grid_point_results[0].score_mode
         # Pick the model with the best validation score
         grid_point_results.sort(key=lambda g: -g.validation_score)
         if mode == "max":
@@ -870,7 +872,7 @@ def task_predictions(
         else:
             raise ValueError(f"mode = {mode}")
         # print(mode)
-        for g in grid_point_result:
+        for g in grid_point_results:
             print(g.validation_score, g.epoch, g.hparams, g.postprocessing)
 
     mode = None
@@ -899,7 +901,7 @@ def task_predictions(
             deterministic=deterministic,
         )
         grid_point_results.append(grid_point_result)
-        print_scores(mode, grid_point_results)
+        print_scores(grid_point_results)
 
     # Use that model to compute test scores
     best_grid_point = grid_point_results[0]
@@ -909,7 +911,7 @@ def task_predictions(
         best_grid_point.validation_score,
         best_grid_point.hparams,
     )
-    print(best_grid_point.best_model_path)
+    print(best_grid_point.model_path)
 
     test_dataloader = dataloader_from_split_name(
         "test",
@@ -925,7 +927,7 @@ def task_predictions(
     best_trainer.fit_loop.current_epoch = best_grid_point.epoch
 
     test_results = best_trainer.test(
-        ckpt_path=best_grid_point.best_model_path, test_dataloaders=test_dataloader
+        ckpt_path=best_grid_point.model_path, test_dataloaders=test_dataloader
     )
     assert len(test_results) == 1, "Should have only one test dataloader"
     test_results = test_results[0]
@@ -937,6 +939,7 @@ def task_predictions(
             "postprocessing": best_grid_point.postprocessing,
             "epoch": best_grid_point.epoch,
             "time_in_min": best_grid_point.time_in_min,
+            "score_mode": best_grid_point.score_mode,
             "embedding_path": embedding_path,
         }
     )
