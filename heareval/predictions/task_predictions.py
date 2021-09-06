@@ -421,7 +421,7 @@ class EventPredictionModel(AbstractPredictionModel):
 
 class SplitMemmapDataset(Dataset):
     """
-    Embeddings are memmap'ed.
+    Embeddings are memmap'ed, unless in-memory = True.
 
     WARNING: Don't shuffle this or access will be SLOW.
     """
@@ -433,6 +433,8 @@ class SplitMemmapDataset(Dataset):
         nlabels: int,
         split_name: str,
         embedding_type: str,
+        in_memory: bool,
+        metadata: bool,
     ):
         self.embedding_path = embedding_path
         self.label_to_idx = label_to_idx
@@ -445,19 +447,23 @@ class SplitMemmapDataset(Dataset):
                 open(embedding_path.joinpath(f"{split_name}.embedding-dimensions.json"))
             )
         )
-        self.embedding_memmap = np.memmap(
+        self.embeddings = np.memmap(
             filename=embedding_path.joinpath(f"{split_name}.embeddings.npy"),
             dtype=np.float32,
             mode="r",
             shape=self.dim,
         )
+        if in_memory:
+            self.embeddings = torch.stack(
+                [torch.tensor(e) for e in tqdm(self.embeddings)]
+            )
         self.labels = pickle.load(
             open(embedding_path.joinpath(f"{split_name}.target-labels.pkl"), "rb")
         )
-        # Only used for event-based prediction
+        # Only used for event-based prediction, for validation and test scoring,
         # For timestamp (event) embedding tasks,
         # the metadata for each instance is {filename: , timestamp: }.
-        if self.embedding_type == "event":
+        if self.embedding_type == "event" and metadata:
             filename_timestamps_json = embedding_path.joinpath(
                 f"{split_name}.filename-timestamps.json"
             )
@@ -468,26 +474,28 @@ class SplitMemmapDataset(Dataset):
         else:
             self.metadata = [{}] * self.dim[0]
         assert len(self.labels) == self.dim[0]
-        assert len(self.labels) == len(self.embedding_memmap)
+        assert len(self.labels) == len(self.embeddings)
         assert len(self.labels) == len(self.metadata)
-        assert self.embedding_memmap[0].shape[0] == self.dim[1]
+        assert self.embeddings[0].shape[0] == self.dim[1]
+
+        """
+        For all labels, return a multi or one-hot vector.
+        This allows us to have tensors that are all the same shape.
+        Later we reduce this with an argmax to get the vocabulary indices.
+        """
+        ys = []
+        for idx in tqdm(range(len(self.labels))):
+            labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
+            y = torch.tensor(label_to_binary_vector(labels, self.nlabels))
+            ys.append(y)
+        self.y = torch.stack(ys)
+        assert self.y.shape == (len(self.labels), self.nlabels)
 
     def __len__(self) -> int:
         return self.dim[0]
 
     def __getitem__(self, idx) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, Any]]:
-        """
-        For all labels, return a multi or one-hot vector.
-        This allows us to have tensors that are all the same shape.
-        Later we reduce this with an argmax to get the vocabulary indices.
-            We also include the filename and timestamp, which we need
-        for evaluation of timestamp (event) tasks.
-        We also return the metadata as a Dict.
-        """
-        x = self.embedding_memmap[idx]
-        labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-        y = label_to_binary_vector(labels, self.nlabels)
-        return x, y, self.metadata[idx]
+        return self.embeddings[idx], self.y[idx], self.metadata[idx]
 
 
 def create_events_from_prediction(
@@ -654,6 +662,8 @@ def dataloader_from_split_name(
     label_to_idx: Dict[str, int],
     nlabels: int,
     embedding_type: str,
+    in_memory: bool,
+    metadata: bool = True,
     batch_size: int = 64,
 ) -> DataLoader:
     dataset = SplitMemmapDataset(
@@ -662,6 +672,8 @@ def dataloader_from_split_name(
         nlabels=nlabels,
         split_name=split_name,
         embedding_type=embedding_type,
+        in_memory=in_memory,
+        metadata=metadata,
     )
 
     print(
@@ -672,10 +684,12 @@ def dataloader_from_split_name(
     return DataLoader(
         dataset,
         batch_size=batch_size,
-        # We don't shuffle because it's slow.
+        # We don't shuffle because it's slow
+        # (except when in_memory = True).
         # Also we want predicted labels in the same order as
-        # target labels.
+        # target labels, for validation and test.
         shuffle=False,
+        pin_memory=True,
     )
 
 
@@ -689,6 +703,7 @@ def task_predictions_train(
     scores: List[ScoreFunction],
     conf: Dict,
     gpus: Any,
+    in_memory: bool,
     deterministic: bool,
 ) -> Tuple[
     str, int, Dict[str, Any], Tuple[Tuple[str, Any], ...], pl.Trainer, float, str
@@ -758,6 +773,8 @@ def task_predictions_train(
         nlabels,
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
+        in_memory=in_memory,
+        metadata=False,
     )
     valid_dataloader = dataloader_from_split_name(
         "valid",
@@ -766,6 +783,7 @@ def task_predictions_train(
         nlabels,
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
+        in_memory=in_memory,
     )
     trainer.fit(predictor, train_dataloader, valid_dataloader)
     if checkpoint_callback.best_model_score is not None:
@@ -819,6 +837,7 @@ def task_predictions(
     timestamp_embedding_size: int,
     grid_points: int,
     gpus: Optional[int],
+    in_memory: bool,
     deterministic: bool,
     grid: str,
 ):
@@ -894,6 +913,7 @@ def task_predictions(
             scores=scores,
             conf=conf,
             gpus=gpus,
+            in_memory=in_memory,
             deterministic=deterministic,
         )
         scores_and_trainers.append(
@@ -932,6 +952,7 @@ def task_predictions(
         nlabels,
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
+        in_memory=in_memory,
     )
     # This hack is necessary because we use the best validation epoch to
     # choose the event postprocessing
