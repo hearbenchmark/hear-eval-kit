@@ -370,16 +370,16 @@ class EventPredictionModel(AbstractPredictionModel):
             # During training, the epoch is one behind the value that will
             # be stored as the "best" epoch
             epoch = self.current_epoch + 1
-            postprocessing = None
+            postprocessing_cached = None
         elif name == "test":
             epoch = self.current_epoch
-            postprocessing = self.epoch_best_postprocessing[epoch]
+            postprocessing_cached = self.epoch_best_postprocessing[epoch]
         else:
             raise ValueError
         # print("\n\n\n", epoch)
 
         predicted_events_by_postprocessing = get_events_for_all_files(
-            prediction, filename, timestamp, self.idx_to_label, postprocessing
+            prediction, filename, timestamp, self.idx_to_label, postprocessing_cached
         )
 
         score_and_postprocessing = []
