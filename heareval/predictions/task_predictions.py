@@ -771,6 +771,7 @@ def task_predictions_train(
     if checkpoint_callback.best_model_score is not None:
         sys.stdout.flush()
         end = time.time()
+        time_in_min = (end - start) / 60
         epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
         if metadata["embedding_type"] == "event":
             best_postprocessing = predictor.epoch_best_postprocessing[epoch]
@@ -782,7 +783,7 @@ def task_predictions_train(
             checkpoint_callback.best_model_score.detach().cpu().item(),
             json.dumps(best_postprocessing),
             "epoch %d" % epoch,
-            "time_in_min %.2f" % ((end - start) / 60),
+            "time_in_min %.2f" % time_in_min,
             json.dumps(hparams_to_json(predictor.hparams)),
             "\n\n\n",
         )
@@ -922,7 +923,7 @@ def task_predictions(
     (
         best_score,
         best_model_path,
-        best_model_epoch,
+        best_epoch,
         best_time_in_min,
         best_trainer,
         best_hparams,
@@ -946,7 +947,7 @@ def task_predictions(
     )
     # This hack is necessary because we use the best validation epoch to
     # choose the event postprocessing
-    best_trainer.fit_loop.current_epoch = best_model_epoch
+    best_trainer.fit_loop.current_epoch = best_epoch
 
     test_scores = best_trainer.test(
         ckpt_path=best_model_path, test_dataloaders=test_dataloader
