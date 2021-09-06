@@ -681,6 +681,7 @@ def dataloader_from_split_name(
 
 class GridPointResult:
     def __init__(
+        self,
         model_path: Path,
         best_epoch: int,
         time_in_min: float,
@@ -918,6 +919,7 @@ def task_predictions(
         metadata["embedding_type"],
         batch_size=conf["batch_size"],
     )
+    best_trainer = best_grid_point.trainer
     # This hack is necessary because we use the best validation epoch to
     # choose the event postprocessing
     best_trainer.fit_loop.current_epoch = best_grid_point.epoch
