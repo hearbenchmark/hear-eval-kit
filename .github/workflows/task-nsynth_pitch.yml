@@ -30,7 +30,8 @@ jobs:
         pip install -e "."
     - name: wget
       run: |
-        wget https://storage.googleapis.com/hear2021/small/hear-20210906-2021.0.2-nsynth_pitch-v2.2.3-small-44100.tar.gz
+        wget https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/preprocessed/hear-20210906-2021.0.2-nsynth_pitch-v2.2.3-small-44100.tar.gz
+        #wget https://storage.googleapis.com/hear2021/small/hear-20210906-2021.0.2-nsynth_pitch-v2.2.3-small-44100.tar.gz
         tar zxvf hear-20210906-2021.0.2-nsynth_pitch-v2.2.3-small-44100.tar.gz
     - name: Downstream
       run: |
