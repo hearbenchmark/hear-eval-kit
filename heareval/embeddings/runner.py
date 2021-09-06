@@ -91,14 +91,6 @@ def runner(
         tasks = [tasks_dir_path.joinpath(task)]
         assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
-        done_embeddings = embed_task_dir.joinpath(".done.embeddings")
-        if os.path.exists(done_embeddings):
-            continue
-
-        print(f"Computing embeddings for {task_path.name}")
-        start = time.time()
-        gpu_max_mem.reset()
-
         # TODO: Would be good to include the version here
         # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
         embed_dir = embeddings_dir_path.joinpath(embedding.name + options_str)
@@ -106,7 +98,13 @@ def runner(
         task_name = task_path.name
         embed_task_dir = embed_dir.joinpath(task_name)
 
-        print(embed_task_dir)
+        done_embeddings = embed_task_dir.joinpath(".done.embeddings")
+        if os.path.exists(done_embeddings):
+            continue
+
+        print(f"Computing embeddings for {task_path.name}")
+        start = time.time()
+        gpu_max_mem.reset()
 
         task_embeddings(embedding, task_path, embed_task_dir)
 
