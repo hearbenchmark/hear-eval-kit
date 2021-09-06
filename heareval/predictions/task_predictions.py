@@ -679,6 +679,27 @@ def dataloader_from_split_name(
     )
 
 
+class GridPointResult:
+    def __init__(
+        model_path: Path,
+        best_epoch: int,
+        time_in_min: float,
+        hparams: Dict[str, Any],
+        postprocessing: Tuple[Tuple[str, Any], ...],
+        trainer: pl.Trainer,
+        validation_score: float,
+        score_mode: str,
+    ):
+        self.model_path = model_path
+        self.best_epoch = best_epoch
+        self.time_in_min = time_in_min
+        self.hparams = hparams
+        self.postprocessing = postprocessing
+        self.trainer = trainer
+        self.validation_score = validation_score
+        self.score_mode = score_mode
+
+
 def task_predictions_train(
     embedding_path: Path,
     embedding_size: int,
@@ -690,9 +711,7 @@ def task_predictions_train(
     conf: Dict,
     gpus: Any,
     deterministic: bool,
-) -> Tuple[
-    str, int, Dict[str, Any], Tuple[Tuple[str, Any], ...], pl.Trainer, float, str
-]:
+) -> GridPointResult:
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
@@ -777,26 +796,15 @@ def task_predictions_train(
             best_postprocessing = predictor.epoch_best_postprocessing[epoch]
         else:
             best_postprocessing = []
-        print(
-            "\n\n\nGRID POINT",
-            embedding_path,
-            checkpoint_callback.best_model_score.detach().cpu().item(),
-            json.dumps(best_postprocessing),
-            "epoch %d" % epoch,
-            "time_in_min %.2f" % time_in_min,
-            json.dumps(hparams_to_json(predictor.hparams)),
-            "\n\n\n",
-        )
-        sys.stdout.flush()
-        return (
-            checkpoint_callback.best_model_path,
-            epoch,
-            time_in_min,
-            dict(predictor.hparams),
-            best_postprocessing,
-            trainer,
-            checkpoint_callback.best_model_score.detach().cpu().item(),
-            mode,
+        return GridPointResult(
+            model_path=checkpoint_callback.best_model_path,
+            best_epoch=epoch,
+            time_in_min=time_in_min,
+            hparams=dict(predictor.hparams),
+            postprocessing=best_postprocessing,
+            trainer=trainer,
+            validation_score=checkpoint_callback.best_model_score.detach().cpu().item(),
+            score_mode=mode,
         )
     else:
         raise ValueError(
@@ -851,21 +859,21 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
-    def print_scores(mode, scores_and_trainers):
+    def print_scores(mode: str, grid_point_results: List[GridPointResult]):
         # Pick the model with the best validation score
-        scores_and_trainers.sort(key=lambda st: -st[0])
+        grid_point_results.sort(key=lambda g: -g.validation_score)
         if mode == "max":
             pass
         elif mode == "min":
-            scores_and_trainers.reverse()
+            grid_point_results.reverse()
         else:
             raise ValueError(f"mode = {mode}")
         # print(mode)
-        for score, _, epoch, _, _, hparams, postprocessing in scores_and_trainers:
-            print(score, epoch, hparams, postprocessing)
+        for g in grid_point_result:
+            print(g.validation_score, g.epoch, g.hparams, g.postprocessing)
 
     mode = None
-    scores_and_trainers = []
+    grid_point_results = []
     # Model selection
     if grid == "default":
         confs = list(ParameterGrid(PARAM_GRID))
@@ -877,17 +885,7 @@ def task_predictions(
         raise ValueError(f"grid {grid} unknown")
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
-        # TODO: Assert mode doesn't change?
-        (
-            model_path,
-            epoch,
-            time_in_min,
-            hparams,
-            postprocessing,
-            trainer,
-            best_model_score,
-            mode,
-        ) = task_predictions_train(
+        grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             grid_points=grid_points,
@@ -899,43 +897,18 @@ def task_predictions(
             gpus=gpus,
             deterministic=deterministic,
         )
-        scores_and_trainers.append(
-            (
-                best_model_score,
-                model_path,
-                epoch,
-                time_in_min,
-                trainer,
-                hparams,
-                postprocessing,
-            )
-        )
-        print_scores(mode, scores_and_trainers)
-
-    with open(embedding_path.joinpath("valid.hparams.jsonl"), "wt") as w:
-        for score, _, _, _, _, hparams, _ in scores_and_trainers:
-            w.write(json.dumps([score, hparams_to_json(hparams)]) + "\n")
-    with open(embedding_path.joinpath("valid.postprocessing.jsonl"), "wt") as w:
-        for score, _, _, _, _, _, postprocessing in scores_and_trainers:
-            w.write(json.dumps([score, postprocessing]) + "\n")
+        grid_point_results.append(grid_point_result)
+        print_scores(mode, grid_point_results)
 
     # Use that model to compute test scores
-    (
-        best_score,
-        best_model_path,
-        best_epoch,
-        best_time_in_min,
-        best_trainer,
-        best_hparams,
-        best_postprocessing,
-    ) = scores_and_trainers[0]
+    best_grid_point = grid_point_results[0]
     print()
-    print("Best validation score", best_score, best_hparams)
-    print(best_model_path)
-
-    open(embedding_path.joinpath("test.best-model-config.json"), "wt").write(
-        json.dumps([hparams_to_json(best_hparams), best_postprocessing], indent=4)
+    print(
+        "Best validation score",
+        best_grid_point.validation_score,
+        best_grid_point.hparams,
     )
+    print(best_grid_point.best_model_path)
 
     test_dataloader = dataloader_from_split_name(
         "test",
@@ -947,27 +920,28 @@ def task_predictions(
     )
     # This hack is necessary because we use the best validation epoch to
     # choose the event postprocessing
-    best_trainer.fit_loop.current_epoch = best_epoch
+    best_trainer.fit_loop.current_epoch = best_grid_point.epoch
 
-    test_scores = best_trainer.test(
-        ckpt_path=best_model_path, test_dataloaders=test_dataloader
+    test_results = best_trainer.test(
+        ckpt_path=best_grid_point.best_model_path, test_dataloaders=test_dataloader
     )
-    assert len(test_scores) == 1, "Should have only one test dataloader"
-    test_scores = test_scores[0]
+    assert len(test_results) == 1, "Should have only one test dataloader"
+    test_results = test_results[0]
 
-    test_scores.update(
+    test_results.update(
         {
-            "validation": best_score,
-            "postprocessing": best_postprocessing,
-            "hparams": best_hparams,
-            "epoch": best_epoch,
-            "time_in_min": best_time_in_min,
+            "validation_score": best_grid_point.validation_score,
+            "hparams": best_grid_point.hparams,
+            "postprocessing": best_grid_point.postprocessing,
+            "epoch": best_grid_point.epoch,
+            "time_in_min": best_grid_point.time_in_min,
+            "embedding_path": embedding_path,
         }
     )
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
-        json.dumps(test_scores, indent=4)
+        json.dumps(test_results, indent=4)
     )
-    print("TEST SCORES", json.dumps(test_scores))
+    print("TEST RESULTS", json.dumps(test_results))
 
     # We no longer have best_predictor, the predictor is
     # loaded by trainer.test and then disappears
