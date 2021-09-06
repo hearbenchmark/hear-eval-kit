@@ -48,13 +48,15 @@ from heareval.score import (
 )
 
 PARAM_GRID = {
-    "hidden_layers": [0, 1, 2],
+    "hidden_layers": [1, 2],
+    # "hidden_layers": [0, 1, 2],
     # "hidden_layers": [0, 1, 2, 3],
     # "hidden_dim": [256, 512, 1024],
     "hidden_dim": [1024, 512],
     "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    "lr": [3.2e-3, 1e-3, 3.2e-4, 1e-4],
+    # "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
-    "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     "patience": [20],
     "max_epochs": [500],
     "check_val_every_n_epoch": [10],
@@ -62,7 +64,8 @@ PARAM_GRID = {
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "norm_after_activation": [False, True],
-    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d],
+    # "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
     "optim": [torch.optim.Adam],
     # "optim": [torch.optim.Adam, torch.optim.SGD],
