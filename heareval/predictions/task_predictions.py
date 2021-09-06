@@ -900,7 +900,6 @@ def task_predictions(
         for g in grid_point_results:
             print(g.validation_score, g.epoch, g.hparams, g.postprocessing)
 
-    mode = None
     grid_point_results = []
     # Model selection
     if grid == "default":
