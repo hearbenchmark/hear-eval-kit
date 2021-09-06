@@ -873,7 +873,8 @@ def task_predictions(
     # Note that if you change the number of workers, determinism
     # might change.
     # However, it appears that workers=False does get deterministic
-    # results on 4 multi-worker jobs I ran??
+    # results on 4 multi-worker jobs I ran, probably because our
+    # dataloader doesn't do any augmentation or use randomness.
     if deterministic:
         seed_everything(42, workers=False)
 
