@@ -15,6 +15,7 @@ TODO:
 import copy
 import json
 import math
+import multiprocessing
 import pickle
 import random
 import sys
@@ -47,19 +48,24 @@ from heareval.score import (
 )
 
 PARAM_GRID = {
-    "hidden_layers": [0, 1, 2, 3],
+    "hidden_layers": [1, 2],
+    # "hidden_layers": [0, 1, 2],
+    # "hidden_layers": [0, 1, 2, 3],
     # "hidden_dim": [256, 512, 1024],
     "hidden_dim": [1024, 512],
     "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    "lr": [3.2e-3, 1e-3, 3.2e-4, 1e-4],
+    # "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
-    "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     "patience": [20],
     "max_epochs": [500],
-    "check_val_every_n_epoch": [1, 3, 10],
+    "check_val_every_n_epoch": [10],
+    # "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "norm_after_activation": [False, True],
-    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d],
+    # "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
     "optim": [torch.optim.Adam],
     # "optim": [torch.optim.Adam, torch.optim.SGD],
@@ -86,9 +92,13 @@ FASTER_PARAM_GRID.update(
 
 # These are good for dcase, change for other event-based secret tasks
 EVENT_POSTPROCESSING_GRID = {
-    "median_filter_ms": [0.0, 60.0, 150.0, 250.0],
-    "min_duration": [0.0, 60.0, 150.0, 250.0],
+    "median_filter_ms": [250],
+    "min_duration": [125, 250],
+    #    "median_filter_ms": [0, 62, 125, 250, 500, 1000],
+    #    "min_duration": [0, 62, 125, 250, 500, 1000],
 }
+
+NUM_WORKERS = int(multiprocessing.cpu_count() / (max(1, torch.cuda.device_count())))
 
 
 class OneHotToCrossEntropyLoss(pl.LightningModule):
@@ -365,20 +375,20 @@ class EventPredictionModel(AbstractPredictionModel):
             # During training, the epoch is one behind the value that will
             # be stored as the "best" epoch
             epoch = self.current_epoch + 1
-            postprocessing = None
+            postprocessing_cached = None
         elif name == "test":
             epoch = self.current_epoch
-            postprocessing = self.epoch_best_postprocessing[epoch]
+            postprocessing_cached = self.epoch_best_postprocessing[epoch]
         else:
             raise ValueError
         # print("\n\n\n", epoch)
 
         predicted_events_by_postprocessing = get_events_for_all_files(
-            prediction, filename, timestamp, self.idx_to_label, postprocessing
+            prediction, filename, timestamp, self.idx_to_label, postprocessing_cached
         )
 
         score_and_postprocessing = []
-        for postprocessing in predicted_events_by_postprocessing:
+        for postprocessing in tqdm(predicted_events_by_postprocessing):
             predicted_events = predicted_events_by_postprocessing[postprocessing]
             primary_score_fn = self.scores[0]
             primary_score = primary_score_fn(
@@ -395,7 +405,9 @@ class EventPredictionModel(AbstractPredictionModel):
         #    print(vs)
 
         best_postprocessing = score_and_postprocessing[0][1]
-        self.epoch_best_postprocessing[epoch] = best_postprocessing
+        if name == "val":
+            print("BEST POSTPROCESSING", best_postprocessing)
+            self.epoch_best_postprocessing[epoch] = best_postprocessing
         predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
         end_scores = {}
@@ -486,7 +498,7 @@ class SplitMemmapDataset(Dataset):
         ys = []
         for idx in tqdm(range(len(self.labels))):
             labels = [self.label_to_idx[str(label)] for label in self.labels[idx]]
-            y = torch.tensor(label_to_binary_vector(labels, self.nlabels))
+            y = label_to_binary_vector(labels, self.nlabels)
             ys.append(y)
         self.y = torch.stack(ys)
         assert self.y.shape == (len(self.labels), self.nlabels)
@@ -631,16 +643,16 @@ def get_events_for_all_files(
     if postprocessing:
         postprocess = postprocessing
         event_dict[postprocess] = {}
-        for slug, timestamp_predictions in tqdm(event_files.items()):
+        for slug, timestamp_predictions in event_files.items():
             event_dict[postprocess][slug] = create_events_from_prediction(
                 timestamp_predictions, idx_to_label, **dict(postprocess)
             )
     else:
         postprocessing_confs = list(ParameterGrid(EVENT_POSTPROCESSING_GRID))
-        for postprocess_dict in postprocessing_confs:
+        for postprocess_dict in tqdm(postprocessing_confs):
             postprocess = tuple(postprocess_dict.items())
             event_dict[postprocess] = {}
-            for slug, timestamp_predictions in tqdm(event_files.items()):
+            for slug, timestamp_predictions in event_files.items():
                 event_dict[postprocess][slug] = create_events_from_prediction(
                     timestamp_predictions, idx_to_label, **postprocess_dict
                 )
@@ -681,6 +693,12 @@ def dataloader_from_split_name(
         + f"which has {len(dataset)} instances."
     )
 
+    if in_memory:
+        num_workers = NUM_WORKERS
+    else:
+        # We are disk bound, so multiple workers might cause thrashing
+        num_workers = 0
+
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -690,6 +708,7 @@ def dataloader_from_split_name(
         # target labels, for validation and test.
         shuffle=False,
         pin_memory=True,
+        num_workers=num_workers,
     )
 
 
@@ -782,6 +801,7 @@ def task_predictions_train(
         check_val_every_n_epoch=conf["check_val_every_n_epoch"],
         max_epochs=conf["max_epochs"],
         deterministic=deterministic,
+        num_sanity_val_steps=0,
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
@@ -853,11 +873,13 @@ def task_predictions(
     grid: str,
 ):
     # By setting workers=True in seed_everything(), Lightning derives
-    # unique seeds across all dataloader workers and processes for
-    # torch, numpy and stdlib random number generators. When turned
-    # on, it ensures that e.g. data augmentations are not repeated
-    # across workers.
-    # This means we should keep dataloader workers consistent.
+    # unique seeds across all dataloader workers and processes
+    # for torch, numpy and stdlib random number generators.
+    # Note that if you change the number of workers, determinism
+    # might change.
+    # However, it appears that workers=False does get deterministic
+    # results on 4 multi-worker jobs I ran, probably because our
+    # dataloader doesn't do any augmentation or use randomness.
     if deterministic:
         seed_everything(42, workers=False)
 

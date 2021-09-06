@@ -5,6 +5,7 @@ Computes embeddings on a set of tasks
 
 import json
 import os
+import shutil
 import time
 from pathlib import Path
 
@@ -91,10 +92,6 @@ def runner(
         tasks = [tasks_dir_path.joinpath(task)]
         assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
     for task_path in tqdm(tasks):
-        print(f"Computing embeddings for {task_path.name}")
-        start = time.time()
-        gpu_max_mem.reset()
-
         # TODO: Would be good to include the version here
         # https://github.com/neuralaudio/hear2021-eval-kit/issues/37
         embed_dir = embeddings_dir_path.joinpath(embedding.name + options_str)
@@ -102,7 +99,16 @@ def runner(
         task_name = task_path.name
         embed_task_dir = embed_dir.joinpath(task_name)
 
-        print(embed_task_dir)
+        done_embeddings = embed_task_dir.joinpath(".done.embeddings")
+        if os.path.exists(done_embeddings):
+            continue
+
+        if os.path.exists(embed_task_dir):
+            shutil.rmtree(embed_task_dir)
+
+        print(f"Computing embeddings for {task_path.name}")
+        start = time.time()
+        gpu_max_mem.reset()
 
         task_embeddings(embedding, task_path, embed_task_dir)
 
@@ -111,7 +117,7 @@ def runner(
         print(
             f"...computed embeddings in {time_elapsed} sec "
             f"(GPU max mem {gpu_max_mem_used}) "
-            f"for {task_path.name}"
+            f"for {task_path.name} using {module} {model_options}"
         )
         open(embed_task_dir.joinpath("profile.embeddings.json"), "wt").write(
             json.dumps(
@@ -124,7 +130,7 @@ def runner(
         )
 
         # Touch this file to indicate that processing completed successfully
-        open(embed_task_dir.joinpath(".done.embeddings"), "wt")
+        open(done_embeddings, "wt")
 
 
 if __name__ == "__main__":
