@@ -8,7 +8,7 @@ from typing import Optional
 import torch
 
 if torch.cuda.is_available():
-    if torch.cuda.num_devices() > 1:
+    if torch.cuda.device_count() > 1:
         print("WARNING: gpu_max_mem measures the *first* GPU, but you have several.")
 
     from pynvml import (
