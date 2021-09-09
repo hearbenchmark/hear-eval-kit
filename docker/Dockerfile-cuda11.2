@@ -45,13 +45,12 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         git \
         vim \
         libssl-dev \
-        curl
-
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
-        unzip unrar
+        curl \
+        bc \
+        less \
+        locate \
+        unzip \
+        unrar
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q
 
@@ -277,7 +276,8 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $PIP_INSTALL hearbaseline hearvalidator
 
-RUN echo 20210905
+# Touch this to force a rebuild of everything below
+RUN echo 20210909
 
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
@@ -291,11 +291,6 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     $GIT_CLONE https://github.com/neuralaudio/hear-eval-kit.git
 RUN cd hear-eval-kit && \
     python -m pip --no-cache-dir install -e ".[dev]"
-
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL less locate
 
 # THIS COMPLETE WACKNESS IS BECAUSE FUCKING dcase-util DEPENDS UPON librosa,
 # which is a gnarly PITA to install and get play nice with other packages.

@@ -11,7 +11,6 @@ long_description = open("README.md", "r", encoding="utf-8").read()
 
 setup(
     name="heareval",
-    version="2021.0.1",
     description="Holistic Evaluation of Audio Representations (HEAR) 2021 -- Evaluation Kit",
     author="",
     author_email="",

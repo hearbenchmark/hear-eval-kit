@@ -13,10 +13,18 @@ pip3 install heareval
 Tested with Python 3.7 and 3.8. Python 3.9 is not officially supported
 because pip3 installs are very finicky, but it might work.
 
+## Quickstart
 
 ## Evaluation
 
+### Setup
+
+#### Docker
+
+#### Cloud GPUs
+
 The easiest way to do evaluation is to launch a Spotty GCP instance.
+You can easily adapt Spotty also for AWS GPU instances.
 
 Prepare a `spotty.yaml` file with the provided template file:
 ```
@@ -36,6 +44,12 @@ This requires the heareval Docker image, which is pre-built and
 published on Dockerhub for your convenience.
 
 Please refer to `README.spotty` for more details.
+
+### Download Open Tasks
+
+google cloud
+
+HTTP
 
 ### Computing embeddings
 
@@ -132,3 +146,4 @@ Running tests:
 python3 -m pytest
 ```
 
+### Docker Development

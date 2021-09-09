@@ -202,7 +202,7 @@ def get_dataloader_for_embedding(
         return DataLoader(
             AudioFileDataset(data, audio_dir, embedding.sample_rate),
             batch_size=batch_size,
-            shuffle=True,
+            shuffle=False,
         )
 
     else:
