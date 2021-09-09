@@ -4,10 +4,10 @@ Downstream training, using embeddings as input features and learning
 predictions.
 """
 
+import glob
 import json
 import os
 import random
-from importlib import import_module
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,18 +20,11 @@ from heareval.predictions.task_predictions import task_predictions
 
 
 @click.command()
-@click.argument("module", type=str)
 @click.option(
-    "--embeddings-dir",
-    default="embeddings",
-    help="Location of task embeddings to compute predictions on",
-    type=click.Path(exists=True),
-)
-@click.option(
-    "--model",
-    default=None,
-    help="Location of model weights file",
-    type=click.Path(exists=True),
+    "--task-embeddings",
+    default="embeddings/*/*",
+    help="Task embeddings to predict over, as a directory or a glob. (Default: 'embeddings/*/*')",
+    type=str,
 )
 @click.option(
     "--task",
@@ -45,9 +38,6 @@ from heareval.predictions.task_predictions import task_predictions
     help="Number of grid points for randomized grid search "
     "model selection. (Default: 8)",
     type=click.INT,
-)
-@click.option(
-    "--model-options", default="{}", help="A JSON dict of kwargs to pass to load_model"
 )
 @click.option(
     "--gpus",
@@ -76,12 +66,9 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 def runner(
-    module: str,
-    embeddings_dir: str = "embeddings",
-    model: Optional[str] = None,
+    task_embeddings: str = "embeddings/*/*",
     task: str = "all",
     grid_points: int = 8,
-    model_options: str = "{}",
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     in_memory: bool = True,
     deterministic: bool = True,
@@ -89,55 +76,36 @@ def runner(
 ) -> None:
     if gpus is not None:
         gpus = json.loads(gpus)
-    model_options_dict = json.loads(model_options)
-    if isinstance(model_options_dict, dict):
-        if model_options_dict:
-            options_str = "-" + "-".join(
-                [
-                    "%s=%s" % (slugify(k), slugify(str(v)))
-                    for k, v in model_options_dict.items()
-                ]
-            )
-        else:
-            options_str = ""
-    else:
-        raise ValueError("model_options should be a JSON dict")
 
-    embeddings_dir_path = Path(embeddings_dir).joinpath(module + options_str)
-    if not embeddings_dir_path.is_dir():
-        raise ValueError(
-            "Cannot locate directory containing embeddings. "
-            f"Ensure that directory named {embeddings_dir_path} exists."
-        )
-
-    # We only load this to get the embedding sizes.
-    # This is because there's no simple API for querying that.
-    # (And perhaps it is model specific anyway.)
-    module_clr = import_module(module)
-    # Load the model using the model weights path if they were provided
-    if model is not None:
-        print(f"Loading {module} using: {model}, {model_options_dict}")
-        model_obj = module_clr.load_model(model, **model_options_dict)  # type: ignore
-    else:
-        print(f"Loading {module} using: {model}, {model_options_dict}")
-        model_obj = module_clr.load_model("", **model_options_dict)  # type: ignore
-    scene_embedding_size = model_obj.scene_embedding_size
-    timestamp_embedding_size = model_obj.timestamp_embedding_size
-    # Free model obj
-    model_obj = None
-
-    if task == "all":
-        tasks = list(embeddings_dir_path.iterdir())
-    else:
-        tasks = [embeddings_dir_path.joinpath(task)]
-        assert os.path.exists(tasks[0]), f"{tasks[0]} does not exist"
-    random.shuffle(tasks)
-    for task_path in tqdm(tasks):
+    # TODO: Come up with consistent terminology for task_path / task_embeddings
+    # TODO: Shuffle paths?
+    # TODO: Don't redo work
+    for task_dir in tqdm(list(glob.glob(task_embeddings))):
+        task_path = Path(task_dir)
         print(f"Computing predictions for {task_path.name}")
+        if not task_path.is_dir():
+            raise ValueError(
+                f"{task_path} from --task_embeddings '{task_embeddings}' should be a directory"
+            )
+
+        train_embedding_dimensions = task_path.joinpath(
+            "train.embedding-dimensions.json"
+        )
+        if not train_embedding_dimensions.exists():
+            raise ValueError(f"{train_embedding_dimensions} does not exist")
+
+        embedding_size = json.load(open(train_embedding_dimensions))[1]
+        if (
+            embedding_size
+            != json.load(open(task_path.joinpath("valid.embedding-dimensions.json")))[1]
+            or embedding_size
+            != json.load(open(task_path.joinpath("test.embedding-dimensions.json")))[1]
+        ):
+            raise ValueError(f"Embedding dimension mismatch among JSON files")
+
         task_predictions(
             embedding_path=task_path,
-            scene_embedding_size=scene_embedding_size,
-            timestamp_embedding_size=timestamp_embedding_size,
+            embedding_size=embedding_size,
             grid_points=grid_points,
             gpus=gpus,
             in_memory=in_memory,

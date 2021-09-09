@@ -864,8 +864,7 @@ def hparams_to_json(hparams):
 
 def task_predictions(
     embedding_path: Path,
-    scene_embedding_size: int,
-    timestamp_embedding_size: int,
+    embedding_size: int,
     grid_points: int,
     gpus: Optional[int],
     in_memory: bool,
@@ -887,13 +886,6 @@ def task_predictions(
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
     # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
-
-    if metadata["embedding_type"] == "scene":
-        embedding_size = scene_embedding_size
-    elif metadata["embedding_type"] == "event":
-        embedding_size = timestamp_embedding_size
-    else:
-        raise ValueError(f"Unknown embedding type {metadata['embedding_type']}")
 
     label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
     scores = [
