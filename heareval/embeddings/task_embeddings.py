@@ -372,7 +372,12 @@ def memmap_embeddings(
         ).write(json.dumps(filename_timestamps, indent=4))
 
 
-def task_embeddings(embedding: Embedding, task_path: Path, embed_task_dir: Path):
+def task_embeddings(
+    embedding: Embedding,
+    task_path: Path,
+    embed_task_dir: Path,
+    splits: List[str] = SPLITS,
+):
     prng = random.Random()
     prng.seed(0)
 
@@ -390,7 +395,7 @@ def task_embeddings(embedding: Embedding, task_path: Path, embed_task_dir: Path)
     shutil.copy(metadata_path, embed_task_dir)
     shutil.copy(label_vocab_path, embed_task_dir)
 
-    for split in SPLITS:
+    for split in splits:
         print(f"Getting embeddings for split: {split}")
 
         split_path = task_path.joinpath(f"{split}.json")

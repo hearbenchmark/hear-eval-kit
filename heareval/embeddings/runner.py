@@ -45,6 +45,12 @@ if torch.cuda.is_available() and not tf.test.is_gpu_available(
     type=str,
 )
 @click.option(
+    "--split",
+    default=None,
+    help="Split to run. (Default: None, i.e. all)",
+    type=str,
+)
+@click.option(
     "--embeddings-dir", default="embeddings", help="Location to save task embeddings"
 )
 @click.option(
@@ -55,6 +61,7 @@ def runner(
     model: str = None,
     tasks_dir: str = "tasks",
     task: str = "tasks",
+    split: Optional[str] = None,
     embeddings_dir: str = "embeddings",
     model_options: str = "{}",
 ) -> None:
@@ -110,16 +117,21 @@ def runner(
         start = time.time()
         gpu_max_mem.reset()
 
-        task_embeddings(embedding, task_path, embed_task_dir)
+        if split == None:
+            task_embeddings(embedding, task_path, embed_task_dir)
+        else:
+            task_embeddings(embedding, task_path, embed_task_dir, splits=[split])
 
         time_elapsed = time.time() - start
         gpu_max_mem_used = gpu_max_mem.measure()
         print(
             f"...computed embeddings in {time_elapsed} sec "
             f"(GPU max mem {gpu_max_mem_used}) "
-            f"for {task_path.name} using {module} {model_options}"
+            f"for {task_path.name} (split {split}) using {module} {model_options}"
         )
-        open(embed_task_dir.joinpath("profile.embeddings.json"), "wt").write(
+        open(
+            embed_task_dir.joinpath(f"profile.embeddings-split{split}.json"), "wt"
+        ).write(
             json.dumps(
                 {
                     "time_elapsed": time_elapsed,
