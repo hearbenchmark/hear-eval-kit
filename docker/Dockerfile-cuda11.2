@@ -288,7 +288,7 @@ RUN cd hear-baseline && \
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
-    $GIT_CLONE https://github.com/neuralaudio/hear-eval-kit.git
+    $GIT_CLONE -b v2021.0.3 https://github.com/neuralaudio/hear-eval-kit.git
 RUN cd hear-eval-kit && \
     python -m pip --no-cache-dir install -e ".[dev]"
 

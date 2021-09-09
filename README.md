@@ -4,16 +4,47 @@
 Evaluation kit for HEAR 2021 NeurIPS competition, using tasks from
 [hear-preprocess](https://github.com/neuralaudio/hear-preprocess).
 
-## Installation
+If you have any questions or comments:
+* 
 
-```
-pip3 install heareval
-```
+Summary:
+* Embedding
+* Prediction + evaluation. Speed only dependent upon embedding size (with GPUs its non-linear) and hopsize (only for events).
+[also, max_epochs + grid points]
+
+[multi GPU], single GPU, how to specify the GPU you want.
+
+Where to find CSVs.
+
+ignore messages about:
+Warning: Leaking Caffe2 thread-pool after fork. (function pthreadpool)
+
+TF and Torch versions.
+
+RAM requirements.
+
+GPU memory requirements.
+
+You are welcome to futz with stuff but this is all known to work
+on the following setup, which is the canonical setup:
+
+
+## Requirements
 
 Tested with Python 3.7 and 3.8. Python 3.9 is not officially supported
 because pip3 installs are very finicky, but it might work.
 
 ## Quickstart
+
+Here is a simple quickstart to evaluate the naive `hearbaseline`. It isn't guaranteed to use your GPU. More detailed instructions are below. If you have any questions
+
+```
+
+## Installation
+
+```
+pip3 install heareval
+```
 
 ## Evaluation
 
@@ -50,6 +81,9 @@ Please refer to `README.spotty` for more details.
 google cloud
 
 HTTP
+
+[how to stop and restart, continuing where you left off, how to clean]
+[lightning_logs, etc.]
 
 ### Computing embeddings
 
