@@ -27,12 +27,6 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 @click.option(
-    "--task",
-    default="all",
-    help="Task to run. (Default: all)",
-    type=str,
-)
-@click.option(
     "--grid-points",
     default=8,
     help="Number of grid points for randomized grid search "

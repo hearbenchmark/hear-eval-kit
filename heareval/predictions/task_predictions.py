@@ -35,6 +35,7 @@ import torchinfo
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
 from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
@@ -58,8 +59,9 @@ PARAM_GRID = {
     # "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
     "patience": [20],
-    "max_epochs": [500],
-    "check_val_every_n_epoch": [10],
+    #    "max_epochs": [500],
+    "max_epochs": [5],
+    "check_val_every_n_epoch": [1],
     # "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
@@ -317,7 +319,7 @@ class ScenePredictionModel(AbstractPredictionModel):
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
         for score_name in end_scores:
-            self.log(score_name, end_scores[score_name], prog_bar=True)
+            self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
 
 
 class EventPredictionModel(AbstractPredictionModel):
@@ -407,6 +409,7 @@ class EventPredictionModel(AbstractPredictionModel):
         best_postprocessing = score_and_postprocessing[0][1]
         if name == "val":
             print("BEST POSTPROCESSING", best_postprocessing)
+            # self.log("postprocessing", {k: v for k, v in best_postprocessing}, logger=True)
             self.epoch_best_postprocessing[epoch] = best_postprocessing
         predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
@@ -428,7 +431,7 @@ class EventPredictionModel(AbstractPredictionModel):
                 end_scores[f"{name}_{score}"] = 0.0
 
         for score_name in end_scores:
-            self.log(score_name, end_scores[score_name], prog_bar=True)
+            self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
 
 
 class SplitMemmapDataset(Dataset):
@@ -793,6 +796,9 @@ def task_predictions_train(
         mode=mode,
     )
 
+    logger = CSVLogger(Path("logs").joinpath(embedding_path))
+    logger.log_hyperparams(hparams_to_json(conf))
+
     # Try also pytorch profiler
     # profiler = pl.profiler.AdvancedProfiler(output_filename="predictions-profile.txt")
     trainer = pl.Trainer(
@@ -805,6 +811,7 @@ def task_predictions_train(
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
+        logger=logger,
     )
     train_dataloader = dataloader_from_split_name(
         "train",
@@ -835,6 +842,10 @@ def task_predictions_train(
             best_postprocessing = predictor.epoch_best_postprocessing[epoch]
         else:
             best_postprocessing = []
+        # TODO: Postprocessing
+        logger.log_metrics({"time_in_min", time_in_min})
+        logger.finalize()
+        logger.save()
         return GridPointResult(
             model_path=checkpoint_callback.best_model_path,
             epoch=epoch,
