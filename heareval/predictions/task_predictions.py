@@ -317,7 +317,9 @@ class ScenePredictionModel(AbstractPredictionModel):
             end_scores[f"{name}_{score}"] = score(
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
-        self.log({f"{name}_score": end_scores[self.scores[0]]}, logger=True)
+        self.log(
+            f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
+        )
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
 
@@ -429,7 +431,9 @@ class EventPredictionModel(AbstractPredictionModel):
             # Weird, this can happen if precision has zero guesses
             if math.isnan(end_scores[f"{name}_{score}"]):
                 end_scores[f"{name}_{score}"] = 0.0
-        self.log({f"{name}_score": end_scores[self.scores[0]]}, logger=True)
+        self.log(
+            f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
+        )
 
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
