@@ -41,9 +41,9 @@ from heareval.predictions.task_predictions import task_predictions
 )
 @click.option(
     "--grid-points",
-    default=1,
+    default=8,
     help="Number of grid points for randomized grid search "
-    "model selection. (Default: 1)",
+    "model selection. (Default: 8)",
     type=click.INT,
 )
 @click.option(
@@ -80,7 +80,7 @@ def runner(
     embeddings_dir: str = "embeddings",
     model: Optional[str] = None,
     task: str = "all",
-    grid_points: int = 1,
+    grid_points: int = 8,
     model_options: str = "{}",
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     in_memory: bool = True,
