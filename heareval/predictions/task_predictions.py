@@ -928,7 +928,9 @@ def task_predictions(
     def print_scores(grid_point_results: List[GridPointResult]):
         sort_grid_points(grid_point_results)
         for g in grid_point_results:
-            print(g.validation_score, g.epoch, g.hparams, g.postprocessing)
+            print(
+                g.validation_score, g.epoch, g.hparams, g.postprocessing, embedding_path
+            )
 
     grid_point_results = []
     # Model selection
@@ -966,6 +968,7 @@ def task_predictions(
         "Best validation score",
         best_grid_point.validation_score,
         best_grid_point.hparams,
+        embedding_path,
     )
     print(best_grid_point.model_path)
 
