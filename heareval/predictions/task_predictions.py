@@ -59,9 +59,8 @@ PARAM_GRID = {
     # "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
     "patience": [20],
-    #    "max_epochs": [500],
-    "max_epochs": [5],
-    "check_val_every_n_epoch": [1],
+    "max_epochs": [500],
+    "check_val_every_n_epoch": [10],
     # "check_val_every_n_epoch": [1, 3, 10],
     "batch_size": [1024, 2048, 4096, 8192],
     "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
@@ -318,6 +317,7 @@ class ScenePredictionModel(AbstractPredictionModel):
             end_scores[f"{name}_{score}"] = score(
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
+        self.log({f"{name}_score": end_scores[self.scores[0]]}, logger=True)
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
 
@@ -429,6 +429,7 @@ class EventPredictionModel(AbstractPredictionModel):
             # Weird, this can happen if precision has zero guesses
             if math.isnan(end_scores[f"{name}_{score}"]):
                 end_scores[f"{name}_{score}"] = 0.0
+        self.log({f"{name}_score": end_scores[self.scores[0]]}, logger=True)
 
         for score_name in end_scores:
             self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
@@ -843,8 +844,8 @@ def task_predictions_train(
         else:
             best_postprocessing = []
         # TODO: Postprocessing
-        logger.log_metrics({"time_in_min", time_in_min})
-        logger.finalize()
+        logger.log_metrics({"time_in_min": time_in_min})
+        logger.finalize("success")
         logger.save()
         return GridPointResult(
             model_path=checkpoint_callback.best_model_path,

@@ -9,7 +9,7 @@ import json
 import os
 import random
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, List, Tuple, Optional
 
 import click
 import torch
@@ -20,11 +20,10 @@ from heareval.predictions.task_predictions import task_predictions
 
 
 @click.command()
-@click.option(
-    "--task-embeddings",
-    default="embeddings/*/*",
-    help="Task embeddings to predict over, as a directory or a glob. (Default: 'embeddings/*/*')",
-    type=str,
+@click.argument(
+    "task_dirs",
+    nargs=-1,
+    required=True,
 )
 @click.option(
     "--grid-points",
@@ -60,8 +59,7 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 def runner(
-    task_embeddings: str = "embeddings/*/*",
-    task: str = "all",
+    task_dirs: Tuple[str],
     grid_points: int = 8,
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     in_memory: bool = True,
@@ -71,10 +69,11 @@ def runner(
     if gpus is not None:
         gpus = json.loads(gpus)
 
-    # TODO: Come up with consistent terminology for task_path / task_embeddings
     # TODO: Shuffle paths?
     # TODO: Don't redo work
-    for task_dir in tqdm(list(glob.glob(task_embeddings))):
+    task_dirs = list(task_dirs)
+    random.shuffle(task_dirs)
+    for task_dir in tqdm(task_dirs):
         task_path = Path(task_dir)
         print(f"Computing predictions for {task_path.name}")
         if not task_path.is_dir():
