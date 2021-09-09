@@ -929,7 +929,15 @@ def task_predictions(
         sort_grid_points(grid_point_results)
         for g in grid_point_results:
             print(
-                g.validation_score, g.epoch, g.hparams, g.postprocessing, embedding_path
+                json.dumps(
+                    (
+                        g.validation_score,
+                        g.epoch,
+                        hparams_to_json(g.hparams),
+                        g.postprocessing,
+                        str(embedding_path),
+                    )
+                )
             )
 
     grid_point_results = []
