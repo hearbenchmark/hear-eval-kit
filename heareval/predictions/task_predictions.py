@@ -411,7 +411,8 @@ class EventPredictionModel(AbstractPredictionModel):
         best_postprocessing = score_and_postprocessing[0][1]
         if name == "val":
             print("BEST POSTPROCESSING", best_postprocessing)
-            # self.log("postprocessing", {k: v for k, v in best_postprocessing}, logger=True)
+            for k, v in best_postprocessing:
+                self.log(f"postprocessing/{k}", v, logger=True)
             self.epoch_best_postprocessing[epoch] = best_postprocessing
         predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
@@ -707,14 +708,17 @@ def dataloader_from_split_name(
         # We are disk bound, so multiple workers might cause thrashing
         num_workers = 0
 
+    if in_memory == True and split_name == "train":
+        shuffle = True
+    else:
+        # We don't shuffle if we are memmap'ing from disk
+        # We don't shuffle validation and test, to maintain the order
+        # of the event metadata
+        shuffle = False
     return DataLoader(
         dataset,
         batch_size=batch_size,
-        # We don't shuffle because it's slow
-        # (except when in_memory = True).
-        # Also we want predicted labels in the same order as
-        # target labels, for validation and test.
-        shuffle=False,
+        shuffle=shuffle,
         pin_memory=True,
         num_workers=num_workers,
     )
