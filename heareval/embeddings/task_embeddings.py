@@ -376,7 +376,6 @@ def task_embeddings(
     embedding: Embedding,
     task_path: Path,
     embed_task_dir: Path,
-    splits: List[str] = SPLITS,
 ):
     prng = random.Random()
     prng.seed(0)
