@@ -394,7 +394,7 @@ def task_embeddings(
     shutil.copy(metadata_path, embed_task_dir)
     shutil.copy(label_vocab_path, embed_task_dir)
 
-    for split in splits:
+    for split in SPLITS:
         print(f"Getting embeddings for split: {split}")
 
         split_path = task_path.joinpath(f"{split}.json")

@@ -48,24 +48,46 @@ from heareval.score import (
     label_vocab_as_dict,
 )
 
+
+TASK_SPECIFIC_PARAM_GRID = {
+    "dcase2016_task2": {
+        # sed_eval is very slow
+        "check_val_every_n_epoch": [10],
+    }
+}
+
 PARAM_GRID = {
     "hidden_layers": [1, 2],
     # "hidden_layers": [0, 1, 2],
-    # "hidden_layers": [0, 1, 2, 3],
+    # "hidden_layers": [1, 2, 3],
+    "hidden_dim": [1024],
     # "hidden_dim": [256, 512, 1024],
-    "hidden_dim": [1024, 512],
-    "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    # "hidden_dim": [1024, 512],
+    # Encourage 0.5
+    "dropout": [0.1],
+    # "dropout": [0.1, 0.3],
+    # "dropout": [0.1, 0.3, 0.5],
+    # "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+    # "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
     "lr": [3.2e-3, 1e-3, 3.2e-4, 1e-4],
+    # "lr": [3.2e-3, 1e-3, 3.2e-4, 1e-4, 3.2e-5, 1e-5],
     # "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
     "patience": [20],
     "max_epochs": [500],
-    "check_val_every_n_epoch": [10],
+    # "max_epochs": [500, 1000],
+    "check_val_every_n_epoch": [3],
     # "check_val_every_n_epoch": [1, 3, 10],
-    "batch_size": [1024, 2048, 4096, 8192],
-    "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
-    "norm_after_activation": [False, True],
-    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d],
+    "batch_size": [1024],
+    # "batch_size": [1024, 2048],
+    # "batch_size": [256, 512, 1024],
+    # "batch_size": [256, 512, 1024, 2048, 4096, 8192],
+    "hidden_norm": [torch.nn.BatchNorm1d],
+    # "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "norm_after_activation": [False],
+    # "norm_after_activation": [False, True],
+    "embedding_norm": [torch.nn.Identity],
+    # "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d],
     # "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
     "optim": [torch.optim.Adam],
@@ -944,16 +966,18 @@ def task_predictions(
                 )
             )
 
+    if grid == "default":
+        final_grid = copy.copy(PARAM_GRID)
+    elif grid == "fast":
+        final_grid = copy.copy(FAST_PARAM_GRID)
+    elif grid == "faster":
+        final_grid = copy.copy(FASTER_PARAM_GRID)
+    if metadata["task_name"] in TASK_SPECIFIC_PARAM_GRID:
+        final_grid.update(TASK_SPECIFIC_PARAM_GRID[metadata["task_name"]])
+
     grid_point_results = []
     # Model selection
-    if grid == "default":
-        confs = list(ParameterGrid(PARAM_GRID))
-    elif grid == "fast":
-        confs = list(ParameterGrid(FAST_PARAM_GRID))
-    elif grid == "faster":
-        confs = list(ParameterGrid(FASTER_PARAM_GRID))
-    else:
-        raise ValueError(f"grid {grid} unknown")
+    confs = list(ParameterGrid(final_grid))
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         grid_point_result = task_predictions_train(
