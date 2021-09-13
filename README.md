@@ -22,19 +22,6 @@ If you have any questions or comments:
 * Post on the [discussion board](discuss.neuralaudio.ai/).
 * [Email us](mailto:deep at neuralaudio dot ai).
 
-Where to find CSVs.
-
-[multi GPU], single GPU, how to specify the GPU you want.
-
-ignore messages about:
-Warning: Leaking Caffe2 thread-pool after fork. (function pthreadpool)
-
-# Hack to get tf 2.4.2 to play nice with CUDA 11.2
-# https://medium.com/mlearning-ai/tensorflow-2-4-with-cuda-11-2-gpu-training-fix-87f205215419
-RUN ln -s /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.10
-ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/cuda-11.2/targets/x86_64-linux/lib"
-
-
 ## Requirements
 
 Tested with Python 3.7 and 3.8. Python 3.9 is not officially supported
@@ -163,6 +150,9 @@ into CPU memory, for speed of training.
 Logs will be sent to stdout and concise logs will be in `logs/`.
 If you run this multiple times, it should be deterministic, but will
 always start from scratch.
+
+Ignore warnings about `Leaking Caffe2 thread-pool after fork`, this
+is a known torch bug.
 
 More advanced flags allow different downstream training regimes
 
