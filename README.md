@@ -10,12 +10,7 @@ steps:
 * computing audio embeddings
 * learning a shallow fully-connected predictor
 The first step's speed depends upon a variety of factors.
-The second step step's speed is relatively similar between models.
-Models with larger embeddings scale sub-linearly in training time
-(because of GPU optimizations) and linearly in hop-size (for
-event-based prediction tasks). The main hyperparameters controlling
-downstream training time are the maximum number of epochs and number
-of grid points for grid search.
+The second step's speed is relatively similar between models.
 
 If you have any questions or comments:
 * File an [issue](github.com/neuralaudio/hear-eval-kit/issues).
@@ -32,7 +27,7 @@ Tensorflow 2.4.2 using the hack described in the [Dockerfile
 README](docker/README.md). We use CUDA 11.2. Other versions are
 possible, please contact us.
 
-We test on 16GB GPUs GCP GPUs.
+We test on 16GB GCP GPUs.
 
 ## Quickstart
 
@@ -99,9 +94,9 @@ gsutil -m cp gs://hear2021/open-tasks/hear-2021.0.3-*-{SAMPLE_RATE}.gz . && for 
 where `SAMPLE_RATE` in `{16000, 20050, 32000, 44100, 48000}`  is
 the sample rate your model desires.
 
-If you are downloading from HTTPS, please one download open tasks
-once and mirror them internally, because cloud downloads are expensive
-for us. We are looking for longer-term hosting options.
+If you are downloading from HTTPS, please only download open
+tasks once and mirror them internally, because cloud downloads are
+expensive for us. We are looking for longer-term hosting options.
 
 Download:
 ```
@@ -125,6 +120,7 @@ Untar all the files.
 ```
 time python3 -m heareval.embeddings.runner MODULE_NAME --model WEIGHTS_FILE --tasks-dir hear-2021.0.3/tasks/
 ```
+where `MODULE_NAME` is your embedding model name.
 
 This will create directories `embeddings/MODULE_NAME/TASK/` with
 your embeddings. If you run the above command multiple times, it
@@ -156,6 +152,14 @@ Ignore warnings about `Leaking Caffe2 thread-pool after fork`, this
 is a known torch bug.
 
 More advanced flags allow different downstream training regimes
+
+## Note on Speed
+
+Models with larger embeddings scale sub-linearly in training time
+(because of GPU optimizations) and linearly in hop-size (for
+event-based prediction tasks). The main hyperparameters controlling
+downstream training time are the maximum number of epochs and number
+of grid points for grid search.
 
 ## Development
 

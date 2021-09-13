@@ -119,7 +119,7 @@ def runner(
             f"(GPU max mem {gpu_max_mem_used}) "
             f"for {task_path.name} using {module} {model_options}"
         )
-        open(embed_task_dir.joinpath(f"profile.embeddings.json"), "wt").write(
+        open(embed_task_dir.joinpath("profile.embeddings.json"), "wt").write(
             json.dumps(
                 {
                     "time_elapsed": time_elapsed,
