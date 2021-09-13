@@ -1,29 +1,15 @@
-# Unfortunately, dockerhub won't integrate with github unless we
-# pay, so just run this manually each time you update the Dockerfile:
-# docker build -t turian/heareval . && docker push turian/heareval
+# pypi stable version of all HEAR packages.
 
-# 1.19.2 numpy for tf 2.6.0
-
-# We downgrade from GCP CUDA 11.0 to Docker CUDA 10.2, so we can
-# install pre-built pytorch 1.9 easily
-#
-# Ah shit: TF 2.6 wants cudnn 8.1 and CUDA 11.2
-# https://www.tensorflow.org/install/source#gpu
-
-
-# deepo: python3 generate.py --cuda-ver 10.2 --cudnn-ver 7 --ubuntu-ver 18.04 Dockerfile pytorch tensorflow keras python==3.7
 # ==================================================================
 # module list
 # ------------------------------------------------------------------
 # python        3.7    (apt)
-# pytorch       latest (pip)
+# pytorch       latest (docker)
 # tensorflow    latest (pip)
 # keras         latest (pip)
 # ==================================================================
 
-FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
-#FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu18.04
-#FROM nvidia/cuda:11.0-cudnn8-devel-ubuntu18.04
+FROM nvidia/cuda:11.2.0-cudnn8-devel-ubuntu18.04
 
 ENV LANG C.UTF-8
 
@@ -49,26 +35,15 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         git \
         vim \
         libssl-dev \
-        curl
-
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    DEBIAN_FRONTEND=noninteractive $APT_INSTALL \
-        unzip unrar
+        curl \
+        bc \
+        less \
+        locate \
+        unzip \
+        unrar
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q
 
-#RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-#    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-#    GIT_CLONE="git clone --depth 10" && \
-#
-#    $GIT_CLONE https://github.com/Kitware/CMake ~/cmake && \
-#    cd ~/cmake && \
-#    ./bootstrap && \
-#    make -j"$(nproc)" install
-    #make -j"$(nproc)" install && \
-    
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
@@ -136,19 +111,23 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
         typing \
         && \
     $PIP_INSTALL \
-        # deepo installs nightly CPU version
-        # TODO: CUDA 11.0 only is supported by torch <= 1.7.1.
-        # We want torch 1.9.0. BUT, GCP images only seem to be 11.0.
-        # So we downgrade to CUDA 10.2 in this Docker
-        torch torchvision torchaudio
+        --pre torch torchvision -f \
+        https://download.pytorch.org/whl/nightly/cu112/torch_nightly.html
 
 # ==================================================================
 # tensorflow
 # ------------------------------------------------------------------
 
-RUN wget https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-2.6.0-cp37-cp37m-manylinux2010_x86_64.whl && \
-        python -m pip --no-cache-dir install --upgrade tensorflow_gpu-2.6.0-cp37-cp37m-manylinux2010_x86_64.whl && \
-        rm tensorflow_gpu-2.6.0-cp37-cp37m-manylinux2010_x86_64.whl
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $PIP_INSTALL \
+        tensorflow-gpu
+
+# Hack to get tf 2.4.2 to play nice with CUDA 11.2
+# https://medium.com/mlearning-ai/tensorflow-2-4-with-cuda-11-2-gpu-training-fix-87f205215419
+RUN ln -s /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.10
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/cuda-11.2/targets/x86_64-linux/lib"
 
 # ==================================================================
 # keras
@@ -209,21 +188,6 @@ RUN update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm
 RUN update-alternatives --config llvm-config
 
 
-## Need this crap to get python 3.7 (or 3.8)
-## Might not need to add deadsnakes, since deepo has it already
-#RUN add-apt-repository ppa:deadsnakes/ppa
-#RUN $APT_INSTALL python3.7 python3.7-dev
-#RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
-##RUN $APT_INSTALL python3.8 python3.8-dev
-##RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 3
-#RUN $APT_INSTALL python3-pip cython
-##RUN update-alternatives  --set python3  /usr/bin/python3.7
-#
-## Is this right?
-## https://askubuntu.com/questions/1229095/modulenotfounderror-no-module-named-apt-pkg-after-installing-python-3-7
-#RUN update-alternatives --remove-all python3
-#RUN ln -sf /usr/bin/python3.6 /usr/bin/python3
-
 # For ffmpeg >= 4.2
 # Could also build from source:
 # https://github.com/jrottenberg/ffmpeg/blob/master/docker-images/4.3/ubuntu1804/Dockerfile
@@ -234,13 +198,16 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     GIT_CLONE="git clone --depth 10" && \
     $APT_INSTALL ffmpeg
 
-## add to bashrc:
-#alias python3=python3.7
-
-##RUN $APT_INSTALL python3-pandas
-#RUN python3 -m pip install numpy
-##pip3 install cython
-##pip3 install -e ".[dev]"
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $PIP_INSTALL cython ipython
+RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
+    PIP_INSTALL="python -m pip --no-cache-dir install" && \
+    GIT_CLONE="git clone --depth 10" && \
+    $PIP_INSTALL \
+        numpy==1.19.2 \
+        pynvml
 
 
 # gsutil
@@ -250,7 +217,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $APT_INSTALL apt-transport-https ca-certificates gnupg
-RUN curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+RUN wget -O - https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
 RUN apt-get update
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
@@ -258,33 +225,13 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     $APT_INSTALL google-cloud-sdk
 #gcloud init
 
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $PIP_INSTALL cython ipython
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $PIP_INSTALL \
-        numpy==1.19.2
-    #hearbaseline
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $GIT_CLONE https://github.com/neuralaudio/hear-baseline.git
-RUN cd hear-baseline && \
-    python -m pip --no-cache-dir install -e ".[dev]"
+# Install heareval pypi dependencies first, and after get the github versions,
+# because this makes it faster
+# to rebuild the docker if code changes but not dependencies
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
     GIT_CLONE="git clone --depth 10" && \
-    $GIT_CLONE https://github.com/neuralaudio/hear-eval-kit.git
-RUN cd hear-eval-kit && \
-    python -m pip --no-cache-dir install -e ".[dev]"
-
-RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-    GIT_CLONE="git clone --depth 10" && \
-    $APT_INSTALL less locate
+    $PIP_INSTALL hearbaseline hearvalidator heareval
 
 # THIS COMPLETE WACKNESS IS BECAUSE FUCKING dcase-util DEPENDS UPON librosa,
 # which is a gnarly PITA to install and get play nice with other packages.

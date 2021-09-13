@@ -35,6 +35,7 @@ import torchinfo
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
 from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
 from torch.utils.data import DataLoader, Dataset
@@ -47,24 +48,46 @@ from heareval.score import (
     label_vocab_as_dict,
 )
 
+TASK_SPECIFIC_PARAM_GRID = {
+    "dcase2016_task2": {
+        # sed_eval is very slow
+        "check_val_every_n_epoch": [10],
+    }
+}
+
 PARAM_GRID = {
     "hidden_layers": [1, 2],
     # "hidden_layers": [0, 1, 2],
-    # "hidden_layers": [0, 1, 2, 3],
+    # "hidden_layers": [1, 2, 3],
+    "hidden_dim": [1024],
     # "hidden_dim": [256, 512, 1024],
-    "hidden_dim": [1024, 512],
-    "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+    # "hidden_dim": [1024, 512],
+    # Encourage 0.5
+    "dropout": [0.1],
+    # "dropout": [0.1, 0.5],
+    # "dropout": [0.1, 0.3],
+    # "dropout": [0.1, 0.3, 0.5],
+    # "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+    # "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
     "lr": [3.2e-3, 1e-3, 3.2e-4, 1e-4],
+    # "lr": [3.2e-3, 1e-3, 3.2e-4, 1e-4, 3.2e-5, 1e-5],
     # "lr": [1e-2, 3.2e-3, 1e-3, 3.2e-4, 1e-4],
     # "lr": [1e-1, 1e-2, 1e-3, 1e-4, 1e-5],
     "patience": [20],
     "max_epochs": [500],
-    "check_val_every_n_epoch": [10],
+    # "max_epochs": [500, 1000],
+    "check_val_every_n_epoch": [3],
     # "check_val_every_n_epoch": [1, 3, 10],
-    "batch_size": [1024, 2048, 4096, 8192],
-    "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
-    "norm_after_activation": [False, True],
-    "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d],
+    "batch_size": [1024],
+    # "batch_size": [1024, 2048],
+    # "batch_size": [256, 512, 1024],
+    # "batch_size": [256, 512, 1024, 2048, 4096, 8192],
+    "hidden_norm": [torch.nn.BatchNorm1d],
+    # "hidden_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
+    "norm_after_activation": [False],
+    # "norm_after_activation": [False, True],
+    "embedding_norm": [torch.nn.Identity],
+    # "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d],
     # "embedding_norm": [torch.nn.Identity, torch.nn.BatchNorm1d, torch.nn.LayerNorm],
     "initialization": [torch.nn.init.xavier_uniform_, torch.nn.init.xavier_normal_],
     "optim": [torch.optim.Adam],
@@ -85,8 +108,8 @@ FASTER_PARAM_GRID.update(
         "hidden_layers": [0, 1],
         "hidden_dim": [64, 128],
         "patience": [1, 3],
-        "max_epochs": [3, 10],
-        "check_val_every_n_epoch": [1, 3],
+        "max_epochs": [10],
+        "check_val_every_n_epoch": [1],
     }
 )
 
@@ -316,8 +339,11 @@ class ScenePredictionModel(AbstractPredictionModel):
             end_scores[f"{name}_{score}"] = score(
                 prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
             )
+        self.log(
+            f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
+        )
         for score_name in end_scores:
-            self.log(score_name, end_scores[score_name], prog_bar=True)
+            self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
 
 
 class EventPredictionModel(AbstractPredictionModel):
@@ -407,6 +433,8 @@ class EventPredictionModel(AbstractPredictionModel):
         best_postprocessing = score_and_postprocessing[0][1]
         if name == "val":
             print("BEST POSTPROCESSING", best_postprocessing)
+            for k, v in best_postprocessing:
+                self.log(f"postprocessing/{k}", v, logger=True)
             self.epoch_best_postprocessing[epoch] = best_postprocessing
         predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
@@ -426,9 +454,12 @@ class EventPredictionModel(AbstractPredictionModel):
             # Weird, this can happen if precision has zero guesses
             if math.isnan(end_scores[f"{name}_{score}"]):
                 end_scores[f"{name}_{score}"] = 0.0
+        self.log(
+            f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
+        )
 
         for score_name in end_scores:
-            self.log(score_name, end_scores[score_name], prog_bar=True)
+            self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
 
 
 class SplitMemmapDataset(Dataset):
@@ -699,14 +730,17 @@ def dataloader_from_split_name(
         # We are disk bound, so multiple workers might cause thrashing
         num_workers = 0
 
+    if in_memory and split_name == "train":
+        shuffle = True
+    else:
+        # We don't shuffle if we are memmap'ing from disk
+        # We don't shuffle validation and test, to maintain the order
+        # of the event metadata
+        shuffle = False
     return DataLoader(
         dataset,
         batch_size=batch_size,
-        # We don't shuffle because it's slow
-        # (except when in_memory = True).
-        # Also we want predicted labels in the same order as
-        # target labels, for validation and test.
-        shuffle=False,
+        shuffle=shuffle,
         pin_memory=True,
         num_workers=num_workers,
     )
@@ -793,6 +827,9 @@ def task_predictions_train(
         mode=mode,
     )
 
+    logger = CSVLogger(Path("logs").joinpath(embedding_path))
+    logger.log_hyperparams(hparams_to_json(conf))
+
     # Try also pytorch profiler
     # profiler = pl.profiler.AdvancedProfiler(output_filename="predictions-profile.txt")
     trainer = pl.Trainer(
@@ -805,6 +842,7 @@ def task_predictions_train(
         # profiler=profiler,
         # profiler="pytorch",
         profiler="simple",
+        logger=logger,
     )
     train_dataloader = dataloader_from_split_name(
         "train",
@@ -835,6 +873,10 @@ def task_predictions_train(
             best_postprocessing = predictor.epoch_best_postprocessing[epoch]
         else:
             best_postprocessing = []
+        # TODO: Postprocessing
+        logger.log_metrics({"time_in_min": time_in_min})
+        logger.finalize("success")
+        logger.save()
         return GridPointResult(
             model_path=checkpoint_callback.best_model_path,
             epoch=epoch,
@@ -864,8 +906,7 @@ def hparams_to_json(hparams):
 
 def task_predictions(
     embedding_path: Path,
-    scene_embedding_size: int,
-    timestamp_embedding_size: int,
+    embedding_size: int,
     grid_points: int,
     gpus: Optional[int],
     in_memory: bool,
@@ -887,13 +928,6 @@ def task_predictions(
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
     # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
-
-    if metadata["embedding_type"] == "scene":
-        embedding_size = scene_embedding_size
-    elif metadata["embedding_type"] == "event":
-        embedding_size = timestamp_embedding_size
-    else:
-        raise ValueError(f"Unknown embedding type {metadata['embedding_type']}")
 
     label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
     scores = [
@@ -920,20 +954,33 @@ def task_predictions(
     def print_scores(grid_point_results: List[GridPointResult]):
         sort_grid_points(grid_point_results)
         for g in grid_point_results:
-            print(g.validation_score, g.epoch, g.hparams, g.postprocessing)
+            print(
+                json.dumps(
+                    (
+                        g.validation_score,
+                        g.epoch,
+                        hparams_to_json(g.hparams),
+                        g.postprocessing,
+                        str(embedding_path),
+                    )
+                )
+            )
+
+    if grid == "default":
+        final_grid = copy.copy(PARAM_GRID)
+    elif grid == "fast":
+        final_grid = copy.copy(FAST_PARAM_GRID)
+    elif grid == "faster":
+        final_grid = copy.copy(FASTER_PARAM_GRID)
+    if metadata["task_name"] in TASK_SPECIFIC_PARAM_GRID:
+        final_grid.update(TASK_SPECIFIC_PARAM_GRID[metadata["task_name"]])
 
     grid_point_results = []
     # Model selection
-    if grid == "default":
-        confs = list(ParameterGrid(PARAM_GRID))
-    elif grid == "fast":
-        confs = list(ParameterGrid(FAST_PARAM_GRID))
-    elif grid == "faster":
-        confs = list(ParameterGrid(FASTER_PARAM_GRID))
-    else:
-        raise ValueError(f"grid {grid} unknown")
+    confs = list(ParameterGrid(final_grid))
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
+        print("trying grid point", conf)
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -958,6 +1005,7 @@ def task_predictions(
         "Best validation score",
         best_grid_point.validation_score,
         best_grid_point.hparams,
+        embedding_path,
     )
     print(best_grid_point.model_path)
 

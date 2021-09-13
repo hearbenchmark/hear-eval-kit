@@ -36,4 +36,4 @@ jobs:
     - name: Downstream
       run: |
         python -m heareval.embeddings.runner hearbaseline --tasks-dir hear-20210906-2021.0.2/tasks/
-        python -m heareval.predictions.runner hearbaseline --grid faster
+        python -m heareval.predictions.runner embeddings/hearbaseline/nsynth_pitch-v2.2.3-small/ --grid faster --grid-points 1

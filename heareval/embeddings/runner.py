@@ -106,7 +106,6 @@ def runner(
         if os.path.exists(embed_task_dir):
             shutil.rmtree(embed_task_dir)
 
-        print(f"Computing embeddings for {task_path.name}")
         start = time.time()
         gpu_max_mem.reset()
 
