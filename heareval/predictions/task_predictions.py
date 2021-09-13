@@ -109,7 +109,7 @@ FASTER_PARAM_GRID.update(
         "hidden_dim": [64, 128],
         "patience": [1, 3],
         "max_epochs": [3, 10],
-        "check_val_every_n_epoch": [1, 3],
+        "check_val_every_n_epoch": [1],
     }
 )
 
