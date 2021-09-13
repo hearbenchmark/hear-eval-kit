@@ -96,8 +96,8 @@ If you are on GCP cloud, you can freely download open tasks as follows:
 ```
 gsutil -m cp gs://hear2021/open-tasks/hear-2021.0.3-*-{SAMPLE_RATE}.gz . && for f in hear-*.gz; do tar zxf "$f"; done
 ```
-
-where `SAMPLE_RATE` (48000, 44100, etc.) is the sample rate your model desires.
+where `SAMPLE_RATE` in `{16000, 20050, 32000, 44100, 48000}`  is
+the sample rate your model desires.
 
 If you are downloading from HTTPS, please one download open tasks
 once and mirror them internally, because cloud downloads are expensive
@@ -115,7 +115,8 @@ for the following tasks:
     speech_commands-v0.0.2-5h
     speech_commands-v0.0.2-full
 ```
-and for `SAMPLE_RATE` in `{16000, 20050, 32000, 44100, 48000}`.
+where `SAMPLE_RATE` in `{16000, 20050, 32000, 44100, 48000}` is the
+sample rate your model desires.
 
 Untar all the files.
 
