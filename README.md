@@ -14,9 +14,9 @@ The first step's speed depends upon a variety of factors.
 The second step's speed is relatively similar between models.
 
 If you have any questions or comments:
-* File an [issue](github.com/neuralaudio/hear-eval-kit/issues).
-* Post on the [discussion board](discuss.neuralaudio.ai/).
-* [Email us](mailto:deep at neuralaudio dot ai).
+* File an [issue](https://github.com/neuralaudio/hear-eval-kit/issues).
+* Post on the [discussion board](https://discuss.neuralaudio.ai/).
+* Email us (deep at neuralaudio dot ai).
 
 ## Requirements
 
