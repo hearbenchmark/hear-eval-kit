@@ -12,8 +12,6 @@ from multiprocessing import Pool, current_process
 import tqdm
 import os
 
-from models import model_opts
-
 gpus = torch.cuda.device_count()
 assert gpus < 10, "Otherwise, fix the code getting the GPU from current_process().name"
 
@@ -31,7 +29,6 @@ def runcmd(cmd):
 
 if __name__ == "__main__":
     cmds = sys.stdin.readlines()
-    random.shuffle(cmds)
     print(cmds)
     assert gpus
     with Pool(gpus) as p:

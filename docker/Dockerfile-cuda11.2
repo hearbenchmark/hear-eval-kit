@@ -1,10 +1,4 @@
-# Unfortunately, dockerhub won't integrate with github unless we
-# pay, so just run this manually each time you update the Dockerfile:
-# ./docker/build.sh
-
-# 1.19.2 numpy for tf 2.6.0
-
-# GCP CUDA is 11.0, but we use CUDA 11.2 to get latest TF
+# latest (git 'main') versions of all HEAR packages.
 
 # ==================================================================
 # module list
@@ -15,11 +9,7 @@
 # keras         latest (pip)
 # ==================================================================
 
-#FROM pytorch/pytorch:1.9.0-cuda11.1-cudnn8-devel
 FROM nvidia/cuda:11.2.0-cudnn8-devel-ubuntu18.04
-#FROM nvidia/cuda:10.2-cudnn7-devel-ubuntu18.04
-#FROM nvidia/cuda:11.0.3-cudnn8-devel-ubuntu18.04
-#FROM nvidia/cuda:11.0-cudnn8-devel-ubuntu18.04
 
 ENV LANG C.UTF-8
 
@@ -54,16 +44,6 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections && apt-get install -y -q
 
-#RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
-#    PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
-#    GIT_CLONE="git clone --depth 10" && \
-#
-#    $GIT_CLONE https://github.com/Kitware/CMake ~/cmake && \
-#    cd ~/cmake && \
-#    ./bootstrap && \
-#    make -j"$(nproc)" install
-    #make -j"$(nproc)" install && \
-    
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
@@ -208,21 +188,6 @@ RUN update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm
 RUN update-alternatives --config llvm-config
 
 
-## Need this crap to get python 3.7 (or 3.8)
-## Might not need to add deadsnakes, since deepo has it already
-#RUN add-apt-repository ppa:deadsnakes/ppa
-#RUN $APT_INSTALL python3.7 python3.7-dev
-#RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.7 2
-##RUN $APT_INSTALL python3.8 python3.8-dev
-##RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 3
-#RUN $APT_INSTALL python3-pip cython
-##RUN update-alternatives  --set python3  /usr/bin/python3.7
-#
-## Is this right?
-## https://askubuntu.com/questions/1229095/modulenotfounderror-no-module-named-apt-pkg-after-installing-python-3-7
-#RUN update-alternatives --remove-all python3
-#RUN ln -sf /usr/bin/python3.6 /usr/bin/python3
-
 # For ffmpeg >= 4.2
 # Could also build from source:
 # https://github.com/jrottenberg/ffmpeg/blob/master/docker-images/4.3/ubuntu1804/Dockerfile
@@ -232,14 +197,6 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
     GIT_CLONE="git clone --depth 10" && \
     $APT_INSTALL ffmpeg
-
-## add to bashrc:
-#alias python3=python3.7
-
-##RUN $APT_INSTALL python3-pandas
-#RUN python3 -m pip install numpy
-##pip3 install cython
-##pip3 install -e ".[dev]"
 
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install --upgrade" && \
@@ -277,7 +234,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     $PIP_INSTALL hearbaseline hearvalidator
 
 # Touch this to force a rebuild of everything below
-RUN echo 20210909
+RUN echo 20210912
 
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \

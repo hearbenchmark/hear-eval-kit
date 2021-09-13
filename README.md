@@ -4,20 +4,36 @@
 Evaluation kit for HEAR 2021 NeurIPS competition, using tasks from
 [hear-preprocess](https://github.com/neuralaudio/hear-preprocess).
 
+# hear-eval-kit
+Downstream evaluation on each task involves two
+steps:
+* computing audio embeddings
+* learning a shallow fully-connected predictor
+The first step's speed depends upon a variety of factors.
+The second step step's speed is relatively similar between models.
+Models with larger embeddings scale sub-linearly in training time
+(because of GPU optimizations) and linearly in hop-size (for
+event-based prediction tasks). The main hyperparameters controlling
+downstream training time are the maximum number of epochs and number
+of grid points for grid search.
+
 If you have any questions or comments:
-* 
-
-Summary:
-* Embedding
-* Prediction + evaluation. Speed only dependent upon embedding size (with GPUs its non-linear) and hopsize (only for events).
-[also, max_epochs + grid points]
-
-[multi GPU], single GPU, how to specify the GPU you want.
+* File an [issue](github.com/neuralaudio/hear-eval-kit/issues).
+* Post on the [discussion board](discuss.neuralaudio.ai/).
+* [Email us](mailto:deep at neuralaudio dot ai).
 
 Where to find CSVs.
 
+[multi GPU], single GPU, how to specify the GPU you want.
+
 ignore messages about:
 Warning: Leaking Caffe2 thread-pool after fork. (function pthreadpool)
+
+# Hack to get tf 2.4.2 to play nice with CUDA 11.2
+# https://medium.com/mlearning-ai/tensorflow-2-4-with-cuda-11-2-gpu-training-fix-87f205215419
+RUN ln -s /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.11 /usr/local/cuda-11.2/targets/x86_64-linux/lib/libcusolver.so.10
+ENV LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/usr/local/cuda-11.2/targets/x86_64-linux/lib"
+
 
 TF and Torch versions.
 
@@ -37,6 +53,8 @@ because pip3 installs are very finicky, but it might work.
 ## Quickstart
 
 Here is a simple quickstart to evaluate the naive `hearbaseline`. It isn't guaranteed to use your GPU. More detailed instructions are below. If you have any questions
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/googlecolab/colabtools/blob/master/notebooks/colab-github-demo.ipynb)
 
 ```
 

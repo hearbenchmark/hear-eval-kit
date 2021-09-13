@@ -65,6 +65,7 @@ PARAM_GRID = {
     # "hidden_dim": [1024, 512],
     # Encourage 0.5
     "dropout": [0.1],
+    # "dropout": [0.1, 0.5],
     # "dropout": [0.1, 0.3],
     # "dropout": [0.1, 0.3, 0.5],
     # "dropout": [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
@@ -980,6 +981,7 @@ def task_predictions(
     confs = list(ParameterGrid(final_grid))
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
+        print("trying grid point", conf)
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,

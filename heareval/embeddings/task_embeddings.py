@@ -180,7 +180,7 @@ class AudioFileDataset(Dataset):
     def __init__(self, data: Dict, audio_dir: Path, sample_rate: int):
         self.filenames = list(data.keys())
         self.audio_dir = audio_dir
-        assert self.audio_dir.is_dir()
+        assert self.audio_dir.is_dir(), f"{audio_dir} is not a directory"
         self.sample_rate = sample_rate
 
     def __len__(self):

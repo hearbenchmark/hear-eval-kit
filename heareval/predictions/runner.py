@@ -8,6 +8,8 @@ import glob
 import json
 import os
 import random
+import sys
+import time
 from pathlib import Path
 from typing import Any, List, Tuple, Optional
 
@@ -96,6 +98,7 @@ def runner(
         ):
             raise ValueError(f"Embedding dimension mismatch among JSON files")
 
+        start = time.time()
         task_predictions(
             embedding_path=task_path,
             embedding_size=embedding_size,
@@ -105,6 +108,11 @@ def runner(
             deterministic=deterministic,
             grid=grid,
         )
+        sys.stdout.flush()
+        print(
+            f"DONE. took {time.time() - start} seconds to complete task_predictions(embedding_path={task_path}, embedding_size={embedding_size}, grid_points={grid_points}, gpus={gpus}, in_memory={in_memory}, deterministic={deterministic}, grid={grid})"
+        )
+        sys.stdout.flush()
 
 
 if __name__ == "__main__":
