@@ -9,6 +9,7 @@ Downstream evaluation on each task involves two
 steps:
 * computing audio embeddings
 * learning a shallow fully-connected predictor
+
 The first step's speed depends upon a variety of factors.
 The second step's speed is relatively similar between models.
 
@@ -37,7 +38,6 @@ instructions are below.
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/master/heareval_quickstart.ipynb)
 
-```
 
 ## Installation
 
