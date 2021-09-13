@@ -3,14 +3,13 @@
 Given commands in sys.stdin (one per line), distribute them across GPUs.
 """
 
-import random
-import subprocess
-import time
-import sys
-import torch
-from multiprocessing import Pool, current_process
-import tqdm
 import os
+import sys
+import time
+from multiprocessing import Pool, current_process
+
+import torch
+import tqdm
 
 gpus = torch.cuda.device_count()
 assert gpus < 10, "Otherwise, fix the code getting the GPU from current_process().name"

@@ -48,7 +48,6 @@ from heareval.score import (
     label_vocab_as_dict,
 )
 
-
 TASK_SPECIFIC_PARAM_GRID = {
     "dcase2016_task2": {
         # sed_eval is very slow

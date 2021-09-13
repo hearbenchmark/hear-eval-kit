@@ -11,7 +11,7 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Optional, Tuple
 
 import click
 import torch
