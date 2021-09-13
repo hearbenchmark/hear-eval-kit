@@ -153,6 +153,9 @@ is a known torch bug.
 
 More advanced flags allow different downstream training regimes
 
+Final test scores are logged to stdout and also to
+`{EMBEDDINGS_DIR}/{MODULE_NAME}/{TASK_NAME}/test.predicted-scores.json`.
+
 ## Note on Speed
 
 Models with larger embeddings scale sub-linearly in training time
