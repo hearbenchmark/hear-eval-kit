@@ -730,7 +730,7 @@ def dataloader_from_split_name(
         # We are disk bound, so multiple workers might cause thrashing
         num_workers = 0
 
-    if in_memory == True and split_name == "train":
+    if in_memory and split_name == "train":
         shuffle = True
     else:
         # We don't shuffle if we are memmap'ing from disk

@@ -4,18 +4,14 @@ Downstream training, using embeddings as input features and learning
 predictions.
 """
 
-import glob
 import json
-import os
-import random
 import sys
 import time
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Tuple
 
 import click
 import torch
-from slugify import slugify
 from tqdm import tqdm
 
 from heareval.predictions.task_predictions import task_predictions
@@ -71,17 +67,12 @@ def runner(
     if gpus is not None:
         gpus = json.loads(gpus)
 
-    # TODO: Shuffle paths?
-    # TODO: Don't redo work
-    task_dirs = list(task_dirs)
-    random.shuffle(task_dirs)
+    # random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
         task_path = Path(task_dir)
         print(f"Computing predictions for {task_path.name}")
         if not task_path.is_dir():
-            raise ValueError(
-                f"{task_path} from --task_embeddings '{task_embeddings}' should be a directory"
-            )
+            raise ValueError(f"{task_path} should be a directory")
 
         train_embedding_dimensions = task_path.joinpath(
             "train.embedding-dimensions.json"
@@ -96,7 +87,7 @@ def runner(
             or embedding_size
             != json.load(open(task_path.joinpath("test.embedding-dimensions.json")))[1]
         ):
-            raise ValueError(f"Embedding dimension mismatch among JSON files")
+            raise ValueError("Embedding dimension mismatch among JSON files")
 
         start = time.time()
         task_predictions(
@@ -110,7 +101,10 @@ def runner(
         )
         sys.stdout.flush()
         print(
-            f"DONE. took {time.time() - start} seconds to complete task_predictions(embedding_path={task_path}, embedding_size={embedding_size}, grid_points={grid_points}, gpus={gpus}, in_memory={in_memory}, deterministic={deterministic}, grid={grid})"
+            f"DONE. took {time.time() - start} seconds to complete task_predictions"
+            f"(embedding_path={task_path}, embedding_size={embedding_size}, "
+            f"grid_points={grid_points}, gpus={gpus}, in_memory={in_memory}, "
+            f"deterministic={deterministic}, grid={grid})"
         )
         sys.stdout.flush()
 

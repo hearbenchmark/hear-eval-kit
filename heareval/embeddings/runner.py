@@ -8,7 +8,6 @@ import os
 import shutil
 import time
 from pathlib import Path
-from typing import Optional
 
 import click
 import tensorflow as tf
