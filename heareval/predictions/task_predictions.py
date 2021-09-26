@@ -38,7 +38,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, ConcatDataset
 from tqdm.auto import tqdm
 
 from heareval.score import (
@@ -477,7 +477,7 @@ class SplitMemmapDataset(Dataset):
         split_name: str,
         embedding_type: str,
         in_memory: bool,
-        metadata: bool,
+        metadata_req: bool,
     ):
         self.embedding_path = embedding_path
         self.label_to_idx = label_to_idx
@@ -506,7 +506,7 @@ class SplitMemmapDataset(Dataset):
         # Only used for event-based prediction, for validation and test scoring,
         # For timestamp (event) embedding tasks,
         # the metadata for each instance is {filename: , timestamp: }.
-        if self.embedding_type == "event" and metadata:
+        if self.embedding_type == "event" and metadata_req:
             filename_timestamps_json = embedding_path.joinpath(
                 f"{split_name}.filename-timestamps.json"
             )
@@ -706,7 +706,7 @@ def dataloader_from_split_name(
     nlabels: int,
     embedding_type: str,
     in_memory: bool,
-    metadata: bool = True,
+    metadata_req: bool = True,
     batch_size: int = 64,
 ) -> DataLoader:
     dataset = SplitMemmapDataset(
@@ -716,7 +716,7 @@ def dataloader_from_split_name(
         split_name=split_name,
         embedding_type=embedding_type,
         in_memory=in_memory,
-        metadata=metadata,
+        metadata_req=metadata_req,
     )
 
     print(
