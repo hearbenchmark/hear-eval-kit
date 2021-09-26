@@ -904,17 +904,18 @@ class GridPointResult:
 def task_predictions_train(
     embedding_path: Path,
     embedding_size: int,
-    grid_points: int,
     metadata: Dict[str, Any],
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
     conf: Dict,
     gpus: Any,
-    in_memory: bool,
     deterministic: bool,
-) -> GridPointResult:
+    train_dataloader,
+    valid_dataloader,
+) -> Union[GridPointResult, pl.Trainer]:
     start = time.time()
+
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
         validation_target_events = json.load(
@@ -943,22 +944,25 @@ def task_predictions_train(
     else:
         raise ValueError(f"Unknown embedding_type {metadata['embedding_type']}")
 
+    callbacks = []
     # First score is the target
     target_score = f"val_{str(scores[0])}"
-
     if scores[0].maximize:
         mode = "max"
     else:
         mode = "min"
     checkpoint_callback = ModelCheckpoint(monitor=target_score, mode=mode)
-    early_stop_callback = EarlyStopping(
-        monitor=target_score,
-        min_delta=0.00,
-        patience=conf["patience"],
-        check_on_train_epoch_end=False,
-        verbose=False,
-        mode=mode,
-    )
+    callbacks.append(checkpoint_callback)
+    if valid_dataloader is not None:
+        early_stop_callback = EarlyStopping(
+            monitor=target_score,
+            min_delta=0.00,
+            patience=conf["patience"],
+            check_on_train_epoch_end=False,
+            verbose=False,
+            mode=mode,
+        )
+        callbacks.append(early_stop_callback)
 
     logger = CSVLogger(Path("logs").joinpath(embedding_path))
     logger.log_hyperparams(hparams_to_json(conf))
@@ -966,7 +970,7 @@ def task_predictions_train(
     # Try also pytorch profiler
     # profiler = pl.profiler.AdvancedProfiler(output_filename="predictions-profile.txt")
     trainer = pl.Trainer(
-        callbacks=[checkpoint_callback, early_stop_callback],
+        callbacks=callbacks,
         gpus=gpus,
         check_val_every_n_epoch=conf["check_val_every_n_epoch"],
         max_epochs=conf["max_epochs"],
