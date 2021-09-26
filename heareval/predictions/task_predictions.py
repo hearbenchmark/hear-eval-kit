@@ -1124,26 +1124,118 @@ def task_predictions_grid_search(
     return best_grid_point
 
 
+def task_predictions(
+    embedding_path: Path,
+    embedding_size: int,
+    grid_points: int,
+    gpus: Optional[int],
+    in_memory: bool,
+    deterministic: bool,
+    grid: str,
+):
+    # By setting workers=True in seed_everything(), Lightning derives
+    # unique seeds across all dataloader workers and processes
+    # for torch, numpy and stdlib random number generators.
+    # Note that if you change the number of workers, determinism
+    # might change.
+    # However, it appears that workers=False does get deterministic
+    # results on 4 multi-worker jobs I ran, probably because our
+    # dataloader doesn't do any augmentation or use randomness.
+    if deterministic:
+        seed_everything(42, workers=False)
 
-    test_dataloader = dataloader_from_split_name(
-        "test",
-        embedding_path,
-        label_to_idx,
-        nlabels,
-        metadata["embedding_type"],
-        batch_size=conf["batch_size"],
+    # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
+
+    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    label_vocab, nlabels = label_vocab_nlabels(embedding_path)
+    label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
+    scores = [
+        available_scores[score](label_to_idx=label_to_idx)
+        for score in metadata["evaluation"]
+    ]
+    # get_partition_dataloaders will help in getting the dataloaders for the splits
+    # for each partition.
+    get_partition_dataloaders = GetPartitionDataLoaders(
+        metadata=metadata,
+        embedding_path=embedding_path,
+        label_to_idx=label_to_idx,
+        nlabels=nlabels,
+        embedding_type=metadata["embedding_type"],
         in_memory=in_memory,
     )
-    best_trainer = best_grid_point.trainer
-    # This hack is necessary because we use the best validation epoch to
-    # choose the event postprocessing
-    best_trainer.fit_loop.current_epoch = best_grid_point.epoch
 
-    test_results = best_trainer.test(
-        ckpt_path=best_grid_point.model_path, test_dataloaders=test_dataloader
+    # Do grid search by using the train split for training and the
+    # dev split for evaluating. In case multiple partitions are present,
+    # the best grid point is found only by using the first partition
+    best_grid_point = task_predictions_grid_search(
+        gpus=gpus,
+        deterministic=deterministic,
+        metadata=metadata,
+        embedding_path=embedding_path,
+        embedding_size=embedding_size,
+        grid_points=grid_points,
+        grid=grid,
+        nlabels=nlabels,
+        label_to_idx=label_to_idx,
+        scores=scores,
+        get_partition_dataloaders=get_partition_dataloaders,
     )
-    assert len(test_results) == 1, "Should have only one test dataloader"
-    test_results = test_results[0]
+    best_conf = best_grid_point.conf
+
+    # Train the model on the full train + dev set and do testing on test set for
+    # each partition
+    partition_dataloaders = get_partition_dataloaders(
+        batch_size=best_conf["batch_size"]
+    )
+    # If the data has no folds, the partition dataloaders should have a single key
+    # with the name single_fold
+    if metadata["mode"] == "folds":
+        set(partition_dataloaders.keys()) - {"single_fold"} == {}
+
+    partition_test_results: Dict[str, Dict] = {}
+    for partition_name, partition_dataloader in partition_dataloaders.items():
+        train_dataloader = partition_dataloader["train+val"]
+        test_dataloader = partition_dataloader["test"]
+        result = task_predictions_train(
+            embedding_path=embedding_path,
+            embedding_size=embedding_size,
+            grid_points=grid_points,
+            metadata=metadata,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            scores=scores,
+            conf=best_conf,
+            gpus=gpus,
+            in_memory=in_memory,
+            deterministic=deterministic,
+            train_dataloader=train_dataloader,
+            valid_dataloader=None,
+        )
+        trainer = result.trainer
+        # This hack is necessary because we use the best validation epoch to
+        # choose the event postprocessing
+        trainer.fit_loop.current_epoch = best_grid_point.epoch
+
+        partition_test_result = trainer.test(
+            ckpt_path=trainer.model_path, test_dataloaders=test_dataloader
+        )
+        assert len(partition_test_result) == 1, "Should have only one test dataloader"
+        partition_test_result = partition_test_result[0]
+
+        partition_test_results[partition_name] = partition_test_result
+
+    # If the data has no folds, the partition dataloaders should have a single key
+    # with the name `single_fold`
+    if metadata["mode"] == "folds":
+        set(partition_dataloaders.keys()) - {"single_fold"} == {}
+
+    if metadata["mode"] == "folds":
+        test_results = partition_test_results
+    else:
+        # In case the mode is not folds, there will be a single partition result
+        test_results = list(partition_test_results.values())[0]
+        assert "single_fold" in partition_test_results, "Data has no folds, "
+        "so the partition should only be single_fold"
 
     test_results.update(
         {
