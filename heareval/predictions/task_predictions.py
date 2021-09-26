@@ -888,6 +888,7 @@ class GridPointResult:
         trainer: pl.Trainer,
         validation_score: float,
         score_mode: str,
+        conf: Dict[str, Any],
     ):
         self.model_path = model_path
         self.epoch = epoch
@@ -897,6 +898,7 @@ class GridPointResult:
         self.trainer = trainer
         self.validation_score = validation_score
         self.score_mode = score_mode
+        self.conf = conf
 
 
 def task_predictions_train(
