@@ -981,26 +981,11 @@ def task_predictions_train(
         profiler="simple",
         logger=logger,
     )
-    train_dataloader = dataloader_from_split_name(
-        "train",
-        embedding_path,
-        label_to_idx,
-        nlabels,
-        metadata["embedding_type"],
-        batch_size=conf["batch_size"],
-        in_memory=in_memory,
-        metadata=False,
-    )
-    valid_dataloader = dataloader_from_split_name(
-        "valid",
-        embedding_path,
-        label_to_idx,
-        nlabels,
-        metadata["embedding_type"],
-        batch_size=conf["batch_size"],
-        in_memory=in_memory,
-    )
+
     trainer.fit(predictor, train_dataloader, valid_dataloader)
+    if valid_dataloader is not None:
+        return trainer
+
     if checkpoint_callback.best_model_score is not None:
         sys.stdout.flush()
         end = time.time()
@@ -1023,6 +1008,7 @@ def task_predictions_train(
             trainer=trainer,
             validation_score=checkpoint_callback.best_model_score.detach().cpu().item(),
             score_mode=mode,
+            conf=conf,
         )
     else:
         raise ValueError(
