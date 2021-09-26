@@ -746,6 +746,137 @@ def dataloader_from_split_name(
     )
 
 
+class GetPartitionDataLoaders:
+    def __init__(
+        self,
+        metadata: Dict[str, Any],
+        embedding_path: Path,
+        label_to_idx: Dict[str, int],
+        nlabels: int,
+        embedding_type: str,
+        in_memory: bool,
+        metadata_req: bool = True,
+    ):
+        self.metadata = metadata
+        self.embedding_path = embedding_path
+        self.label_to_idx = label_to_idx
+        self.nlabels = nlabels
+        self.embedding_type = embedding_type
+        self.in_memory = in_memory
+        self.metadata_req = metadata_req
+        if in_memory:
+            self.num_workers = NUM_WORKERS
+        else:
+            # We are disk bound, so multiple workers might cause thrashing
+            self.num_workers = 0
+
+        # Save already loaded datasets in this variable to avoid reloading datasets
+        # for constructing different sets
+        self.loaded_datasets = {}
+
+    def get_split_dataloader(
+        self, split: str, fold_names: List[str], batch_size: int
+    ) -> DataLoader:
+        """
+        Gets the dataloader of the split by loading data for each fold in
+        the split.
+        """
+
+        datasets: List[Dataset] = []
+        for fold_name in fold_names:
+            # If the dataset has already been loaded, rather than loading it again,
+            # fetch it from the loaded_datasets
+            if fold_name in self.loaded_datasets:
+                dataset = self.loaded_datasets[fold_name]
+            else:
+                dataset = SplitMemmapDataset(
+                    embedding_path=self.embedding_path,
+                    label_to_idx=self.label_to_idx,
+                    nlabels=self.nlabels,
+                    split_name=fold_name,
+                    embedding_type=self.embedding_type,
+                    in_memory=self.in_memory,
+                    metadata_req=self.metadata_req,
+                )
+                # Save a reference to the loaded dataset so that the dataset can be
+                # reused in another partition. This also helps to avoid loading
+                # the dataset again while geting dataloaders with different batch size
+                # during the grid search
+                self.loaded_datasets[fold_name] = dataset
+            datasets.append(dataset)
+
+        # Combine the datasets for the split and create the dataloader from the
+        # combined dataset
+        combined_dataset = ConcatDataset(datasets) if len(datasets) > 0 else datasets[0]
+        if self.in_memory and split in ["train", "train+dev"]:
+            shuffle = True
+        else:
+            # We don't shuffle if we are memmap'ing from disk
+            # We don't shuffle validation and test, to maintain the order
+            # of the event metadata
+            shuffle = False
+
+        return DataLoader(
+            combined_dataset,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            pin_memory=True,
+            num_workers=self.num_workers,
+        )
+
+    def get_partition_dataloaders(
+        self, batch_size: int = 64
+    ) -> List[Dict[str, DataLoader]]:
+        """
+        Generate the split dataloaders for each partition of the dataset.
+
+        If the data has multiple folds, each partition is Leave One Out Cross
+        Validation set i.e. one fold is used in the test split and all other
+        folds are used in the train+dev split.
+
+        If the data has no folds, and the test, train and valid sets are already
+        defined, a single partition with the name `no_folds` will be returned.
+        """
+        all_partition_folds: Dict[str, Dict[str, List[str]]] = {}
+        all_partition_dataloaders: List[str, Dict[str, DataLoader]] = {}
+        if self.metadata["mode"] == "folds":
+            num_folds = self.metadata["num_folds"]  # 4
+            folds = self.metadata["folds"]  # ["fold0", "fold1", "fold2", "fold3"]
+            for fold_idx in range(num_folds):
+                partition_name = f"fold_{fold_idx}"
+                test_fold = folds[fold_idx]
+                dev_fold = folds[(fold_idx + 1) % num_folds]
+                train_folds = set(folds) - {test_fold, dev_fold}
+                all_partition_folds[partition_name] = {
+                    "train": train_folds,
+                    "dev": [dev_fold],
+                    "train+dev": train_folds + [dev_fold],
+                    "test": [test_fold],
+                }
+                assert not train_folds.intersection(
+                    {test_fold, dev_fold}
+                ), "Train folds are not distinct from the dev and the test folds"
+        else:
+            # If the mode of dataset is not folds, make only one partition and
+            # the name of the partition is no_folds
+            all_partition_folds["single_fold"] = {
+                "train": ["train"],
+                "dev": ["valid"],
+                "train+dev": ["train", "valid"],
+                "test": ["test"],
+            }
+
+        all_partition_dataloaders = {
+            partition_name: {
+                split: self.get_split_dataloader(split, fold_names, batch_size)
+                for split, fold_names in partition_folds.items()
+            }
+            for partition_name, partition_folds in all_partition_folds.items()
+        }
+
+        return all_partition_dataloaders
+
+
 class GridPointResult:
     def __init__(
         self,
