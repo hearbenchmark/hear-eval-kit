@@ -1027,37 +1027,19 @@ def hparams_to_json(hparams):
     return {k: serialize_value(v) for k, v in hparams.items()}
 
 
-def task_predictions(
+def task_predictions_grid_search(
+    gpus: Any,
+    deterministic: bool,
+    metadata: Dict,
     embedding_path: Path,
     embedding_size: int,
-    grid_points: int,
-    gpus: Optional[int],
-    in_memory: bool,
-    deterministic: bool,
-    grid: str,
+    grid_points,
+    grid,
+    nlabels,
+    label_to_idx,
+    scores,
+    get_partition_dataloaders: GetPartitionDataLoaders,
 ):
-    # By setting workers=True in seed_everything(), Lightning derives
-    # unique seeds across all dataloader workers and processes
-    # for torch, numpy and stdlib random number generators.
-    # Note that if you change the number of workers, determinism
-    # might change.
-    # However, it appears that workers=False does get deterministic
-    # results on 4 multi-worker jobs I ran, probably because our
-    # dataloader doesn't do any augmentation or use randomness.
-    if deterministic:
-        seed_everything(42, workers=False)
-
-    metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
-    label_vocab, nlabels = label_vocab_nlabels(embedding_path)
-
-    # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
-
-    label_to_idx = label_vocab_as_dict(label_vocab, key="label", value="idx")
-    scores = [
-        available_scores[score](label_to_idx=label_to_idx)
-        for score in metadata["evaluation"]
-    ]
-
     def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
         """
         Sort grid point results in place, so that the first result
@@ -1104,26 +1086,34 @@ def task_predictions(
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         print("trying grid point", conf)
+        partition_dataloaders = get_partition_dataloaders.get_partition_dataloaders(
+            conf["batch_size"]
+        )
+        # In case multiple partition sets are present, only the first one is used
+        # to do the grid search. For single partition datasets (i.e. with
+        # predefined test, train and valid), this will use the whole dataset
+        # for grid search
+        grid_search_dataloaders = partition_dataloaders[0]
+
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
-            grid_points=grid_points,
             metadata=metadata,
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
             conf=conf,
             gpus=gpus,
-            in_memory=in_memory,
             deterministic=deterministic,
+            train_dataloader=grid_search_dataloaders["train"],
+            valid_dataloader=grid_search_dataloaders["dev"],
         )
         grid_point_results.append(grid_point_result)
         print_scores(grid_point_results)
 
-    # Use the best model to compute test scores
+    # Return the best grid point to be used for full training
     sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
-    print()
     print(
         "Best validation score",
         best_grid_point.validation_score,
@@ -1131,6 +1121,9 @@ def task_predictions(
         embedding_path,
     )
     print(best_grid_point.model_path)
+    return best_grid_point
+
+
 
     test_dataloader = dataloader_from_split_name(
         "test",
