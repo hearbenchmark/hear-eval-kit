@@ -360,8 +360,8 @@ class EventPredictionModel(AbstractPredictionModel):
         nlabels: int,
         prediction_type: str,
         scores: List[ScoreFunction],
-        validation_target_events: Dict[str, List[Dict[str, Any]]],
-        test_target_events: Dict[str, List[Dict[str, Any]]],
+        validation_target_events: Union[Dict[str, List[Dict[str, Any]]], None],
+        test_target_events: Union[Dict[str, List[Dict[str, Any]]], None],
         conf: Dict,
     ):
         super().__init__(
@@ -372,10 +372,15 @@ class EventPredictionModel(AbstractPredictionModel):
             scores=scores,
             conf=conf,
         )
-        self.target_events = {
-            "val": validation_target_events,
-            "test": test_target_events,
-        }
+        # If validation or testing has to be done with the model, the corresponding
+        # target events (test or valid) should be provided. This will be used for
+        # while testing - postprocessing the outputs, and
+        # while validating - to find the best postprocessing to be used during testing
+        self.target_events = {}
+        if validation_target_events is not None:
+            self.target_events["val"] = validation_target_events
+        if test_target_events is not None:
+            self.target_events["test"] = test_target_events
         # For each epoch, what postprocessing parameters were best
         self.epoch_best_postprocessing: Dict[int, Tuple[Tuple[str, Any], ...]] = {}
 
@@ -794,7 +799,7 @@ def task_predictions_train_test_full(
     embedding_path: Path,
     embedding_size: int,
     metadata: Dict[str, Any],
-    data_splits: Dict[str, List],
+    data_splits: Dict[str, List[str]],
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
@@ -920,7 +925,7 @@ def task_predictions_train_val_gridpoint(
     embedding_path: Path,
     embedding_size: int,
     metadata: Dict[str, Any],
-    data_splits: Dict[str, List],
+    data_splits: Dict[str, List[str]],
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
@@ -932,14 +937,10 @@ def task_predictions_train_val_gridpoint(
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
+        # Only validation target event is required while searching for best grid point
         validation_target_events = {}
         for split_name in data_splits["valid"]:
             validation_target_events.update(
-                json.load(embedding_path.joinpath(f"{split_name}.json").open())
-            )
-        test_target_events = {}
-        for split_name in data_splits["test"]:
-            test_target_events.update(
                 json.load(embedding_path.joinpath(f"{split_name}.json").open())
             )
         predictor = EventPredictionModel(
@@ -949,7 +950,7 @@ def task_predictions_train_val_gridpoint(
             prediction_type=metadata["prediction_type"],
             scores=scores,
             validation_target_events=validation_target_events,
-            test_target_events=test_target_events,
+            test_target_events=None,
             conf=conf,
         )
     elif metadata["embedding_type"] == "scene":
@@ -1056,7 +1057,7 @@ def hparams_to_json(hparams):
     return {k: serialize_value(v) for k, v in hparams.items()}
 
 
-def data_splits_from_folds(folds: Tuple[str]) -> List[Dict[str, List[str]]]:
+def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
     """
     Create data splits by using Leave One Out Cross Validation strategy.
 
@@ -1074,16 +1075,16 @@ def data_splits_from_folds(folds: Tuple[str]) -> List[Dict[str, List[str]]]:
     for fold_idx in range(num_folds):
         test_fold = folds[fold_idx]
         valid_fold = folds[(fold_idx + 1) % num_folds]
-        train_folds = set(folds) - {test_fold, valid_fold}
+        train_folds = list(set(folds) - {test_fold, valid_fold})
         all_data_splits.append(
             {
                 "train": train_folds,
                 "valid": [valid_fold],
-                "train+valid": train_folds | set([valid_fold]),
+                "train+valid": train_folds + [valid_fold],
                 "test": [test_fold],
             }
         )
-        assert not train_folds.intersection(
+        assert not set(train_folds).intersection(
             {test_fold, valid_fold}
         ), "Train folds are not distinct from the dev and the test folds"
 
@@ -1112,6 +1113,7 @@ def task_predictions(
 
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
     metadata["mode"] = "folds"  # remove me, only for testing
+    metadata["folds"] = ["train", "test", "valid"]  # remove me, only for testing
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
     # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
@@ -1123,11 +1125,14 @@ def task_predictions(
     ]
 
     # Get the data splits for finding the best grid point configuration
-    grid_point_data_splits: Dict[str, str]
+    grid_point_data_splits: Dict[str, List[str]]
     if metadata["mode"] == "folds":
-        # If splits are constructed with folds, use the first combination
-        # from all_data_splits for grid_point_data_splits
-        grid_point_data_splits = data_splits_from_folds(metadata["splits"])[0]
+        # If splits are constructed with folds, use the first data splits
+        # from all_data_splits for grid search. The first data splits will
+        # have test set as the first fold, valid set as the second fold and
+        # train set as all the remaining folds. (Order of the folds is decided
+        # by sorting the folds)
+        grid_point_data_splits = data_splits_from_folds(metadata["folds"])[0]
     else:
         # If data splits are not build using folds, but are rather explicitly
         # made available, use the full data for grid search
@@ -1212,7 +1217,7 @@ def task_predictions(
 
     # Train the model using the best grid point configuration on the train+valid
     # split and test on the test split
-    data_splits: Dict[str, str]
+    data_splits: Dict[str, List[str]]
     if metadata["mode"] == "folds":
         # If the data mode is `folds`, build the data splits with the folds
         # Leave One Out Cross Validation strategy is used. Each Fold will
@@ -1223,7 +1228,7 @@ def task_predictions(
         # fold will be produced. Average testing accuracy will also
         # be reported
         test_results = {}
-        for data_splits in data_splits_from_folds(metadata["splits"]):
+        for data_splits in data_splits_from_folds(metadata["folds"]):
             test_fold_str = "|".join(data_splits["test"])
             test_results[test_fold_str] = task_predictions_train_test_full(
                 best_grid_point=best_grid_point,
