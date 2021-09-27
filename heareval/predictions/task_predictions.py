@@ -38,7 +38,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, ConcatDataset
 from tqdm.auto import tqdm
 
 from heareval.score import (
@@ -700,7 +700,7 @@ def label_vocab_nlabels(embedding_path: Path) -> Tuple[pd.DataFrame, int]:
 
 
 def dataloader_from_split_name(
-    split_name: str,
+    split_name: Union[str, List[str]],
     embedding_path: Path,
     label_to_idx: Dict[str, int],
     nlabels: int,
@@ -709,15 +709,40 @@ def dataloader_from_split_name(
     metadata: bool = True,
     batch_size: int = 64,
 ) -> DataLoader:
-    dataset = SplitMemmapDataset(
-        embedding_path=embedding_path,
-        label_to_idx=label_to_idx,
-        nlabels=nlabels,
-        split_name=split_name,
-        embedding_type=embedding_type,
-        in_memory=in_memory,
-        metadata=metadata,
-    )
+    """
+    Get the dataloader for a `split_name` or a list of `split_name`
+
+    For a list of `split_name`, the dataset for each split will be concatenated.
+    The dataloader will be built from this concatenated
+    dataset
+    """
+    if isinstance(split_name, list):
+        dataset = ConcatDataset(
+            [
+                SplitMemmapDataset(
+                    embedding_path=embedding_path,
+                    label_to_idx=label_to_idx,
+                    nlabels=nlabels,
+                    split_name=name,
+                    embedding_type=embedding_type,
+                    in_memory=in_memory,
+                    metadata=metadata,
+                )
+                for name in split_name
+            ]
+        )
+    elif isinstance(split_name, str):
+        dataset = SplitMemmapDataset(
+            embedding_path=embedding_path,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            split_name=split_name,
+            embedding_type=embedding_type,
+            in_memory=in_memory,
+            metadata=metadata,
+        )
+    else:
+        raise ValueError("split_name should be a list or string")
 
     print(
         f"Getting embeddings for split {split_name}, "
