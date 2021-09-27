@@ -774,23 +774,19 @@ def dataloader_from_split_name(
 class GridPointResult:
     def __init__(
         self,
-        model_path: str,
         epoch: int,
-        time_in_min: float,
         hparams: Dict[str, Any],
         postprocessing: Tuple[Tuple[str, Any], ...],
-        trainer: pl.Trainer,
         validation_score: float,
         score_mode: str,
+        conf: Dict,
     ):
-        self.model_path = model_path
         self.epoch = epoch
-        self.time_in_min = time_in_min
         self.hparams = hparams
         self.postprocessing = postprocessing
-        self.trainer = trainer
         self.validation_score = validation_score
         self.score_mode = score_mode
+        self.conf = conf
 
 
 def task_predictions_train(
@@ -798,6 +794,12 @@ def task_predictions_train(
     embedding_size: int,
     grid_points: int,
     metadata: Dict[str, Any],
+
+def task_predictions_train_gridpoint(
+    embedding_path: Path,
+    embedding_size: int,
+    metadata: Dict[str, Any],
+    data_splits: Dict[str, List],
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
@@ -809,10 +811,16 @@ def task_predictions_train(
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
-        validation_target_events = json.load(
-            embedding_path.joinpath("valid.json").open()
-        )
-        test_target_events = json.load(embedding_path.joinpath("test.json").open())
+        validation_target_events = {}
+        for split_name in data_splits["valid"]:
+            validation_target_events.append(
+                json.load(embedding_path.joinpath(f"{split_name}.json").open())
+            )
+        test_target_events = {}
+        for split_name in data_splits["test"]:
+            test_target_events.append(
+                json.load(embedding_path.joinpath(f"{split_name}.json").open())
+            )
         predictor = EventPredictionModel(
             nfeatures=embedding_size,
             label_to_idx=label_to_idx,
@@ -870,7 +878,7 @@ def task_predictions_train(
         logger=logger,
     )
     train_dataloader = dataloader_from_split_name(
-        "train",
+        data_splits["train"],
         embedding_path,
         label_to_idx,
         nlabels,
@@ -880,7 +888,7 @@ def task_predictions_train(
         metadata=False,
     )
     valid_dataloader = dataloader_from_split_name(
-        "valid",
+        data_splits["valid"],
         embedding_path,
         label_to_idx,
         nlabels,
@@ -903,12 +911,10 @@ def task_predictions_train(
         logger.finalize("success")
         logger.save()
         return GridPointResult(
-            model_path=checkpoint_callback.best_model_path,
             epoch=epoch,
             time_in_min=time_in_min,
             hparams=dict(predictor.hparams),
             postprocessing=best_postprocessing,
-            trainer=trainer,
             validation_score=checkpoint_callback.best_model_score.detach().cpu().item(),
             score_mode=mode,
         )
