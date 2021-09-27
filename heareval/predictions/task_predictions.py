@@ -1055,6 +1055,40 @@ def hparams_to_json(hparams):
     return {k: serialize_value(v) for k, v in hparams.items()}
 
 
+def data_splits_from_folds(folds: Tuple[str]) -> List[Dict[str, List[str]]]:
+    """
+    Create data splits by using Leave One Out Cross Validation strategy.
+
+    Test, Valid and Train Splits will consist of data folds. Successively treat
+    each fold as test split, the next fold as valid split and the remaining
+    fold as the train split.
+    Folds will be sorted before applying the above strategy
+    Total data splits will be equal to n, n being the total number of folds.
+    Each fold will be tested by training on the remaining folds.
+    """
+    folds = tuple(sorted(folds))
+    assert len(folds) == len(set(folds)), "Folds are not unique"
+    num_folds = len(folds)
+    all_data_splits: List[Dict[str, List[str]]] = []
+    for fold_idx in range(num_folds):
+        test_fold = folds[fold_idx]
+        valid_fold = folds[(fold_idx + 1) % num_folds]
+        train_folds = set(folds) - {test_fold, valid_fold}
+        all_data_splits.append(
+            {
+                "train": train_folds,
+                "valid": [valid_fold],
+                "train+valid": train_folds + [valid_fold],
+                "test": [test_fold],
+            }
+        )
+        assert not train_folds.intersection(
+            {test_fold, valid_fold}
+        ), "Train folds are not distinct from the dev and the test folds"
+
+    return all_data_splits
+
+
 def task_predictions(
     embedding_path: Path,
     embedding_size: int,
@@ -1085,6 +1119,22 @@ def task_predictions(
         available_scores[score](label_to_idx=label_to_idx)
         for score in metadata["evaluation"]
     ]
+
+    # Get the data splits for finding the best grid point configuration
+    grid_point_data_splits: Dict[str, str]
+    if metadata["mode"] == "folds":
+        # If splits are constructed with folds, use the first combination
+        # from all_data_splits for grid_point_data_splits
+        grid_point_data_splits = data_splits_from_folds(metadata["folds"])[0]
+    else:
+        # If data splits are not build using folds, but are rather explicitly
+        # made available, use the full data for grid search
+        grid_point_data_splits = {
+            "train": ["train"],
+            "valid": ["valid"],
+            "train+valid": ["train" + "valid"],
+            "test": ["test"],
+        }
 
     def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
         """
@@ -1132,11 +1182,11 @@ def task_predictions(
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         print("trying grid point", conf)
-        grid_point_result = task_predictions_train(
+        grid_point_result = task_predictions_train_gridpoint(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
-            grid_points=grid_points,
             metadata=metadata,
+            data_splits=grid_point_data_splits,
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
@@ -1151,34 +1201,65 @@ def task_predictions(
     # Use the best model to compute test scores
     sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
-    print()
     print(
         "Best validation score",
         best_grid_point.validation_score,
         best_grid_point.hparams,
         embedding_path,
     )
-    print(best_grid_point.model_path)
 
-    test_dataloader = dataloader_from_split_name(
-        "test",
-        embedding_path,
-        label_to_idx,
-        nlabels,
-        metadata["embedding_type"],
-        batch_size=conf["batch_size"],
-        in_memory=in_memory,
-    )
-    best_trainer = best_grid_point.trainer
-    # This hack is necessary because we use the best validation epoch to
-    # choose the event postprocessing
-    best_trainer.fit_loop.current_epoch = best_grid_point.epoch
-
-    test_results = best_trainer.test(
-        ckpt_path=best_grid_point.model_path, test_dataloaders=test_dataloader
-    )
-    assert len(test_results) == 1, "Should have only one test dataloader"
-    test_results = test_results[0]
+    # Train the model using the best grid point configuration on the train+valid
+    # split and test on the test split
+    data_splits: Dict[str, str]
+    if metadata["mode"] == "folds":
+        # If the data mode is `folds`, build the data splits with the folds
+        # Leave One Out Cross Validation strategy is used. Each Fold will
+        # successively be treated as test split, during which remaining folds
+        # will be treated as train split. This will create n sets of data splits,
+        # n being the number of folds. Effectively, each fold will be tested,
+        # by training on the remaining folds, and so test result for each
+        # fold will be produced. Average testing accuracy will also
+        # be reported
+        test_results = {}
+        for data_splits in data_splits_from_folds(metadata["folds"]).items():
+            test_results[data_splits["test"]] = task_predictions_train_test_full(
+                best_grid_point=best_grid_point,
+                embedding_path=embedding_path,
+                embedding_size=embedding_size,
+                metadata=metadata,
+                data_splits=data_splits,
+                label_to_idx=label_to_idx,
+                nlabels=nlabels,
+                scores=scores,
+                conf=conf,
+                gpus=gpus,
+                in_memory=in_memory,
+                deterministic=deterministic,
+            )
+        # TODO - Add average testing results to the test_results
+    else:
+        # If data mode is not folds and splits are explicitly available use those
+        # as data splits
+        data_splits = {
+            "train": ["train"],
+            "valid": ["valid"],
+            "train+valid": ["train" + "valid"],
+            "test": ["test"],
+        }
+        test_results = task_predictions_train_test_full(
+            best_grid_point=best_grid_point,
+            embedding_path=embedding_path,
+            embedding_size=embedding_size,
+            metadata=metadata,
+            data_splits=data_splits,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            scores=scores,
+            conf=conf,
+            gpus=gpus,
+            in_memory=in_memory,
+            deterministic=deterministic,
+        )
 
     test_results.update(
         {
