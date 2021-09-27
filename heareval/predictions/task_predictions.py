@@ -1068,14 +1068,14 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
     Total data splits will be equal to n, n being the total number of folds.
     Each fold will be tested by training on the remaining folds.
     """
-    folds = tuple(sorted(folds))
-    assert len(folds) == len(set(folds)), "Folds are not unique"
-    num_folds = len(folds)
+    sorted_folds: Tuple[str] = tuple(sorted(folds))
+    assert len(sorted_folds) == len(set(sorted_folds)), "Folds are not unique"
+    num_folds = len(sorted_folds)
     all_data_splits: List[Dict[str, List[str]]] = []
     for fold_idx in range(num_folds):
-        test_fold = folds[fold_idx]
-        valid_fold = folds[(fold_idx + 1) % num_folds]
-        train_folds = list(set(folds) - {test_fold, valid_fold})
+        test_fold = sorted_folds[fold_idx]
+        valid_fold = sorted_folds[(fold_idx + 1) % num_folds]
+        train_folds = list(set(sorted_folds) - {test_fold, valid_fold})
         all_data_splits.append(
             {
                 "train": train_folds,
