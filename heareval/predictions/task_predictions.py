@@ -716,7 +716,7 @@ def dataloader_from_split_name(
     The dataloader will be built from this concatenated
     dataset
     """
-    if isinstance(split_name, list):
+    if isinstance(split_name, (list, set)):
         dataset = ConcatDataset(
             [
                 SplitMemmapDataset(
@@ -818,12 +818,12 @@ def task_predictions_train_test_full(
     conf["max_epochs"] = best_grid_point.epoch
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
-        # For event embedding type get the best preprocessing from the best grid
-        # point. This preprocessings will be applied during testing the event outputs
-        preprocessing = best_grid_point.best_preprocessing
+        # For event embedding type get the postprocessing from the best grid
+        # point. This postprocessing will be applied during testing the event outputs
+        postprocessing = best_grid_point.postprocessing
         test_target_events = {}
         for split_name in data_splits["test"]:
-            test_target_events.append(
+            test_target_events.update(
                 json.load(embedding_path.joinpath(f"{split_name}.json").open())
             )
         predictor = EventPredictionModel(
@@ -839,9 +839,10 @@ def task_predictions_train_test_full(
             test_target_events=test_target_events,
             conf=conf,
         )
-        # Apply the preprocessing from the best_grid_point in all the epochs of the model
+        # Apply the postprocessing from the best_grid_point. This will be used
+        # during testing
         predictor.epoch_best_postprocessing = {
-            epoch: preprocessing for epoch in range(1, conf["max_epochs"])
+            epoch: postprocessing for epoch in range(1, conf["max_epochs"])
         }
     elif metadata["embedding_type"] == "scene":
         predictor = ScenePredictionModel(
@@ -915,7 +916,7 @@ def task_predictions_train_test_full(
     return test_results
 
 
-def task_predictions_train_gridpoint(
+def task_predictions_train_val_gridpoint(
     embedding_path: Path,
     embedding_size: int,
     metadata: Dict[str, Any],
@@ -933,12 +934,12 @@ def task_predictions_train_gridpoint(
     if metadata["embedding_type"] == "event":
         validation_target_events = {}
         for split_name in data_splits["valid"]:
-            validation_target_events.append(
+            validation_target_events.update(
                 json.load(embedding_path.joinpath(f"{split_name}.json").open())
             )
         test_target_events = {}
         for split_name in data_splits["test"]:
-            test_target_events.append(
+            test_target_events.update(
                 json.load(embedding_path.joinpath(f"{split_name}.json").open())
             )
         predictor = EventPredictionModel(
@@ -1032,11 +1033,11 @@ def task_predictions_train_gridpoint(
         logger.save()
         return GridPointResult(
             epoch=epoch,
-            time_in_min=time_in_min,
             hparams=dict(predictor.hparams),
             postprocessing=best_postprocessing,
             validation_score=checkpoint_callback.best_model_score.detach().cpu().item(),
             score_mode=mode,
+            conf=conf,
         )
     else:
         raise ValueError(
@@ -1078,7 +1079,7 @@ def data_splits_from_folds(folds: Tuple[str]) -> List[Dict[str, List[str]]]:
             {
                 "train": train_folds,
                 "valid": [valid_fold],
-                "train+valid": train_folds + [valid_fold],
+                "train+valid": train_folds | set([valid_fold]),
                 "test": [test_fold],
             }
         )
@@ -1110,6 +1111,7 @@ def task_predictions(
         seed_everything(42, workers=False)
 
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    metadata["mode"] = "folds"  # remove me, only for testing
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
     # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
@@ -1125,7 +1127,7 @@ def task_predictions(
     if metadata["mode"] == "folds":
         # If splits are constructed with folds, use the first combination
         # from all_data_splits for grid_point_data_splits
-        grid_point_data_splits = data_splits_from_folds(metadata["folds"])[0]
+        grid_point_data_splits = data_splits_from_folds(metadata["splits"])[0]
     else:
         # If data splits are not build using folds, but are rather explicitly
         # made available, use the full data for grid search
@@ -1182,7 +1184,7 @@ def task_predictions(
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         print("trying grid point", conf)
-        grid_point_result = task_predictions_train_gridpoint(
+        grid_point_result = task_predictions_train_val_gridpoint(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             metadata=metadata,
@@ -1221,8 +1223,9 @@ def task_predictions(
         # fold will be produced. Average testing accuracy will also
         # be reported
         test_results = {}
-        for data_splits in data_splits_from_folds(metadata["folds"]).items():
-            test_results[data_splits["test"]] = task_predictions_train_test_full(
+        for data_splits in data_splits_from_folds(metadata["splits"]):
+            test_fold_str = "|".join(data_splits["test"])
+            test_results[test_fold_str] = task_predictions_train_test_full(
                 best_grid_point=best_grid_point,
                 embedding_path=embedding_path,
                 embedding_size=embedding_size,
@@ -1231,11 +1234,22 @@ def task_predictions(
                 label_to_idx=label_to_idx,
                 nlabels=nlabels,
                 scores=scores,
-                conf=conf,
                 gpus=gpus,
                 in_memory=in_memory,
                 deterministic=deterministic,
             )
+            # TODO - Fix this update
+            # test_results.update(
+            #     {
+            #         "validation_score": best_grid_point.validation_score,
+            #         "hparams": hparams_to_json(best_grid_point.hparams),
+            #         "postprocessing": best_grid_point.postprocessing,
+            #         "epoch": best_grid_point.epoch,
+            #         "time_in_min": best_grid_point.time_in_min,
+            #         "score_mode": best_grid_point.score_mode,
+            #         "embedding_path": str(embedding_path),
+            #     }
+            # )
         # TODO - Add average testing results to the test_results
     else:
         # If data mode is not folds and splits are explicitly available use those
@@ -1243,7 +1257,7 @@ def task_predictions(
         data_splits = {
             "train": ["train"],
             "valid": ["valid"],
-            "train+valid": ["train" + "valid"],
+            "train+valid": ["train", "valid"],
             "test": ["test"],
         }
         test_results = task_predictions_train_test_full(
@@ -1255,23 +1269,23 @@ def task_predictions(
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
-            conf=conf,
             gpus=gpus,
             in_memory=in_memory,
             deterministic=deterministic,
         )
 
-    test_results.update(
-        {
-            "validation_score": best_grid_point.validation_score,
-            "hparams": hparams_to_json(best_grid_point.hparams),
-            "postprocessing": best_grid_point.postprocessing,
-            "epoch": best_grid_point.epoch,
-            "time_in_min": best_grid_point.time_in_min,
-            "score_mode": best_grid_point.score_mode,
-            "embedding_path": str(embedding_path),
-        }
-    )
+        # TODO - Fix this update
+        # test_results.update(
+        #     {
+        #         "validation_score": best_grid_point.validation_score,
+        #         "hparams": hparams_to_json(best_grid_point.hparams),
+        #         "postprocessing": best_grid_point.postprocessing,
+        #         "epoch": best_grid_point.epoch,
+        #         "time_in_min": best_grid_point.time_in_min,
+        #         "score_mode": best_grid_point.score_mode,
+        #         "embedding_path": str(embedding_path),
+        #     }
+        # )
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
