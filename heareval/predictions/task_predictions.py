@@ -1124,24 +1124,25 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
-    # Get the data splits for finding the best grid point configuration
-    grid_point_data_splits: Dict[str, List[str]]
+    # Data splits for training
+    data_splits: List[Dict[str, List[str]]]
     if metadata["mode"] == "folds":
-        # If splits are constructed with folds, use the first data splits
-        # from all_data_splits for grid search. The first data splits will
-        # have test set as the first fold, valid set as the second fold and
-        # train set as all the remaining folds. (Order of the folds is decided
-        # by sorting the folds)
-        grid_point_data_splits = data_splits_from_folds(metadata["folds"])[0]
+        # If we are using k-fold cross-validation then get a list of the
+        # splits to test over. This expects that k data folds were generated
+        # during pre-processing and the names of each of these folds is listed
+        # in the metadata["folds"] variable.
+        data_splits = data_splits_from_folds(metadata["folds"])
     else:
-        # If data splits are not build using folds, but are rather explicitly
-        # made available, use the full data for grid search
-        grid_point_data_splits = {
-            "train": ["train"],
-            "valid": ["valid"],
-            "train+valid": ["train" + "valid"],
-            "test": ["test"],
-        }
+        # Otherwise there is a predefined split, so we will just use that. It is
+        # the only "fold" that will be considered during training and testing.
+        data_splits = [
+            {
+                "train": ["train"],
+                "valid": ["valid"],
+                "train+valid": ["train" + "valid"],
+                "test": ["test"],
+            }
+        ]
 
     def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
         """
@@ -1184,6 +1185,7 @@ def task_predictions(
         final_grid.update(TASK_SPECIFIC_PARAM_GRID[metadata["task_name"]])
 
     grid_point_results = []
+
     # Model selection
     confs = list(ParameterGrid(final_grid))
     random.shuffle(confs)
@@ -1193,7 +1195,7 @@ def task_predictions(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             metadata=metadata,
-            data_splits=grid_point_data_splits,
+            data_splits=data_splits[0],
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
@@ -1215,62 +1217,16 @@ def task_predictions(
         embedding_path,
     )
 
-    # Train the model using the best grid point configuration on the train+valid
-    # split and test on the test split
-    data_splits: Dict[str, List[str]]
-    if metadata["mode"] == "folds":
-        # If the data mode is `folds`, build the data splits with the folds
-        # Leave One Out Cross Validation strategy is used. Each Fold will
-        # successively be treated as test split, during which remaining folds
-        # will be treated as train split. This will create n sets of data splits,
-        # n being the number of folds. Effectively, each fold will be tested,
-        # by training on the remaining folds, and so test result for each
-        # fold will be produced. Average testing accuracy will also
-        # be reported
-        test_results = {}
-        for data_splits in data_splits_from_folds(metadata["folds"]):
-            test_fold_str = "|".join(data_splits["test"])
-            test_results[test_fold_str] = task_predictions_train_test_full(
-                best_grid_point=best_grid_point,
-                embedding_path=embedding_path,
-                embedding_size=embedding_size,
-                metadata=metadata,
-                data_splits=data_splits,
-                label_to_idx=label_to_idx,
-                nlabels=nlabels,
-                scores=scores,
-                gpus=gpus,
-                in_memory=in_memory,
-                deterministic=deterministic,
-            )
-            # TODO - Fix this update
-            # test_results.update(
-            #     {
-            #         "validation_score": best_grid_point.validation_score,
-            #         "hparams": hparams_to_json(best_grid_point.hparams),
-            #         "postprocessing": best_grid_point.postprocessing,
-            #         "epoch": best_grid_point.epoch,
-            #         "time_in_min": best_grid_point.time_in_min,
-            #         "score_mode": best_grid_point.score_mode,
-            #         "embedding_path": str(embedding_path),
-            #     }
-            # )
-        # TODO - Add average testing results to the test_results
-    else:
-        # If data mode is not folds and splits are explicitly available use those
-        # as data splits
-        data_splits = {
-            "train": ["train"],
-            "valid": ["valid"],
-            "train+valid": ["train", "valid"],
-            "test": ["test"],
-        }
-        test_results = task_predictions_train_test_full(
+    # Train the model using the best grid point configuration
+    test_results = {}
+    for split in data_splits:
+        test_fold_str = "|".join(split["test"])
+        test_results[test_fold_str] = task_predictions_train_test_full(
             best_grid_point=best_grid_point,
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             metadata=metadata,
-            data_splits=data_splits,
+            data_splits=split,
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
@@ -1278,7 +1234,6 @@ def task_predictions(
             in_memory=in_memory,
             deterministic=deterministic,
         )
-
         # TODO - Fix this update
         # test_results.update(
         #     {
@@ -1291,6 +1246,9 @@ def task_predictions(
         #         "embedding_path": str(embedding_path),
         #     }
         # )
+        print(split)
+
+    # Save test scores
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
