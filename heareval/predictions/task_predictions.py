@@ -809,14 +809,14 @@ def task_predictions_train(
     deterministic: bool,
 ) -> GridPointResult:
     """
-    Train a predictor for a specific task using pre-computed embeddings and
+    Train a predictor for a specific task using pre-computed embeddings.
     """
 
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
 
-        # Save the target events for that validation and test
+        # Save the target events for validation and test
         validation_target_events = {}
         for split_name in data_splits["valid"]:
             validation_target_events.update(
@@ -943,6 +943,9 @@ def task_predictions_test(
     nlabels: int,
     in_memory: bool,
 ):
+    """
+    Test a pre-trained predictor using precomputed embeddings.
+    """
     test_dataloader = dataloader_from_split_name(
         data_splits["test"],
         embedding_path,
@@ -1005,6 +1008,19 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
         ), "Train folds are not distinct from the dev and the test folds"
 
     return all_data_splits
+
+
+def aggregate_test_results(results: Dict[str, Dict[str, float]]) -> Dict[str, float]:
+    """
+    Aggregates test results over folds by mean and standard deviation
+    """
+    results_df = pd.DataFrame.from_dict(results, orient="index")
+    aggregate_results = {}
+    for score in results_df:
+        aggregate_results[f"{score}_mean"] = results_df[score].mean()
+        aggregate_results[f"{score}_std"] = results_df[score].std()
+
+    return aggregate_results
 
 
 def task_predictions(
@@ -1123,7 +1139,8 @@ def task_predictions(
         grid_point_results.append(grid_point_result)
         print_scores(grid_point_results)
 
-    # Use the best model to train remaining splits and compute test scores
+    # Use the best hyperparameters to train models for remaining folds,
+    # then compute test scores using the resulting models
     sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
     print(
@@ -1162,8 +1179,6 @@ def task_predictions(
     test_results = {}
     for i, split in enumerate(data_splits):
         test_fold_str = "|".join(split["test"])
-        print(test_fold_str)
-        print(split_grid_points[i])
         test_results[test_fold_str] = task_predictions_test(
             embedding_path=embedding_path,
             grid_point=split_grid_points[i],
@@ -1183,8 +1198,15 @@ def task_predictions(
             }
         )
 
+    # Make sure we have a test score for each fold
+    assert len(test_results) == len(data_splits)
+
+    # Aggregate scores over folds
+    if len(test_results) > 1:
+        test_results["aggregated_scores"] = aggregate_test_results(test_results)
+
     # Update test results with values relevant for all split models
-    test_results[test_fold_str].update(
+    test_results.update(
         {
             "hparams": hparams_to_json(best_grid_point.hparams),
             "postprocessing": best_grid_point.postprocessing,
