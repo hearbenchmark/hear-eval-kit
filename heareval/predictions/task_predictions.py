@@ -779,149 +779,28 @@ def dataloader_from_split_name(
 class GridPointResult:
     def __init__(
         self,
+        model_path: str,
         epoch: int,
+        time_in_min: float,
         hparams: Dict[str, Any],
         postprocessing: Tuple[Tuple[str, Any], ...],
+        trainer: pl.Trainer,
         validation_score: float,
         score_mode: str,
         conf: Dict,
     ):
+        self.model_path = model_path
         self.epoch = epoch
+        self.time_in_min = time_in_min
         self.hparams = hparams
         self.postprocessing = postprocessing
+        self.trainer = trainer
         self.validation_score = validation_score
         self.score_mode = score_mode
         self.conf = conf
 
 
-def task_predictions_train_test_full(
-    best_grid_point: GridPointResult,
-    embedding_path: Path,
-    embedding_size: int,
-    metadata: Dict[str, Any],
-    data_splits: Dict[str, List[str]],
-    label_to_idx: Dict[str, int],
-    nlabels: int,
-    scores: List[ScoreFunction],
-    gpus: Any,
-    in_memory: bool,
-    deterministic: bool,
-):
-    """
-    Trains on the full `train+valid` split to utilise all the available data
-    and tests on the `test` split.
-
-    Model configurations are copied from the best grid point which was found using the
-    `train` and the `valid` split.
-    """
-    start = time.time()
-
-    # Get the configuration of the best_grid_point and use it to train on the
-    # full train+valid set and test on the test set
-    conf = best_grid_point.conf
-    # Set the max_epochs to the number of epochs done in the best grid point
-    conf["max_epochs"] = best_grid_point.epoch
-    predictor: AbstractPredictionModel
-    if metadata["embedding_type"] == "event":
-        # For event embedding type get the postprocessing from the best grid
-        # point. This postprocessing will be applied during testing the event outputs
-        postprocessing = best_grid_point.postprocessing
-        test_target_events = {}
-        for split_name in data_splits["test"]:
-            test_target_events.update(
-                json.load(embedding_path.joinpath(f"{split_name}.json").open())
-            )
-        predictor = EventPredictionModel(
-            nfeatures=embedding_size,
-            label_to_idx=label_to_idx,
-            nlabels=nlabels,
-            prediction_type=metadata["prediction_type"],
-            scores=scores,
-            # No validation target events is required, since validation will
-            # not be done during full training. Best configurations (including the
-            # number of epochs) has already been found using the grid search
-            validation_target_events=None,
-            test_target_events=test_target_events,
-            conf=conf,
-        )
-        # Apply the postprocessing from the best_grid_point. This will be used
-        # during testing
-        predictor.epoch_best_postprocessing = {
-            epoch: postprocessing for epoch in range(1, conf["max_epochs"])
-        }
-    elif metadata["embedding_type"] == "scene":
-        predictor = ScenePredictionModel(
-            nfeatures=embedding_size,
-            label_to_idx=label_to_idx,
-            nlabels=nlabels,
-            prediction_type=metadata["prediction_type"],
-            scores=scores,
-            conf=conf,
-        )
-    else:
-        raise ValueError(f"Unknown embedding_type {metadata['embedding_type']}")
-
-    # Only save the last epoch during the full traing
-    # Please Note that early stopping is not required during full training
-    # Training will be done for n epochs, where n is the number of epochs
-    # done in the best grid point
-    checkpoint_callback = ModelCheckpoint(save_last=True)
-
-    logger = CSVLogger(Path("logs").joinpath(embedding_path))
-    logger.log_hyperparams(hparams_to_json(conf))
-
-    # Try also pytorch profiler
-    # profiler = pl.profiler.AdvancedProfiler(output_filename="predictions-profile.txt")
-    trainer = pl.Trainer(
-        callbacks=[checkpoint_callback],
-        gpus=gpus,
-        max_epochs=conf["max_epochs"],
-        deterministic=deterministic,
-        # profiler=profiler,
-        # profiler="pytorch",
-        profiler="simple",
-        logger=logger,
-    )
-    # Train Dataloader will be made from the train+valid data splits
-    train_dataloader = dataloader_from_split_name(
-        data_splits["train+valid"],
-        embedding_path,
-        label_to_idx,
-        nlabels,
-        metadata["embedding_type"],
-        batch_size=conf["batch_size"],
-        in_memory=in_memory,
-        metadata=False,
-    )
-    # No validation required for full training
-    trainer.fit(predictor, train_dataloader)
-    sys.stdout.flush()
-    end = time.time()
-    time_in_min = (end - start) / 60
-    logger.log_hyperparams({"test_split_name": data_splits["test"]})
-    logger.log_metrics({"time_in_min": time_in_min})
-    logger.finalize("success")
-    logger.save()
-
-    test_dataloader = dataloader_from_split_name(
-        data_splits["test"],
-        embedding_path,
-        label_to_idx,
-        nlabels,
-        metadata["embedding_type"],
-        batch_size=conf["batch_size"],
-        in_memory=in_memory,
-    )
-
-    test_results = trainer.test(
-        ckpt_path=checkpoint_callback.last_model_path, test_dataloaders=test_dataloader
-    )
-    assert len(test_results) == 1, "Should have only one test dataloader"
-    test_results = test_results[0]
-    return test_results
-
-
-def task_predictions_train_val_gridpoint(
+def task_predictions_train(
     embedding_path: Path,
     embedding_size: int,
     metadata: Dict[str, Any],
@@ -934,6 +813,10 @@ def task_predictions_train_val_gridpoint(
     in_memory: bool,
     deterministic: bool,
 ) -> GridPointResult:
+    """
+    Train a predictor for a specific task using pre-computed embeddings and
+    """
+
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
@@ -1033,9 +916,12 @@ def task_predictions_train_val_gridpoint(
         logger.finalize("success")
         logger.save()
         return GridPointResult(
+            model_path=checkpoint_callback.best_model_path,
             epoch=epoch,
+            time_in_min=time_in_min,
             hparams=dict(predictor.hparams),
             postprocessing=best_postprocessing,
+            trainer=trainer,
             validation_score=checkpoint_callback.best_model_score.detach().cpu().item(),
             score_mode=mode,
             conf=conf,
@@ -1044,6 +930,34 @@ def task_predictions_train_val_gridpoint(
         raise ValueError(
             f"No score {checkpoint_callback.best_model_score} for this model"
         )
+
+
+def task_predictions_test(
+    embedding_path: Path,
+    grid_point: GridPointResult,
+    metadata: Dict[str, Any],
+    data_splits: Dict[str, List[str]],
+    label_to_idx: Dict[str, int],
+    nlabels: int,
+    in_memory: bool,
+):
+    test_dataloader = dataloader_from_split_name(
+        data_splits["test"],
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=grid_point.conf["batch_size"],
+        in_memory=in_memory,
+    )
+
+    trainer = grid_point.trainer
+    test_results = trainer.test(
+        ckpt_path=grid_point.model_path, test_dataloaders=test_dataloader
+    )
+    assert len(test_results) == 1, "Should have only one test dataloader"
+    test_results = test_results[0]
+    return test_results
 
 
 def serialize_value(v):
@@ -1191,7 +1105,7 @@ def task_predictions(
     random.shuffle(confs)
     for conf in tqdm(confs[:grid_points], desc="grid"):
         print("trying grid point", conf)
-        grid_point_result = task_predictions_train_val_gridpoint(
+        grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             metadata=metadata,
@@ -1207,7 +1121,7 @@ def task_predictions(
         grid_point_results.append(grid_point_result)
         print_scores(grid_point_results)
 
-    # Use the best model to compute test scores
+    # Use the best model to train remaining splits and compute test scores
     sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
     print(
@@ -1217,12 +1131,12 @@ def task_predictions(
         embedding_path,
     )
 
-    # Train the model using the best grid point configuration
-    test_results = {}
-    for split in data_splits:
-        test_fold_str = "|".join(split["test"])
-        test_results[test_fold_str] = task_predictions_train_test_full(
-            best_grid_point=best_grid_point,
+    # Train predictors for the remaining splits using the hyperparameters selected
+    # from the grid search.
+    split_grid_points = [best_grid_point]
+    for split in data_splits[1:]:
+        print(f"Training split: {split}")
+        grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
             metadata=metadata,
@@ -1230,23 +1144,52 @@ def task_predictions(
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
+            conf=best_grid_point.conf,
             gpus=gpus,
             in_memory=in_memory,
             deterministic=deterministic,
         )
-        # TODO - Fix this update
-        # test_results.update(
-        #     {
-        #         "validation_score": best_grid_point.validation_score,
-        #         "hparams": hparams_to_json(best_grid_point.hparams),
-        #         "postprocessing": best_grid_point.postprocessing,
-        #         "epoch": best_grid_point.epoch,
-        #         "time_in_min": best_grid_point.time_in_min,
-        #         "score_mode": best_grid_point.score_mode,
-        #         "embedding_path": str(embedding_path),
-        #     }
-        # )
-        print(split)
+        split_grid_points.append(grid_point_result)
+        print(
+            f"Split {split} validation score: ",
+            grid_point_result.validation_score,
+            embedding_path,
+        )
+
+    # Now test each of the trained models
+    test_results = {}
+    for i, split in enumerate(data_splits):
+        test_fold_str = "|".join(split["test"])
+        print(test_fold_str)
+        print(split_grid_points[i])
+        test_results[test_fold_str] = task_predictions_test(
+            embedding_path=embedding_path,
+            grid_point=split_grid_points[i],
+            metadata=metadata,
+            data_splits=split,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            in_memory=in_memory,
+        )
+
+        # Add model training values relevant to this split model
+        test_results[test_fold_str].update(
+            {
+                "validation_score": split_grid_points[i].validation_score,
+                "epoch": split_grid_points[i].epoch,
+                "time_in_min": split_grid_points[i].time_in_min,
+            }
+        )
+
+    # Update test results with values relevant for all split models
+    test_results[test_fold_str].update(
+        {
+            "hparams": hparams_to_json(best_grid_point.hparams),
+            "postprocessing": best_grid_point.postprocessing,
+            "score_mode": split_grid_points[i].score_mode,
+            "embedding_path": str(embedding_path),
+        }
+    )
 
     # Save test scores
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
