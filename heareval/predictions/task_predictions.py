@@ -360,8 +360,8 @@ class EventPredictionModel(AbstractPredictionModel):
         nlabels: int,
         prediction_type: str,
         scores: List[ScoreFunction],
-        validation_target_events: Union[Dict[str, List[Dict[str, Any]]], None],
-        test_target_events: Union[Dict[str, List[Dict[str, Any]]], None],
+        validation_target_events: Dict[str, List[Dict[str, Any]]],
+        test_target_events: Dict[str, List[Dict[str, Any]]],
         conf: Dict,
     ):
         super().__init__(
@@ -372,15 +372,10 @@ class EventPredictionModel(AbstractPredictionModel):
             scores=scores,
             conf=conf,
         )
-        # If validation or testing has to be done with the model, the corresponding
-        # target events (test or valid) should be provided. This will be used for
-        # while testing - postprocessing the outputs, and
-        # while validating - to find the best postprocessing to be used during testing
-        self.target_events = {}
-        if validation_target_events is not None:
-            self.target_events["val"] = validation_target_events
-        if test_target_events is not None:
-            self.target_events["test"] = test_target_events
+        self.target_events = {
+            "val": validation_target_events,
+            "test": test_target_events,
+        }
         # For each epoch, what postprocessing parameters were best
         self.epoch_best_postprocessing: Dict[int, Tuple[Tuple[str, Any], ...]] = {}
 
@@ -820,12 +815,19 @@ def task_predictions_train(
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
-        # Only validation target event is required while searching for best grid point
+
+        # Save the target events for that validation and test
         validation_target_events = {}
         for split_name in data_splits["valid"]:
             validation_target_events.update(
                 json.load(embedding_path.joinpath(f"{split_name}.json").open())
             )
+        test_target_events = {}
+        for split_name in data_splits["test"]:
+            test_target_events.update(
+                json.load(embedding_path.joinpath(f"{split_name}.json").open())
+            )
+
         predictor = EventPredictionModel(
             nfeatures=embedding_size,
             label_to_idx=label_to_idx,
@@ -833,7 +835,7 @@ def task_predictions_train(
             prediction_type=metadata["prediction_type"],
             scores=scores,
             validation_target_events=validation_target_events,
-            test_target_events=None,
+            test_target_events=test_target_events,
             conf=conf,
         )
     elif metadata["embedding_type"] == "scene":
