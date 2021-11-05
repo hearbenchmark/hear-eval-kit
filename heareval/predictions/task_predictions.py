@@ -957,6 +957,11 @@ def task_predictions_test(
     )
 
     trainer = grid_point.trainer
+    # This hack is necessary because we use the best validation epoch to
+    # choose the event postprocessing
+    trainer.fit_loop.current_epoch = grid_point.epoch
+
+    # Run tests
     test_results = trainer.test(
         ckpt_path=grid_point.model_path, test_dataloaders=test_dataloader
     )
