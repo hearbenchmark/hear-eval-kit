@@ -980,12 +980,17 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
     """
     Create data splits by using Leave One Out Cross Validation strategy.
 
-    Test, Valid and Train Splits will consist of data folds. Successively treat
-    each fold as test split, the next fold as valid split and the remaining
-    fold as the train split.
-    Folds will be sorted before applying the above strategy
-    Total data splits will be equal to n, n being the total number of folds.
-    Each fold will be tested by training on the remaining folds.
+    folds is a list of dataset partitions created during pre-processing. For example,
+    for 5-fold cross val: ["fold1", "fold2", ..., "fold5"]. This function will create
+    k test, validation, and train splits using these folds. Each fold is successively
+    treated as test split, the next split as validation, and the remaining as train.
+    Folds will be sorted before applying the above strategy.
+
+    With 5-fold, for example, we would have:
+    test=fold1, val=fold2, train=fold3..5,
+    test=fold2, val=fold3, train=fold4..5,1
+    ...
+    test=fold5, val=fold1, train=2..4
     """
     sorted_folds = tuple(sorted(folds))
     assert len(sorted_folds) == len(set(sorted_folds)), "Folds are not unique"
@@ -1023,6 +1028,69 @@ def aggregate_test_results(results: Dict[str, Dict[str, float]]) -> Dict[str, fl
     return aggregate_results
 
 
+def get_splits_from_metadata(metadata: Dict) -> List[Dict[str, List[str]]]:
+    """
+    Extracts the splits for training from the task metadata. If there are folds
+    present then this creates a set of k splits for each fold.
+    """
+    data_splits: List[Dict[str, List[str]]]
+    if "folds" in metadata:
+        # Folds should be a list of strings
+        folds = metadata["folds"]
+        assert all(isinstance(x, str) for x in folds)
+        # If we are using k-fold cross-validation then get a list of the
+        # splits to test over. This expects that k data folds were generated
+        # during pre-processing and the names of each of these folds is listed
+        # in the metadata["folds"] variable.
+        data_splits = data_splits_from_folds(folds)
+    else:
+        # Otherwise there is a predefined split, so we will just use that. It is
+        # the only "fold" that will be considered during training and testing.
+        data_splits = [
+            {
+                "train": ["train"],
+                "valid": ["valid"],
+                "train+valid": ["train" + "valid"],
+                "test": ["test"],
+            }
+        ]
+
+    return data_splits
+
+
+def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
+    """
+    Sort grid point results in place, so that the first result
+    is the best.
+    """
+    # TODO: Assert all score modes are the same?
+    mode = grid_point_results[0].score_mode
+    # Pick the model with the best validation score
+    grid_point_results.sort(key=lambda g: -g.validation_score)
+    if mode == "max":
+        pass
+    elif mode == "min":
+        grid_point_results.reverse()
+    else:
+        raise ValueError(f"mode = {mode}")
+
+
+def print_scores(grid_point_results: List[GridPointResult], embedding_path: Path):
+    sort_grid_points(grid_point_results)
+    for g in grid_point_results:
+        print(
+            json.dumps(
+                (
+                    g.validation_score,
+                    g.epoch,
+                    hparams_to_json(g.hparams),
+                    g.postprocessing,
+                    str(embedding_path),
+                )
+            )
+        )
+
+
 def task_predictions(
     embedding_path: Path,
     embedding_size: int,
@@ -1044,8 +1112,6 @@ def task_predictions(
         seed_everything(42, workers=False)
 
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
-    metadata["mode"] = "folds"  # remove me, only for testing
-    metadata["folds"] = ["train", "test", "valid"]  # remove me, only for testing
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
     # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
@@ -1057,70 +1123,29 @@ def task_predictions(
     ]
 
     # Data splits for training
-    data_splits: List[Dict[str, List[str]]]
-    if metadata["mode"] == "folds":
-        # If we are using k-fold cross-validation then get a list of the
-        # splits to test over. This expects that k data folds were generated
-        # during pre-processing and the names of each of these folds is listed
-        # in the metadata["folds"] variable.
-        data_splits = data_splits_from_folds(metadata["folds"])
-    else:
-        # Otherwise there is a predefined split, so we will just use that. It is
-        # the only "fold" that will be considered during training and testing.
-        data_splits = [
-            {
-                "train": ["train"],
-                "valid": ["valid"],
-                "train+valid": ["train" + "valid"],
-                "test": ["test"],
-            }
-        ]
+    data_splits = get_splits_from_metadata(metadata)
 
-    def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
-        """
-        Sort grid point results in place, so that the first result
-        is the best.
-        """
-        # TODO: Assert all score modes are the same?
-        mode = grid_point_results[0].score_mode
-        # Pick the model with the best validation score
-        grid_point_results.sort(key=lambda g: -g.validation_score)
-        if mode == "max":
-            pass
-        elif mode == "min":
-            grid_point_results.reverse()
-        else:
-            raise ValueError(f"mode = {mode}")
-
-    def print_scores(grid_point_results: List[GridPointResult]):
-        sort_grid_points(grid_point_results)
-        for g in grid_point_results:
-            print(
-                json.dumps(
-                    (
-                        g.validation_score,
-                        g.epoch,
-                        hparams_to_json(g.hparams),
-                        g.postprocessing,
-                        str(embedding_path),
-                    )
-                )
-            )
-
+    # Construct the grid points for model creation
     if grid == "default":
         final_grid = copy.copy(PARAM_GRID)
     elif grid == "fast":
         final_grid = copy.copy(FAST_PARAM_GRID)
     elif grid == "faster":
         final_grid = copy.copy(FASTER_PARAM_GRID)
+    else:
+        raise ValueError(
+            f"Unknown grid type: {grid}. Please select default, fast, or faster"
+        )
+
+    # Update with task specific grid parameters
     if metadata["task_name"] in TASK_SPECIFIC_PARAM_GRID:
         final_grid.update(TASK_SPECIFIC_PARAM_GRID[metadata["task_name"]])
-
-    grid_point_results = []
 
     # Model selection
     confs = list(ParameterGrid(final_grid))
     random.shuffle(confs)
+
+    grid_point_results = []
     for conf in tqdm(confs[:grid_points], desc="grid"):
         print("trying grid point", conf)
         grid_point_result = task_predictions_train(
@@ -1137,7 +1162,7 @@ def task_predictions(
             deterministic=deterministic,
         )
         grid_point_results.append(grid_point_result)
-        print_scores(grid_point_results)
+        print_scores(grid_point_results, embedding_path)
 
     # Use the best hyperparameters to train models for remaining folds,
     # then compute test scores using the resulting models
