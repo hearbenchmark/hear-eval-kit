@@ -74,20 +74,16 @@ def runner(
         if not task_path.is_dir():
             raise ValueError(f"{task_path} should be a directory")
 
-        train_embedding_dimensions = task_path.joinpath(
-            "train.embedding-dimensions.json"
-        )
-        if not train_embedding_dimensions.exists():
-            raise ValueError(f"{train_embedding_dimensions} does not exist")
-
-        embedding_size = json.load(open(train_embedding_dimensions))[1]
-        if (
-            embedding_size
-            != json.load(open(task_path.joinpath("valid.embedding-dimensions.json")))[1]
-            or embedding_size
-            != json.load(open(task_path.joinpath("test.embedding-dimensions.json")))[1]
-        ):
-            raise ValueError("Embedding dimension mismatch among JSON files")
+        # Get embedding size and confirm all splits have the same embedding size
+        metadata = json.load(task_path.joinpath("task_metadata.json").open())
+        embedding_size = None
+        for split in metadata["splits"]:
+            split_path = task_path.joinpath(f"{split}.embedding-dimensions.json")
+            split_embedding_size = json.load(split_path.open())[1]
+            if embedding_size is None:
+                embedding_size = split_embedding_size
+            elif embedding_size != split_embedding_size:
+                raise ValueError("Embedding dimension mismatch among JSON files")
 
         start = time.time()
         task_predictions(

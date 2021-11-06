@@ -986,16 +986,16 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
     Create data splits by using Leave One Out Cross Validation strategy.
 
     folds is a list of dataset partitions created during pre-processing. For example,
-    for 5-fold cross val: ["fold1", "fold2", ..., "fold5"]. This function will create
+    for 5-fold cross val: ["fold00", "fold01", ..., "fold04"]. This function will create
     k test, validation, and train splits using these folds. Each fold is successively
     treated as test split, the next split as validation, and the remaining as train.
     Folds will be sorted before applying the above strategy.
 
     With 5-fold, for example, we would have:
-    test=fold1, val=fold2, train=fold3..5,
-    test=fold2, val=fold3, train=fold4..5,1
+    test=fold00, val=fold01, train=fold02..04,
+    test=fold01, val=fold02, train=fold03,04,01
     ...
-    test=fold5, val=fold1, train=2..4
+    test=fold04, val=fold00, train=01..03
     """
     sorted_folds = tuple(sorted(folds))
     assert len(sorted_folds) == len(set(sorted_folds)), "Folds are not unique"
@@ -1039,18 +1039,9 @@ def get_splits_from_metadata(metadata: Dict) -> List[Dict[str, List[str]]]:
     present then this creates a set of k splits for each fold.
     """
     data_splits: List[Dict[str, List[str]]]
-    if "folds" in metadata:
-        # Folds should be a list of strings
-        folds = metadata["folds"]
-        assert all(isinstance(x, str) for x in folds)
-        # If we are using k-fold cross-validation then get a list of the
-        # splits to test over. This expects that k data folds were generated
-        # during pre-processing and the names of each of these folds is listed
-        # in the metadata["folds"] variable.
-        data_splits = data_splits_from_folds(folds)
-    else:
-        # Otherwise there is a predefined split, so we will just use that. It is
-        # the only "fold" that will be considered during training and testing.
+    if metadata["split_mode"] == "trainvaltest":
+        # There are train/validation/test splits predefined. These are the only splits
+        # that will be considered during training and testing.
         data_splits = [
             {
                 "train": ["train"],
@@ -1059,6 +1050,19 @@ def get_splits_from_metadata(metadata: Dict) -> List[Dict[str, List[str]]]:
                 "test": ["test"],
             }
         ]
+    elif metadata["split_mode"] in ["new_split_kfold", "presplit_kfold"]:
+        folds = metadata["splits"]
+        # Folds should be a list of strings
+        assert all(isinstance(x, str) for x in folds)
+        # If we are using k-fold cross-validation then get a list of the
+        # splits to test over. This expects that k data folds were generated
+        # during pre-processing and the names of each of these folds is listed
+        # in the metadata["folds"] variable.
+        data_splits = data_splits_from_folds(folds)
+    else:
+        raise AssertionError(
+            f"Unknown split_mode: {metadata['split_mode']} in task metadata."
+        )
 
     return data_splits
 
