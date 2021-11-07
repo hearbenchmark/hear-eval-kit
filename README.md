@@ -186,3 +186,8 @@ Running tests:
 ```
 python3 -m pytest
 ```
+
+
+**_NOTE_** : Please make sure the workflows for each of the open task (`./gihub/workflows/task-{task_name}.yml`) is using the correct version of preprocessed tasks from the [Preprocessed Downsampled HEAR Open
+Tasks](https://github.com/neuralaudio/hear2021-open-tasks-downsampled/tree/main/preprocessed) Repo 
+for Continuous Integration.
