@@ -713,8 +713,17 @@ def dataloader_from_split_name(
     Get the dataloader for a `split_name` or a list of `split_name`
 
     For a list of `split_name`, the dataset for each split will be concatenated.
-    The dataloader will be built from this concatenated
-    dataset
+
+    Case 1 - split_name is a string
+        The Dataloader is built from a single data split.
+    Case 2 - split_name is a list of string
+        The Dataloader combines the data from the list of splits and
+        returns a combined dataloader. This is useful when combining
+        multiple folds of data to create the training or validation
+        dataloader. For example, in k-fold, the training data-loader
+        might be made from the first 4/5 folds, and calling this function
+        with [fold00, fold01, fold02, fold03] will create the
+        required dataloader
     """
     if isinstance(split_name, (list, set)):
         dataset = ConcatDataset(
@@ -794,6 +803,16 @@ class GridPointResult:
         self.score_mode = score_mode
         self.conf = conf
 
+    def __repr__(self):
+        return json.dumps(
+            (
+                self.validation_score,
+                self.epoch,
+                hparams_to_json(self.hparams),
+                self.postprocessing,
+            )
+        )
+
 
 def task_predictions_train(
     embedding_path: Path,
@@ -816,17 +835,35 @@ def task_predictions_train(
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
 
-        # Save the target events for validation and test
-        validation_target_events = {}
-        for split_name in data_splits["valid"]:
-            validation_target_events.update(
-                json.load(embedding_path.joinpath(f"{split_name}.json").open())
-            )
-        test_target_events = {}
-        for split_name in data_splits["test"]:
-            test_target_events.update(
-                json.load(embedding_path.joinpath(f"{split_name}.json").open())
-            )
+        def _combine_target_events(split_names: List[str]):
+            """
+            This combines the target events from the list of splits and
+            returns the combined target events. This is useful when combining
+            multiple folds of data to create the training or validation
+            dataloader. For example, in k-fold, the training data-loader
+            might be made from the first 4/5 folds, and calling this function
+            with [fold00, fold01, fold02, fold03] will return the
+            aggregated target events across all the folds
+            """
+            combined_target_events: Dict = {}
+            for split_name in split_names:
+                target_events = json.load(
+                    embedding_path.joinpath(f"{split_name}.json").open()
+                )
+                common_keys = set(combined_target_events.keys()).intersection(
+                    target_events.keys()
+                )
+                assert len(common_keys) == 0, (
+                    "Target events from one split should not override "
+                    "target events from another. This is very unlikely as the "
+                    "target_event is keyed on the files which are distinct for "
+                    "each split"
+                )
+                combined_target_events.update(target_events)
+            return combined_target_events
+
+        validation_target_events: Dict = _combine_target_events(data_splits["valid"])
+        test_target_events: Dict = _combine_target_events(data_splits["test"])
 
         predictor = EventPredictionModel(
             nfeatures=embedding_size,
@@ -1072,32 +1109,29 @@ def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
     Sort grid point results in place, so that the first result
     is the best.
     """
-    # TODO: Assert all score modes are the same?
-    mode = grid_point_results[0].score_mode
+    assert (
+        len(set([g.score_mode for g in grid_point_results])) == 1
+    ), "Score modes should be same for all the grid points"
+    mode: str = grid_point_results[0].score_mode
     # Pick the model with the best validation score
-    grid_point_results.sort(key=lambda g: -g.validation_score)
     if mode == "max":
-        pass
+        grid_point_results = sorted(
+            grid_point_results, key=lambda g: g.validation_score, reverse=True
+        )
     elif mode == "min":
-        grid_point_results.reverse()
+        grid_point_results = sorted(
+            grid_point_results, key=lambda g: g.validation_score
+        )
     else:
         raise ValueError(f"mode = {mode}")
 
+    return grid_point_results
+
 
 def print_scores(grid_point_results: List[GridPointResult], embedding_path: Path):
-    sort_grid_points(grid_point_results)
+    grid_point_results = sort_grid_points(grid_point_results)
     for g in grid_point_results:
-        print(
-            json.dumps(
-                (
-                    g.validation_score,
-                    g.epoch,
-                    hparams_to_json(g.hparams),
-                    g.postprocessing,
-                    str(embedding_path),
-                )
-            )
-        )
+        print(g, str(embedding_path))
 
 
 def task_predictions(
@@ -1175,7 +1209,7 @@ def task_predictions(
 
     # Use the best hyperparameters to train models for remaining folds,
     # then compute test scores using the resulting models
-    sort_grid_points(grid_point_results)
+    grid_point_results = sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
     print(
         "Best validation score",
