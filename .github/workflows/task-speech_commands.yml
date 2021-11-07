@@ -31,10 +31,8 @@ jobs:
     - name: wget
       run: |
         wget https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/preprocessed/hear-LATEST-speech_commands-v0.0.2-small-44100.tar.gz
-        # wget https://github.com/neuralaudio/hear2021-open-tasks-downsampled/raw/main/preprocessed/hear-20210906-2021.0.2-speech_commands-v0.0.2-small-44100.tar.gz
-        #wget https://storage.googleapis.com/hear2021/small/hear-20210906-2021.0.2-speech_commands-v0.0.2-small-44100.tar.gz
-        tar zxvf hear-20210906-2021.0.2-speech_commands-v0.0.2-small-44100.tar.gz
+        tar zxvf hear-LATEST-speech_commands-v0.0.2-small-44100.tar.gz
     - name: Downstream
       run: |
-        python -m heareval.embeddings.runner hearbaseline --tasks-dir hear-20210906-2021.0.2/tasks/
+        python -m heareval.embeddings.runner hearbaseline --tasks-dir hear-LATEST/tasks/
         python -m heareval.predictions.runner embeddings/hearbaseline/speech_commands-v0.0.2-small/ --grid faster --grid-points 1
