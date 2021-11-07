@@ -1133,7 +1133,9 @@ def get_splits_from_metadata(metadata: Dict) -> List[Dict[str, List[str]]]:
     return data_splits
 
 
-def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
+def sort_grid_points(
+    grid_point_results: List[GridPointResult],
+) -> List[GridPointResult]:
     """
     Sort grid point results in place, so that the first result
     is the best.
