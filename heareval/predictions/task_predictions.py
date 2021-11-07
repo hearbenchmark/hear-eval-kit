@@ -1074,6 +1074,36 @@ def get_splits_from_metadata(metadata: Dict) -> List[Dict[str, List[str]]]:
     """
     Extracts the splits for training from the task metadata. If there are folds
     present then this creates a set of k splits for each fold.
+    Args:
+        metadata: The preprocessing task metadata
+    Returns:
+        list(dict): The `data_splits`, are created from the splits prepared by
+            the hearpreprocess pipeline and represent the actual splits which
+            will be used for training, testing and validation
+            Each Data Split is a dict with the following keys and values:
+                - train (list): The splits to be used for training
+                - valid (list): The splits to be used for validation
+                - test (list): The splits to be used for testing
+            The data splits produced directly depend on the `split_mode`
+                of the hearpreprocess task configuration
+                - If the split mode is `new_split_kfold` or `presplit_kfold`,
+                    each data split will be represent one out of the multiple
+                    combination of LOOCV (refer function `data_splits_from_folds`)
+                - If the split mode is `trainvaltest`, there is a predefined
+                    data split and hence there will only be one data split which is
+                    {
+                        "train": ["train"],
+                        "valid": ["valid"],
+                        "test": ["test"],
+                    }
+                    This data split indicates that the splits (from hearpreprocess )
+                    will be used for training,
+                    validation and testing as defined by the name of the split
+
+    Raises:
+        AssertionError: If the `split_mode` of the metadata is invalid.
+            Valid split modes are - `trainvaltest`, `new_split_kfold`, `presplit_kfold`
+
     """
     data_splits: List[Dict[str, List[str]]]
     if metadata["split_mode"] == "trainvaltest":
@@ -1083,7 +1113,6 @@ def get_splits_from_metadata(metadata: Dict) -> List[Dict[str, List[str]]]:
             {
                 "train": ["train"],
                 "valid": ["valid"],
-                "train+valid": ["train" + "valid"],
                 "test": ["test"],
             }
         ]
