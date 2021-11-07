@@ -44,8 +44,6 @@ import heareval.gpu_max_mem as gpu_max_mem
 TORCH = "torch"
 TENSORFLOW = "tf"
 
-SPLITS = ["train", "valid", "test"]
-
 
 class Embedding:
     """
@@ -394,7 +392,7 @@ def task_embeddings(
     shutil.copy(metadata_path, embed_task_dir)
     shutil.copy(label_vocab_path, embed_task_dir)
 
-    for split in SPLITS:
+    for split in metadata["splits"]:
         print(f"Getting embeddings for split: {split}")
 
         split_path = task_path.joinpath(f"{split}.json")

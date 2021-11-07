@@ -38,7 +38,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, ConcatDataset
 from tqdm.auto import tqdm
 
 from heareval.score import (
@@ -700,7 +700,7 @@ def label_vocab_nlabels(embedding_path: Path) -> Tuple[pd.DataFrame, int]:
 
 
 def dataloader_from_split_name(
-    split_name: str,
+    split_name: Union[str, List[str]],
     embedding_path: Path,
     label_to_idx: Dict[str, int],
     nlabels: int,
@@ -709,15 +709,49 @@ def dataloader_from_split_name(
     metadata: bool = True,
     batch_size: int = 64,
 ) -> DataLoader:
-    dataset = SplitMemmapDataset(
-        embedding_path=embedding_path,
-        label_to_idx=label_to_idx,
-        nlabels=nlabels,
-        split_name=split_name,
-        embedding_type=embedding_type,
-        in_memory=in_memory,
-        metadata=metadata,
-    )
+    """
+    Get the dataloader for a `split_name` or a list of `split_name`
+
+    For a list of `split_name`, the dataset for each split will be concatenated.
+
+    Case 1 - split_name is a string
+        The Dataloader is built from a single data split.
+    Case 2 - split_name is a list of string
+        The Dataloader combines the data from the list of splits and
+        returns a combined dataloader. This is useful when combining
+        multiple folds of data to create the training or validation
+        dataloader. For example, in k-fold, the training data-loader
+        might be made from the first 4/5 folds, and calling this function
+        with [fold00, fold01, fold02, fold03] will create the
+        required dataloader
+    """
+    if isinstance(split_name, (list, set)):
+        dataset = ConcatDataset(
+            [
+                SplitMemmapDataset(
+                    embedding_path=embedding_path,
+                    label_to_idx=label_to_idx,
+                    nlabels=nlabels,
+                    split_name=name,
+                    embedding_type=embedding_type,
+                    in_memory=in_memory,
+                    metadata=metadata,
+                )
+                for name in split_name
+            ]
+        )
+    elif isinstance(split_name, str):
+        dataset = SplitMemmapDataset(
+            embedding_path=embedding_path,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            split_name=split_name,
+            embedding_type=embedding_type,
+            in_memory=in_memory,
+            metadata=metadata,
+        )
+    else:
+        raise ValueError("split_name should be a list or string")
 
     print(
         f"Getting embeddings for split {split_name}, "
@@ -757,6 +791,7 @@ class GridPointResult:
         trainer: pl.Trainer,
         validation_score: float,
         score_mode: str,
+        conf: Dict,
     ):
         self.model_path = model_path
         self.epoch = epoch
@@ -766,13 +801,24 @@ class GridPointResult:
         self.trainer = trainer
         self.validation_score = validation_score
         self.score_mode = score_mode
+        self.conf = conf
+
+    def __repr__(self):
+        return json.dumps(
+            (
+                self.validation_score,
+                self.epoch,
+                hparams_to_json(self.hparams),
+                self.postprocessing,
+            )
+        )
 
 
 def task_predictions_train(
     embedding_path: Path,
     embedding_size: int,
-    grid_points: int,
     metadata: Dict[str, Any],
+    data_splits: Dict[str, List[str]],
     label_to_idx: Dict[str, int],
     nlabels: int,
     scores: List[ScoreFunction],
@@ -781,13 +827,44 @@ def task_predictions_train(
     in_memory: bool,
     deterministic: bool,
 ) -> GridPointResult:
+    """
+    Train a predictor for a specific task using pre-computed embeddings.
+    """
+
     start = time.time()
     predictor: AbstractPredictionModel
     if metadata["embedding_type"] == "event":
-        validation_target_events = json.load(
-            embedding_path.joinpath("valid.json").open()
-        )
-        test_target_events = json.load(embedding_path.joinpath("test.json").open())
+
+        def _combine_target_events(split_names: List[str]):
+            """
+            This combines the target events from the list of splits and
+            returns the combined target events. This is useful when combining
+            multiple folds of data to create the training or validation
+            dataloader. For example, in k-fold, the training data-loader
+            might be made from the first 4/5 folds, and calling this function
+            with [fold00, fold01, fold02, fold03] will return the
+            aggregated target events across all the folds
+            """
+            combined_target_events: Dict = {}
+            for split_name in split_names:
+                target_events = json.load(
+                    embedding_path.joinpath(f"{split_name}.json").open()
+                )
+                common_keys = set(combined_target_events.keys()).intersection(
+                    target_events.keys()
+                )
+                assert len(common_keys) == 0, (
+                    "Target events from one split should not override "
+                    "target events from another. This is very unlikely as the "
+                    "target_event is keyed on the files which are distinct for "
+                    "each split"
+                )
+                combined_target_events.update(target_events)
+            return combined_target_events
+
+        validation_target_events: Dict = _combine_target_events(data_splits["valid"])
+        test_target_events: Dict = _combine_target_events(data_splits["test"])
+
         predictor = EventPredictionModel(
             nfeatures=embedding_size,
             label_to_idx=label_to_idx,
@@ -845,7 +922,7 @@ def task_predictions_train(
         logger=logger,
     )
     train_dataloader = dataloader_from_split_name(
-        "train",
+        data_splits["train"],
         embedding_path,
         label_to_idx,
         nlabels,
@@ -855,7 +932,7 @@ def task_predictions_train(
         metadata=False,
     )
     valid_dataloader = dataloader_from_split_name(
-        "valid",
+        data_splits["valid"],
         embedding_path,
         label_to_idx,
         nlabels,
@@ -886,11 +963,48 @@ def task_predictions_train(
             trainer=trainer,
             validation_score=checkpoint_callback.best_model_score.detach().cpu().item(),
             score_mode=mode,
+            conf=conf,
         )
     else:
         raise ValueError(
             f"No score {checkpoint_callback.best_model_score} for this model"
         )
+
+
+def task_predictions_test(
+    embedding_path: Path,
+    grid_point: GridPointResult,
+    metadata: Dict[str, Any],
+    data_splits: Dict[str, List[str]],
+    label_to_idx: Dict[str, int],
+    nlabels: int,
+    in_memory: bool,
+):
+    """
+    Test a pre-trained predictor using precomputed embeddings.
+    """
+    test_dataloader = dataloader_from_split_name(
+        data_splits["test"],
+        embedding_path,
+        label_to_idx,
+        nlabels,
+        metadata["embedding_type"],
+        batch_size=grid_point.conf["batch_size"],
+        in_memory=in_memory,
+    )
+
+    trainer = grid_point.trainer
+    # This hack is necessary because we use the best validation epoch to
+    # choose the event postprocessing
+    trainer.fit_loop.current_epoch = grid_point.epoch
+
+    # Run tests
+    test_results = trainer.test(
+        ckpt_path=grid_point.model_path, test_dataloaders=test_dataloader
+    )
+    assert len(test_results) == 1, "Should have only one test dataloader"
+    test_results = test_results[0]
+    return test_results
 
 
 def serialize_value(v):
@@ -902,6 +1016,153 @@ def serialize_value(v):
 
 def hparams_to_json(hparams):
     return {k: serialize_value(v) for k, v in hparams.items()}
+
+
+def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
+    """
+    Create data splits by using Leave One Out Cross Validation strategy.
+
+    folds is a list of dataset partitions created during pre-processing. For example,
+    for 5-fold cross val: ["fold00", "fold01", ..., "fold04"]. This function will create
+    k test, validation, and train splits using these folds. Each fold is successively
+    treated as test split, the next split as validation, and the remaining as train.
+    Folds will be sorted before applying the above strategy.
+
+    With 5-fold, for example, we would have:
+    test=fold00, val=fold01, train=fold02..04,
+    test=fold01, val=fold02, train=fold03,04,01
+    ...
+    test=fold04, val=fold00, train=01..03
+    """
+    sorted_folds = tuple(sorted(folds))
+    assert len(sorted_folds) == len(set(sorted_folds)), "Folds are not unique"
+    num_folds = len(sorted_folds)
+    all_data_splits: List[Dict[str, List[str]]] = []
+    for fold_idx in range(num_folds):
+        test_fold = sorted_folds[fold_idx]
+        valid_fold = sorted_folds[(fold_idx + 1) % num_folds]
+        train_folds = list(set(sorted_folds) - {test_fold, valid_fold})
+        all_data_splits.append(
+            {
+                "train": train_folds,
+                "valid": [valid_fold],
+                "train+valid": train_folds + [valid_fold],
+                "test": [test_fold],
+            }
+        )
+        assert not set(train_folds).intersection(
+            {test_fold, valid_fold}
+        ), "Train folds are not distinct from the dev and the test folds"
+
+    return all_data_splits
+
+
+def aggregate_test_results(results: Dict[str, Dict[str, float]]) -> Dict[str, float]:
+    """
+    Aggregates test results over folds by mean and standard deviation
+    """
+    results_df = pd.DataFrame.from_dict(results, orient="index")
+    aggregate_results = {}
+    for score in results_df:
+        aggregate_results[f"{score}_mean"] = results_df[score].mean()
+        aggregate_results[f"{score}_std"] = results_df[score].std()
+
+    return aggregate_results
+
+
+def get_splits_from_metadata(metadata: Dict) -> List[Dict[str, List[str]]]:
+    """
+    Extracts the splits for training from the task metadata. If there are folds
+    present then this creates a set of k splits for each fold.
+    Args:
+        metadata: The preprocessing task metadata
+    Returns:
+        list(dict): The `data_splits`, are created from the splits prepared by
+            the hearpreprocess pipeline and represent the actual splits which
+            will be used for training, testing and validation
+            Each Data Split is a dict with the following keys and values:
+                - train (list): The splits to be used for training
+                - valid (list): The splits to be used for validation
+                - test (list): The splits to be used for testing
+            The data splits produced directly depend on the `split_mode`
+                of the hearpreprocess task configuration
+                - If the split mode is `new_split_kfold` or `presplit_kfold`,
+                    each data split will be represent one out of the multiple
+                    combination of LOOCV (refer function `data_splits_from_folds`)
+                - If the split mode is `trainvaltest`, there is a predefined
+                    data split and hence there will only be one data split which is
+                    {
+                        "train": ["train"],
+                        "valid": ["valid"],
+                        "test": ["test"],
+                    }
+                    This data split indicates that the splits (from hearpreprocess )
+                    will be used for training,
+                    validation and testing as defined by the name of the split
+
+    Raises:
+        AssertionError: If the `split_mode` of the metadata is invalid.
+            Valid split modes are - `trainvaltest`, `new_split_kfold`, `presplit_kfold`
+
+    """
+    data_splits: List[Dict[str, List[str]]]
+    if metadata["split_mode"] == "trainvaltest":
+        # There are train/validation/test splits predefined. These are the only splits
+        # that will be considered during training and testing.
+        data_splits = [
+            {
+                "train": ["train"],
+                "valid": ["valid"],
+                "test": ["test"],
+            }
+        ]
+    elif metadata["split_mode"] in ["new_split_kfold", "presplit_kfold"]:
+        folds = metadata["splits"]
+        # Folds should be a list of strings
+        assert all(isinstance(x, str) for x in folds)
+        # If we are using k-fold cross-validation then get a list of the
+        # splits to test over. This expects that k data folds were generated
+        # during pre-processing and the names of each of these folds is listed
+        # in the metadata["folds"] variable.
+        data_splits = data_splits_from_folds(folds)
+    else:
+        raise AssertionError(
+            f"Unknown split_mode: {metadata['split_mode']} in task metadata."
+        )
+
+    return data_splits
+
+
+def sort_grid_points(
+    grid_point_results: List[GridPointResult],
+) -> List[GridPointResult]:
+    """
+    Sort grid point results in place, so that the first result
+    is the best.
+    """
+    assert (
+        len(set([g.score_mode for g in grid_point_results])) == 1
+    ), "Score modes should be same for all the grid points"
+    mode: str = grid_point_results[0].score_mode
+    # Pick the model with the best validation score
+    if mode == "max":
+        grid_point_results = sorted(
+            grid_point_results, key=lambda g: g.validation_score, reverse=True
+        )
+    elif mode == "min":
+        grid_point_results = sorted(
+            grid_point_results, key=lambda g: g.validation_score
+        )
+    else:
+        raise ValueError(f"mode = {mode}")
+
+    return grid_point_results
+
+
+def print_scores(grid_point_results: List[GridPointResult], embedding_path: Path):
+    grid_point_results = sort_grid_points(grid_point_results)
+    for g in grid_point_results:
+        print(g, str(embedding_path))
 
 
 def task_predictions(
@@ -935,57 +1196,37 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
-    def sort_grid_points(grid_point_results: List[GridPointResult]) -> None:
-        """
-        Sort grid point results in place, so that the first result
-        is the best.
-        """
-        # TODO: Assert all score modes are the same?
-        mode = grid_point_results[0].score_mode
-        # Pick the model with the best validation score
-        grid_point_results.sort(key=lambda g: -g.validation_score)
-        if mode == "max":
-            pass
-        elif mode == "min":
-            grid_point_results.reverse()
-        else:
-            raise ValueError(f"mode = {mode}")
+    # Data splits for training
+    data_splits = get_splits_from_metadata(metadata)
 
-    def print_scores(grid_point_results: List[GridPointResult]):
-        sort_grid_points(grid_point_results)
-        for g in grid_point_results:
-            print(
-                json.dumps(
-                    (
-                        g.validation_score,
-                        g.epoch,
-                        hparams_to_json(g.hparams),
-                        g.postprocessing,
-                        str(embedding_path),
-                    )
-                )
-            )
-
+    # Construct the grid points for model creation
     if grid == "default":
         final_grid = copy.copy(PARAM_GRID)
     elif grid == "fast":
         final_grid = copy.copy(FAST_PARAM_GRID)
     elif grid == "faster":
         final_grid = copy.copy(FASTER_PARAM_GRID)
+    else:
+        raise ValueError(
+            f"Unknown grid type: {grid}. Please select default, fast, or faster"
+        )
+
+    # Update with task specific grid parameters
     if metadata["task_name"] in TASK_SPECIFIC_PARAM_GRID:
         final_grid.update(TASK_SPECIFIC_PARAM_GRID[metadata["task_name"]])
 
-    grid_point_results = []
     # Model selection
     confs = list(ParameterGrid(final_grid))
     random.shuffle(confs)
+
+    grid_point_results = []
     for conf in tqdm(confs[:grid_points], desc="grid"):
         print("trying grid point", conf)
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
-            grid_points=grid_points,
             metadata=metadata,
+            data_splits=data_splits[0],
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             scores=scores,
@@ -995,51 +1236,85 @@ def task_predictions(
             deterministic=deterministic,
         )
         grid_point_results.append(grid_point_result)
-        print_scores(grid_point_results)
+        print_scores(grid_point_results, embedding_path)
 
-    # Use the best model to compute test scores
-    sort_grid_points(grid_point_results)
+    # Use the best hyperparameters to train models for remaining folds,
+    # then compute test scores using the resulting models
+    grid_point_results = sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
-    print()
     print(
         "Best validation score",
         best_grid_point.validation_score,
         best_grid_point.hparams,
         embedding_path,
     )
-    print(best_grid_point.model_path)
 
-    test_dataloader = dataloader_from_split_name(
-        "test",
-        embedding_path,
-        label_to_idx,
-        nlabels,
-        metadata["embedding_type"],
-        batch_size=conf["batch_size"],
-        in_memory=in_memory,
-    )
-    best_trainer = best_grid_point.trainer
-    # This hack is necessary because we use the best validation epoch to
-    # choose the event postprocessing
-    best_trainer.fit_loop.current_epoch = best_grid_point.epoch
+    # Train predictors for the remaining splits using the hyperparameters selected
+    # from the grid search.
+    split_grid_points = [best_grid_point]
+    for split in data_splits[1:]:
+        print(f"Training split: {split}")
+        grid_point_result = task_predictions_train(
+            embedding_path=embedding_path,
+            embedding_size=embedding_size,
+            metadata=metadata,
+            data_splits=split,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            scores=scores,
+            conf=best_grid_point.conf,
+            gpus=gpus,
+            in_memory=in_memory,
+            deterministic=deterministic,
+        )
+        split_grid_points.append(grid_point_result)
+        print(
+            f"Split {split} validation score: ",
+            grid_point_result.validation_score,
+            embedding_path,
+        )
 
-    test_results = best_trainer.test(
-        ckpt_path=best_grid_point.model_path, test_dataloaders=test_dataloader
-    )
-    assert len(test_results) == 1, "Should have only one test dataloader"
-    test_results = test_results[0]
+    # Now test each of the trained models
+    test_results = {}
+    for i, split in enumerate(data_splits):
+        test_fold_str = "|".join(split["test"])
+        test_results[test_fold_str] = task_predictions_test(
+            embedding_path=embedding_path,
+            grid_point=split_grid_points[i],
+            metadata=metadata,
+            data_splits=split,
+            label_to_idx=label_to_idx,
+            nlabels=nlabels,
+            in_memory=in_memory,
+        )
 
+        # Add model training values relevant to this split model
+        test_results[test_fold_str].update(
+            {
+                "validation_score": split_grid_points[i].validation_score,
+                "epoch": split_grid_points[i].epoch,
+                "time_in_min": split_grid_points[i].time_in_min,
+            }
+        )
+
+    # Make sure we have a test score for each fold
+    assert len(test_results) == len(data_splits)
+
+    # Aggregate scores over folds
+    if len(test_results) > 1:
+        test_results["aggregated_scores"] = aggregate_test_results(test_results)
+
+    # Update test results with values relevant for all split models
     test_results.update(
         {
-            "validation_score": best_grid_point.validation_score,
             "hparams": hparams_to_json(best_grid_point.hparams),
             "postprocessing": best_grid_point.postprocessing,
-            "epoch": best_grid_point.epoch,
-            "time_in_min": best_grid_point.time_in_min,
-            "score_mode": best_grid_point.score_mode,
+            "score_mode": split_grid_points[i].score_mode,
             "embedding_path": str(embedding_path),
         }
     )
+
+    # Save test scores
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
