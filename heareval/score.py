@@ -8,6 +8,12 @@ import numpy as np
 import pandas as pd
 import sed_eval
 import torch
+from sklearn.metrics import (
+    average_precision_score,
+    roc_auc_score,
+    label_ranking_average_precision_score,
+)
+from scipy import stats
 
 # Can we get away with not using DCase for every event-based evaluation??
 from dcase_util.containers import MetaDataContainer
@@ -223,6 +229,52 @@ class EventBasedScore(SoundEventScore):
     score_class = sed_eval.sound_event.EventBasedMetrics
 
 
+class MeanAveragePrecision(ScoreFunction):
+    name = "mAP"
+
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+        assert predictions.ndim == 2
+        assert targets.ndim == 2  # One hot
+        return average_precision_score(targets, predictions, average="macro")
+
+
+class DPrime(ScoreFunction):
+    name = "d_prime"
+
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+        assert predictions.ndim == 2
+        assert targets.ndim == 2  # One hot
+        auc = roc_auc_score(targets, predictions, average=None)
+        d_prime = stats.norm().ppf(auc) * np.sqrt(2.0)
+        # Averaged over the classes
+        return np.mean(d_prime)
+
+
+# Adopted from
+# https://colab.research.google.com/drive/1AgPdhSp7ttY18O3fEoHOQKlt_3HJDLi8#scrollTo=FJv0Rtqfsu3X # noqa: E501
+class LWLrap(ScoreFunction):
+    name = "lwlrap"
+
+    @staticmethod
+    def calculate_overall_lwlrap_sklearn(truth, scores):
+        """Calculate the overall lwlrap using sklearn.metrics.lrap."""
+        # sklearn doesn't correctly apply weighting to samples with no labels, so just skip them.
+        sample_weight = np.sum(truth > 0, axis=1)
+        nonzero_weight_sample_indices = np.flatnonzero(sample_weight > 0)
+        overall_lwlrap = label_ranking_average_precision_score(
+            truth[nonzero_weight_sample_indices, :] > 0,
+            scores[nonzero_weight_sample_indices, :],
+            sample_weight=sample_weight[nonzero_weight_sample_indices],
+        )
+        return overall_lwlrap
+
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+        assert predictions.ndim == 2
+        assert targets.ndim == 2  # One hot
+        lwlwrap = self.calculate_overall_lwlrap_sklearn(targets, predictions)
+        return lwlwrap
+
+
 available_scores: Dict[str, Callable] = {
     "top1_acc": Top1Accuracy,
     "pitch_acc": partial(Top1Accuracy, name="pitch_acc"),
@@ -246,4 +298,7 @@ available_scores: Dict[str, Callable] = {
         params={"time_resolution": 1.0},
         maximize=False,
     ),
+    "mAP": MeanAveragePrecision,
+    "d_prime": DPrime,
+    "lwlrap": LWLrap,
 }
