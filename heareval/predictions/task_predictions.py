@@ -1041,7 +1041,7 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
     for fold_idx in range(num_folds):
         test_fold = sorted_folds[fold_idx]
         valid_fold = sorted_folds[(fold_idx + 1) % num_folds]
-        train_folds = list(set(sorted_folds) - {test_fold, valid_fold})
+        train_folds = [f for f in sorted_folds if f not in (test_fold, valid_fold)]
         all_data_splits.append(
             {
                 "train": train_folds,
