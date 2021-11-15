@@ -124,7 +124,7 @@ def runner(
             json.dumps(
                 {
                     "time": time.time() - start,
-                    "embedding_path": task_path,
+                    "embedding_path": str(task_path),
                     "embedding_size": embedding_size,
                     "grid_points": grid_points,
                     "gpus": gpus,
