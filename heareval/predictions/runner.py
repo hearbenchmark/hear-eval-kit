@@ -70,9 +70,15 @@ def runner(
     # random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
         task_path = Path(task_dir)
-        print(f"Computing predictions for {task_path.name}")
         if not task_path.is_dir():
             raise ValueError(f"{task_path} should be a directory")
+
+        done_file = task_path.joinpath("prediction-done.json")
+        if done_file.exists():
+            # We already did this
+            continue
+
+        print(f"Computing predictions for {task_path.name}")
 
         # Get embedding sizes for all splits/folds
         metadata = json.load(task_path.joinpath("task_metadata.json").open())
@@ -102,6 +108,21 @@ def runner(
             f"(embedding_path={task_path}, embedding_size={embedding_size}, "
             f"grid_points={grid_points}, gpus={gpus}, in_memory={in_memory}, "
             f"deterministic={deterministic}, grid={grid})"
+        )
+        open(done_file, "wt").write(
+            json.dumps(
+                {
+                    "time": time.time() - start,
+                    "embedding_path": task_path,
+                    "embedding_size": embedding_size,
+                    "grid_points": grid_points,
+                    "gpus": gpus,
+                    "in_memory": in_memory,
+                    "deterministic": deterministic,
+                    # "grid": grid
+                },
+                indent=4,
+            )
         )
         sys.stdout.flush()
 
