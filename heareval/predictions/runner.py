@@ -56,6 +56,12 @@ from heareval.predictions.task_predictions import task_predictions
     help='Grid to use: ["default", "fast", "faster"]',
     type=str,
 )
+@click.option(
+    "--shuffle",
+    default=False,
+    help="Shuffle tasks? (Default: False)",
+    type=click.BOOL,
+)
 def runner(
     task_dirs: Tuple[str],
     grid_points: int = 8,
@@ -63,11 +69,13 @@ def runner(
     in_memory: bool = True,
     deterministic: bool = True,
     grid: str = "default",
+    shuffle: bool = False,
 ) -> None:
     if gpus is not None:
         gpus = json.loads(gpus)
 
-    # random.shuffle(task_dirs)
+    if shuffle:
+        random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
         task_path = Path(task_dir)
         if not task_path.is_dir():
@@ -109,6 +117,7 @@ def runner(
             f"grid_points={grid_points}, gpus={gpus}, in_memory={in_memory}, "
             f"deterministic={deterministic}, grid={grid})"
         )
+        sys.stdout.flush()
         open(done_file, "wt").write(
             json.dumps(
                 {
@@ -124,7 +133,6 @@ def runner(
                 indent=4,
             )
         )
-        sys.stdout.flush()
 
 
 if __name__ == "__main__":
