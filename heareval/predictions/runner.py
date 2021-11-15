@@ -75,6 +75,7 @@ def runner(
     if gpus is not None:
         gpus = json.loads(gpus)
 
+    task_dirs = list(task_dirs)
     if shuffle:
         random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
