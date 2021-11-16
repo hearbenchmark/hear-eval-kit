@@ -8,11 +8,7 @@ import numpy as np
 import pandas as pd
 import sed_eval
 import torch
-from sklearn.metrics import (
-    average_precision_score,
-    roc_auc_score,
-    label_ranking_average_precision_score,
-)
+from sklearn.metrics import average_precision_score, roc_auc_score
 from scipy import stats
 
 # Can we get away with not using DCase for every event-based evaluation??
