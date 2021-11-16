@@ -1173,7 +1173,7 @@ def task_predictions(
     in_memory: bool,
     deterministic: bool,
     grid: str,
-    outdir: Path,
+    output_path: Path,
 ):
     # By setting workers=True in seed_everything(), Lightning derives
     # unique seeds across all dataloader workers and processes
@@ -1316,7 +1316,7 @@ def task_predictions(
     )
 
     # Save test scores
-    open(outdir.joinpath("test.predicted-scores.json"), "wt").write(
+    open(output_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
     print("TEST RESULTS", json.dumps(test_results))
