@@ -90,7 +90,7 @@ def runner(
             # A separate output directory was passed in.
             # Create a subdirectory within that with the same name as
             # the task to save the results in.
-            outdir = Path(out_dir).joinpath(task_path.name)
+            outdir = Path(outdir).joinpath(task_path.name)
             outdir.mkdir(parents=True, exist_ok=True)
 
         # Get embedding sizes for all splits/folds
