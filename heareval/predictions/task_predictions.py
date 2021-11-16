@@ -604,7 +604,7 @@ def create_events_from_prediction(
             # Add event if greater than the minimum duration threshold
             if end - start >= min_duration:
                 events.append(
-                    {"label": idx_to_label[label], "start": start, "end": end}
+                    {"label": str(idx_to_label[label]), "start": start, "end": end}
                 )
 
     # This is just for pretty output, not really necessary
