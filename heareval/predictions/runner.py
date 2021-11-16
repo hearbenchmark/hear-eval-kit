@@ -27,7 +27,7 @@ from heareval.predictions.task_predictions import task_predictions
     "--outdir",
     default=None,
     help="Output directory to save prediction results. (Defaults to "
-         "the same directory as the input embeddings)",
+    "the same directory as the input embeddings)",
     type=str,
 )
 @click.option(
