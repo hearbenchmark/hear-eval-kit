@@ -248,27 +248,56 @@ class DPrime(ScoreFunction):
 
 # Adopted from
 # https://colab.research.google.com/drive/1AgPdhSp7ttY18O3fEoHOQKlt_3HJDLi8#scrollTo=FJv0Rtqfsu3X # noqa: E501
+# LWLRAP is calculated per class and the mean is taken over the class level scores
+# as mentioned in the below issue
+# https://github.com/neuralaudio/hear2021-secret-tasks/issues/26
 class LWLrap(ScoreFunction):
     name = "lwlrap"
 
     @staticmethod
-    def calculate_overall_lwlrap_sklearn(truth, scores):
-        """Calculate the overall lwlrap using sklearn.metrics.lrap."""
-        # sklearn doesn't correctly apply weighting to samples with no labels, so just skip them.
-        sample_weight = np.sum(truth > 0, axis=1)
-        nonzero_weight_sample_indices = np.flatnonzero(sample_weight > 0)
-        overall_lwlrap = label_ranking_average_precision_score(
-            truth[nonzero_weight_sample_indices, :] > 0,
-            scores[nonzero_weight_sample_indices, :],
-            sample_weight=sample_weight[nonzero_weight_sample_indices],
-        )
-        return overall_lwlrap
+    def _one_sample_positive_class_precisions(scores, truth):
+        """Calculate precisions for each true class for a single sample."""
+        num_classes = scores.shape[0]
+        pos_class_indices = np.flatnonzero(truth > 0)
+        if not len(pos_class_indices):
+            return pos_class_indices, np.zeros(0)
+        retrieved_classes = np.argsort(scores)[::-1]
+        class_rankings = np.zeros(num_classes, dtype=np.int)
+        class_rankings[retrieved_classes] = range(num_classes)
+        retrieved_class_true = np.zeros(num_classes, dtype=np.bool)
+        retrieved_class_true[class_rankings[pos_class_indices]] = True
+        retrieved_cumulative_hits = np.cumsum(retrieved_class_true)
+        precision_at_hits = retrieved_cumulative_hits[
+            class_rankings[pos_class_indices]
+        ] / (1 + class_rankings[pos_class_indices].astype(np.float))
+        return pos_class_indices, precision_at_hits
+
+    def calculate_per_class_lwlrap(self, truth, scores):
+        """Calculate label-weighted label-ranking average precision."""
+        assert truth.shape == scores.shape
+        num_samples, num_classes = scores.shape
+        precisions_for_samples_by_classes = np.zeros((num_samples, num_classes))
+        for sample_num in range(num_samples):
+            (
+                pos_class_indices,
+                precision_at_hits,
+            ) = self._one_sample_positive_class_precisions(
+                scores[sample_num, :], truth[sample_num, :]
+            )
+            precisions_for_samples_by_classes[
+                sample_num, pos_class_indices
+            ] = precision_at_hits
+        labels_per_class = np.sum(truth > 0, axis=0)
+        per_class_lwlrap = np.sum(
+            precisions_for_samples_by_classes, axis=0
+        ) / np.maximum(1, labels_per_class)
+        return per_class_lwlrap
 
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
-        lwlwrap = self.calculate_overall_lwlrap_sklearn(targets, predictions)
-        return lwlwrap
+        per_class_lwlrap = self.calculate_per_class_lwlrap(targets, predictions)
+        return np.mean(per_class_lwlrap)
 
 
 available_scores: Dict[str, Callable] = {
