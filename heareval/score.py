@@ -231,6 +231,8 @@ class MeanAveragePrecision(ScoreFunction):
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
+        # Issue when all negative ground truth
+        # https://github.com/scikit-learn/scikit-learn/issues/8245
         return average_precision_score(targets, predictions, average="macro")
 
 
