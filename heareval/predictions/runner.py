@@ -24,7 +24,7 @@ from heareval.predictions.task_predictions import task_predictions
     required=True,
 )
 @click.option(
-    "--out-dir",
+    "--outdir",
     default=None,
     help="Output directory to save prediction results. (Defaults to "
          "the same directory as the input embeddings)",
@@ -65,7 +65,7 @@ from heareval.predictions.task_predictions import task_predictions
 )
 def runner(
     task_dirs: Tuple[str],
-    out_dir: Optional[str] = None,
+    outdir: Optional[str] = None,
     grid_points: int = 8,
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     in_memory: bool = True,
@@ -83,15 +83,15 @@ def runner(
             raise ValueError(f"{task_path} should be a directory")
 
         # Get the output directory name
-        if out_dir is None:
+        if outdir is None:
             # Default is the task_path -- dir with embeddings
-            out_dir = task_path
+            outdir = task_path
         else:
             # A separate output directory was passed in.
             # Create a subdirectory within that with the same name as
             # the task to save the results in.
-            out_dir = Path(out_dir).joinpath(task_path.name)
-            out_dir.mkdir(parents=True, exist_ok=True)
+            outdir = Path(out_dir).joinpath(task_path.name)
+            outdir.mkdir(parents=True, exist_ok=True)
 
         # Get embedding sizes for all splits/folds
         metadata = json.load(task_path.joinpath("task_metadata.json").open())
@@ -114,6 +114,7 @@ def runner(
             in_memory=in_memory,
             deterministic=deterministic,
             grid=grid,
+            outdir=outdir,
         )
         sys.stdout.flush()
         print(
