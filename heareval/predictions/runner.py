@@ -85,14 +85,17 @@ def runner(
         # Get the output directory name
         output_path: Path
         if outdir is None:
-            # Default is the task_path -- dir with embeddings
-            output_path = task_path
+            # Default is a folder predictions/embedding_name/task_name
+            output_path = Path("predictions").joinpath(task_path.parent.name)
+            output_path = output_path.joinpath(task_path.name)
         else:
             # A separate output directory was passed in.
             # Create a subdirectory within that with the same name as
             # the task to save the results in.
             output_path = Path(outdir).joinpath(task_path.name)
-            output_path.mkdir(parents=True, exist_ok=True)
+
+        # Create the output path if it needs to be created
+        output_path.mkdir(parents=True, exist_ok=True)
 
         # Get embedding sizes for all splits/folds
         metadata = json.load(task_path.joinpath("task_metadata.json").open())
