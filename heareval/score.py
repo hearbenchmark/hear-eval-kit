@@ -190,7 +190,7 @@ class SoundEventScore(ScoreFunction):
                 reference_events.append(
                     {
                         # Convert from ms to seconds for sed_eval
-                        "event_label": str(event["label"]),
+                        "event_label": event["label"],
                         "event_onset": event["start"] / 1000.0,
                         "event_offset": event["end"] / 1000.0,
                         "file": filename,
