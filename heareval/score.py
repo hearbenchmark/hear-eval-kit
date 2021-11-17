@@ -230,6 +230,7 @@ class MeanAveragePrecision(ScoreFunction):
     Average Precision is calculated in macro mode which calculates AP at a class
     level followed by averaging across the classes
     """
+
     name = "mAP"
 
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
