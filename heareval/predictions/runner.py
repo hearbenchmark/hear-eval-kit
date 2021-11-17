@@ -5,6 +5,7 @@ predictions.
 """
 
 import json
+import random
 import sys
 import time
 from pathlib import Path
@@ -24,10 +25,10 @@ from heareval.predictions.task_predictions import task_predictions
     required=True,
 )
 @click.option(
-    "--outdir",
+    "--predictions-dir",
     default=None,
-    help="Output directory to save prediction results. (Defaults to "
-    "the same directory as the input embeddings)",
+    help="Directory to save prediction results. (Defaults to "
+         "predictions/embedding_name/task_name)",
     type=str,
 )
 @click.option(
@@ -63,39 +64,59 @@ from heareval.predictions.task_predictions import task_predictions
     help='Grid to use: ["default", "fast", "faster"]',
     type=str,
 )
+@click.option(
+    "--shuffle",
+    default=False,
+    help="Shuffle tasks? (Default: False)",
+    type=click.BOOL,
+)
 def runner(
     task_dirs: Tuple[str],
-    outdir: Optional[str] = None,
+    predictions_dir: Optional[str] = None,
     grid_points: int = 8,
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     in_memory: bool = True,
     deterministic: bool = True,
     grid: str = "default",
+    shuffle: bool = False,
 ) -> None:
     if gpus is not None:
         gpus = json.loads(gpus)
 
-    # random.shuffle(task_dirs)
+    task_dirs = list(task_dirs)
+    if shuffle:
+        random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
         task_path = Path(task_dir)
-        print(f"Computing predictions for {task_path.name}")
         if not task_path.is_dir():
             raise ValueError(f"{task_path} should be a directory")
 
         # Get the output directory name
-        output_path: Path
-        if outdir is None:
+        predictions_path: Path
+        if predictions_dir is None:
             # Default is a folder predictions/embedding_name/task_name
-            output_path = Path("predictions").joinpath(task_path.parent.name)
-            output_path = output_path.joinpath(task_path.name)
+            predictions_path = Path("predictions").joinpath(task_path.parent.name)
+            predictions_path = predictions_path.joinpath(task_path.name)
         else:
             # A separate output directory was passed in.
             # Create a subdirectory within that with the same name as
             # the task to save the results in.
-            output_path = Path(outdir).joinpath(task_path.name)
+            predictions_path = Path(predictions_dir).joinpath(task_path.name)
 
-        # Create the output path if it needs to be created
-        output_path.mkdir(parents=True, exist_ok=True)
+        # # Create the output path if it needs to be created
+        # predictions_path.mkdir(parents=True, exist_ok=True)
+
+        # Skip if these predictions are complete
+        done_file = predictions_path.joinpath("prediction-done.json")
+        if done_file.exists():
+            # We already did this
+            continue
+
+        # Clean up any old predictions if they exist
+        if predictions_path.exists():
+            shutil.rmtree(predictions_path)
+
+        print(f"Computing predictions for {task_path.name}")
 
         # Get embedding sizes for all splits/folds
         metadata = json.load(task_path.joinpath("task_metadata.json").open())
@@ -118,7 +139,7 @@ def runner(
             in_memory=in_memory,
             deterministic=deterministic,
             grid=grid,
-            output_path=output_path,
+            output_path=predictions_path,
         )
         sys.stdout.flush()
         print(
@@ -128,6 +149,21 @@ def runner(
             f"deterministic={deterministic}, grid={grid})"
         )
         sys.stdout.flush()
+        open(done_file, "wt").write(
+            json.dumps(
+                {
+                    "time": time.time() - start,
+                    "embedding_path": str(task_path),
+                    "embedding_size": embedding_size,
+                    "grid_points": grid_points,
+                    "gpus": gpus,
+                    "in_memory": in_memory,
+                    "deterministic": deterministic,
+                    # "grid": grid
+                },
+                indent=4,
+            )
+        )
 
 
 if __name__ == "__main__":
