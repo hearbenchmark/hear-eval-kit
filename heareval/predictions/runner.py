@@ -10,7 +10,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional
 
 import click
 import torch
@@ -72,7 +72,7 @@ from heareval.predictions.task_predictions import task_predictions
     type=click.BOOL,
 )
 def runner(
-    task_dirs: Tuple[str],
+    task_dirs: List[str],
     predictions_dir: Optional[str] = None,
     grid_points: int = 8,
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
