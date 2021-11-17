@@ -226,17 +226,27 @@ class EventBasedScore(SoundEventScore):
 
 
 class MeanAveragePrecision(ScoreFunction):
+    """
+    Average Precision is calculated in macro mode which calculates AP at a class
+    level followed by averaging across the classes
+    """
     name = "mAP"
 
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
-        # Issue when all negative ground truth
+        # Issue when all ground truths are negative
         # https://github.com/scikit-learn/scikit-learn/issues/8245
         return average_precision_score(targets, predictions, average="macro")
 
 
 class DPrime(ScoreFunction):
+    """
+    DPrime is calculated per class followed by averaging across the classes
+    Adopted from -
+    https://stats.stackexchange.com/questions/492673/understanding-and-implementing-the-dprime-measure-in-python # noqa: E501
+    """
+
     name = "d_prime"
 
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
@@ -248,12 +258,18 @@ class DPrime(ScoreFunction):
         return np.mean(d_prime)
 
 
-# Adopted from
-# https://colab.research.google.com/drive/1AgPdhSp7ttY18O3fEoHOQKlt_3HJDLi8#scrollTo=FJv0Rtqfsu3X # noqa: E501
-# LWLRAP is calculated per class and the mean is taken over the class level scores
-# as mentioned in the below issue
-# https://github.com/neuralaudio/hear2021-secret-tasks/issues/26
 class LWLrap(ScoreFunction):
+    """
+    LWLRAP is calculated per class followed by averaging this class level score
+    as mentioned in the below issue
+    https://github.com/neuralaudio/hear2021-secret-tasks/issues/26
+
+    Adopted from -
+    https://colab.research.google.com/drive/1AgPdhSp7ttY18O3fEoHOQKlt_3HJDLi8#scrollTo=FJv0Rtqfsu3X # noqa: E501
+    Author: Dan Ellis dpwe@google.com
+    Date: 2019-03-03
+    """
+
     name = "lwlrap"
 
     @staticmethod
