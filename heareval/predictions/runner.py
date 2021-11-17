@@ -6,6 +6,7 @@ predictions.
 
 import json
 import random
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -28,7 +29,7 @@ from heareval.predictions.task_predictions import task_predictions
     "--predictions-dir",
     default=None,
     help="Directory to save prediction results. (Defaults to "
-         "predictions/embedding_name/task_name)",
+    "predictions/embedding_name/task_name)",
     type=str,
 )
 @click.option(
@@ -100,11 +101,14 @@ def runner(
         else:
             # A separate output directory was passed in.
             # Create a subdirectory within that with the same name as
-            # the task to save the results in.
+            # the task to save the results in. Must be different than the folder
+            # of input embeddings.
             predictions_path = Path(predictions_dir).joinpath(task_path.name)
-
-        # # Create the output path if it needs to be created
-        # predictions_path.mkdir(parents=True, exist_ok=True)
+            if predictions_path == task_path:
+                raise AssertionError(
+                    "predictions_path output must be different "
+                    "than the input embeddings_path."
+                )
 
         # Skip if these predictions are complete
         done_file = predictions_path.joinpath("prediction-done.json")
@@ -115,6 +119,9 @@ def runner(
         # Clean up any old predictions if they exist
         if predictions_path.exists():
             shutil.rmtree(predictions_path)
+
+        # Create the predictions directory now along with any required parents
+        predictions_path.mkdir(parents=True, exist_ok=True)
 
         print(f"Computing predictions for {task_path.name}")
 
