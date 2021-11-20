@@ -8,6 +8,8 @@ import numpy as np
 import pandas as pd
 import sed_eval
 import torch
+from sklearn.metrics import average_precision_score, roc_auc_score
+from scipy import stats
 
 # Can we get away with not using DCase for every event-based evaluation??
 from dcase_util.containers import MetaDataContainer
@@ -223,6 +225,82 @@ class EventBasedScore(SoundEventScore):
     score_class = sed_eval.sound_event.EventBasedMetrics
 
 
+class MeanAveragePrecision(ScoreFunction):
+    """
+    Average Precision is calculated in macro mode which calculates
+    AP at a class level followed by macro-averaging across the classes.
+    """
+
+    name = "mAP"
+
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+        assert predictions.ndim == 2
+        assert targets.ndim == 2  # One hot
+
+        """
+        Based on suggestions from Eduardo Fonseca -
+        Equal weighting is assigned to each class regardless
+        of its prior, which is commonly referred to as macro
+        averaging, following Hershey et al. (2017); Gemmeke et al.
+        (2017).
+        This means that rare classes are as important as common
+        classes.
+
+        Issue with average_precision_score, when all ground truths are negative
+        https://github.com/scikit-learn/scikit-learn/issues/8245
+        This might come up in small tasks, where few samples are available
+        """
+        return average_precision_score(targets, predictions, average="macro")
+
+
+class DPrime(ScoreFunction):
+    """
+    DPrime is calculated per class followed by averaging across the classes
+
+    Code adapted from code provided by Eduoard Fonseca.
+    """
+
+    name = "d_prime"
+
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+        assert predictions.ndim == 2
+        assert targets.ndim == 2  # One hot
+        # ROC-AUC Requires more than one example for each class
+        # This might fail for data in small instances, so putting this in try except
+        try:
+            auc = roc_auc_score(targets, predictions, average=None)
+
+            d_prime = stats.norm().ppf(auc) * np.sqrt(2.0)
+            # Calculate macro score by averaging over the classes,
+            # see `MeanAveragePrecision` for reasons
+            d_prime_macro = np.mean(d_prime)
+            return d_prime_macro
+        except ValueError:
+            return np.nan
+
+
+class AUCROC(ScoreFunction):
+    """
+    AUCROC (macro mode) is calculated per class followed by averaging across the
+    classes
+    """
+
+    name = "aucroc"
+
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+        assert predictions.ndim == 2
+        assert targets.ndim == 2  # One hot
+        # ROC-AUC Requires more than one example for each class
+        # This might fail for data in small instances, so putting this in try except
+        try:
+            # Macro mode auc-roc. Please check `MeanAveragePrecision`
+            # for the reasoning behind using using macro mode
+            auc = roc_auc_score(targets, predictions, average="macro")
+            return auc
+        except ValueError:
+            return np.nan
+
+
 available_scores: Dict[str, Callable] = {
     "top1_acc": Top1Accuracy,
     "pitch_acc": partial(Top1Accuracy, name="pitch_acc"),
@@ -246,4 +324,7 @@ available_scores: Dict[str, Callable] = {
         params={"time_resolution": 1.0},
         maximize=False,
     ),
+    "mAP": MeanAveragePrecision,
+    "d_prime": DPrime,
+    "aucroc": AUCROC,
 }
