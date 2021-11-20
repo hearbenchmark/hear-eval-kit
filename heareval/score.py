@@ -275,6 +275,28 @@ class DPrime(ScoreFunction):
             return np.nan
 
 
+class AUCROC(ScoreFunction):
+    """
+    DPrime is calculated per class followed by averaging across the classes
+    """
+
+    name = "aucroc"
+
+    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+        assert predictions.ndim == 2
+        assert targets.ndim == 2  # One hot
+        # ROC-AUC Requires more than one example for each class
+        # This might fail for instances, so putting this in try except
+        try:
+            # Macro mode auc-roc. Please check `MeanAveragePrecision`
+            # for the reasoning behind using macro mode
+            auc = roc_auc_score(targets, predictions, average="macro")
+            return auc
+
+        except Exception:
+            return np.nan
+
+
 available_scores: Dict[str, Callable] = {
     "top1_acc": Top1Accuracy,
     "pitch_acc": partial(Top1Accuracy, name="pitch_acc"),
@@ -300,4 +322,5 @@ available_scores: Dict[str, Callable] = {
     ),
     "mAP": MeanAveragePrecision,
     "d_prime": DPrime,
+    "aucroc": AUCROC,
 }
