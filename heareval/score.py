@@ -277,7 +277,8 @@ class DPrime(ScoreFunction):
 
 class AUCROC(ScoreFunction):
     """
-    DPrime is calculated per class followed by averaging across the classes
+    AUCROC (macro mode) is calculated per class followed by averaging across the
+    classes
     """
 
     name = "aucroc"
@@ -289,7 +290,7 @@ class AUCROC(ScoreFunction):
         # This might fail for instances, so putting this in try except
         try:
             # Macro mode auc-roc. Please check `MeanAveragePrecision`
-            # for the reasoning behind using macro mode
+            # for the reasoning behind using using macro mode
             auc = roc_auc_score(targets, predictions, average="macro")
             return auc
 
