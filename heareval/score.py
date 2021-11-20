@@ -236,16 +236,24 @@ class MeanAveragePrecision(ScoreFunction):
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
-        # Issue when all ground truths are negative
+
+        # Based on suggestions from Eduardo Fonseca -
+        # Equal weightage should be assigned to each class regardless of its prior,
+        # which is commonly referred to as macro averaging,
+        # following Hershey et al. (2017); Gemmeke et al. (2017).
+        # Since the importance of each class lies in the end application
+        # and for HEAR, which is a holistic evaulation, the macro mode,
+        # which treats each class equally is appropriate to use.
+
+        # Issue with average_precision_score, when all ground truths are negative
         # https://github.com/scikit-learn/scikit-learn/issues/8245
+        # This might come up in small tasks, where few samples are available
         return average_precision_score(targets, predictions, average="macro")
 
 
 class DPrime(ScoreFunction):
     """
     DPrime is calculated per class followed by averaging across the classes
-    Adopted from -
-    https://stats.stackexchange.com/questions/492673/understanding-and-implementing-the-dprime-measure-in-python # noqa: E501
     """
 
     name = "d_prime"
@@ -254,136 +262,12 @@ class DPrime(ScoreFunction):
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         auc = roc_auc_score(targets, predictions, average=None)
+
         d_prime = stats.norm().ppf(auc) * np.sqrt(2.0)
-        # Averaged over the classes
-        return np.mean(d_prime)
-
-
-class LRAP(ScoreFunction):
-    """
-    Label ranking average precision (LRAP) is the average over each ground
-    truth label assigned to each sample, of the ratio of true vs. total
-    labels with lower score
-
-    There are two averaging modes:
-        * balanced (label weighted ) - per class LRAP, weighted by the overall
-            frequency of each class in the ground truth
-        * macro - per class LRAP, averaged over the classes as discussed in
-            https://github.com/neuralaudio/hear2021-secret-tasks/issues/26
-
-    Adopted from -
-    https://colab.research.google.com/drive/1AgPdhSp7ttY18O3fEoHOQKlt_3HJDLi8#scrollTo=FJv0Rtqfsu3X # noqa: E501
-    Author: Dan Ellis dpwe@google.com
-    Date: 2019-03-03
-
-    Please refer below link for an overview of LRAP
-    https://scikit-learn.org/stable/modules/model_evaluation.html#label-ranking-average-precision # noqa: E501
-    """
-
-    def __init__(
-        self,
-        label_to_idx: Dict[str, int],
-        average: str,
-        name: Optional[str] = None,
-        maximize: bool = True,
-    ):
-        """
-        :param score: Score to use, from the list of overall SED eval scores.
-        :param params: Parameters to pass to the scoring function,
-                       see inheriting children for details.
-        """
-        super().__init__(label_to_idx=label_to_idx, name=name, maximize=maximize)
-        assert average in ["macro", "balanced"]
-        self.average = average
-
-    @staticmethod
-    def _one_sample_positive_class_precisions(scores, truth):
-        """
-        Calculate precisions for each true class for a single sample.
-        For instance , If there are multiple true classes for a sample, this
-        will return a score for each of the true class, the score being the
-        ratio of true vs total labels with lower predicted score than
-        prediction score of the label in consideration for the sample
-
-        Args:
-            scores: np.array of (num_classes,) giving the individual classifier scores.
-            truth: np.array of (num_classes,) bools indicating which classes are true.
-
-        Returns:
-            pos_class_indices: np.array of indices of the true classes for this sample.
-            pos_class_precisions: np.array of precisions corresponding to each of those
-            classes.
-        """
-        num_classes = scores.shape[0]
-        pos_class_indices = np.flatnonzero(truth > 0)
-        if not len(pos_class_indices):
-            return pos_class_indices, np.zeros(0)
-        # Rank the labels, according to the predicted score
-        retrieved_classes = np.argsort(scores)[::-1]
-        class_rankings = np.zeros(num_classes, dtype=np.int)
-        class_rankings[retrieved_classes] = range(num_classes)
-        retrieved_class_true = np.zeros(num_classes, dtype=np.bool)
-        retrieved_class_true[class_rankings[pos_class_indices]] = True
-        retrieved_cumulative_hits = np.cumsum(retrieved_class_true)
-        # For each true label, precision is defined as the
-        # ratio of true vs total labels below that score
-        precision_at_hits = retrieved_cumulative_hits[
-            class_rankings[pos_class_indices]
-        ] / (1 + class_rankings[pos_class_indices].astype(np.float))
-        return pos_class_indices, precision_at_hits
-
-    def calculate_per_class_lrap(self, truth, scores):
-        """
-        Calculate label-ranking average precision for each class
-        Arguments:
-            truth: np.array of (num_samples, num_classes) giving boolean ground-truth
-            of presence of that class in that sample.
-            scores: np.array of (num_samples, num_classes) giving the classifier-under-
-            test's real-valued score for each class for each sample.
-
-        Returns:
-            per_class_lrap: np.array of (num_classes,) giving the lrap for each
-            class.
-            weight_per_class: np.array of (num_classes,) giving the prior of each
-            class within the truth labels.
-        """
-        assert truth.shape == scores.shape
-        num_samples, num_classes = scores.shape
-        precisions_for_samples_by_classes = np.zeros((num_samples, num_classes))
-        for sample_num in range(num_samples):
-            (
-                pos_class_indices,
-                precision_at_hits,
-            ) = self._one_sample_positive_class_precisions(
-                scores[sample_num, :], truth[sample_num, :]
-            )
-            precisions_for_samples_by_classes[
-                sample_num, pos_class_indices
-            ] = precision_at_hits
-        # Determine the number of instances associated with each label
-        labels_per_class = np.sum(truth > 0, axis=0)
-        # Weight of each class is prior of each class within the true labels
-        weight_per_class = labels_per_class / float(np.sum(labels_per_class))
-        per_class_lrap = np.sum(precisions_for_samples_by_classes, axis=0) / np.maximum(
-            1, labels_per_class
-        )
-        return per_class_lrap, weight_per_class
-
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
-        assert predictions.ndim == 2
-        assert targets.ndim == 2  # One hot
-        per_class_lrap, weight_per_class = self.calculate_per_class_lrap(
-            targets, predictions
-        )
-        if self.average == "macro":
-            return np.mean(per_class_lrap)
-        elif self.average == "balanced":
-            return np.sum(per_class_lrap * weight_per_class)
-        else:
-            raise NotImplementedError(
-                f"{self.average} mode is not implemented. Only implemented modes are "
-                "balanced and macro"
-            )
+        # Calculate macro score by averaging over the classes,
+        # see `MeanAveragePrecision` for reasons
+        d_prime_macro = np.mean(d_prime)
+        return d_prime_macro
 
 
 available_scores: Dict[str, Callable] = {
@@ -411,6 +295,4 @@ available_scores: Dict[str, Callable] = {
     ),
     "mAP": MeanAveragePrecision,
     "d_prime": DPrime,
-    "lrap": partial(LRAP, name="lrap", average="macro"),
-    "lwlrap": partial(LRAP, name="lwlrap", average="balanced"),
 }
