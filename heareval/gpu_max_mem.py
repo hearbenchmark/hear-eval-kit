@@ -14,8 +14,8 @@ if torch.cuda.is_available():
     from pynvml import (
         NVMLError,
         nvmlDeviceGetHandleByIndex,
-        nvmlDeviceGetHandleByIndex,
         nvmlDeviceGetMemoryInfo,
+        nvmlDeviceGetName,
         nvmlInit,
     )
 

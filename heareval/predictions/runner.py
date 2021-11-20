@@ -110,7 +110,8 @@ def runner(
         print(
             f"DONE. took {time.time() - start} seconds to complete task_predictions"
             f"(embedding_path={task_path}, embedding_size={embedding_size}, "
-            f"grid_points={grid_points}, gpus={gpus}, gpu_max_mem_used={gpu_max_mem_used}, "
+            f"grid_points={grid_points}, gpus={gpus}, "
+            f"gpu_max_mem_used={gpu_max_mem_used}, "
             f"gpu_device_name={gpu_max_mem.device_name()}, in_memory={in_memory}, "
             f"deterministic={deterministic}, grid={grid})"
         )
