@@ -271,7 +271,7 @@ class DPrime(ScoreFunction):
             # see `MeanAveragePrecision` for reasons
             d_prime_macro = np.mean(d_prime)
             return d_prime_macro
-        except:
+        except Exception:
             return np.nan
 
 
