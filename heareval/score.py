@@ -275,6 +275,9 @@ class LRAP(ScoreFunction):
     https://colab.research.google.com/drive/1AgPdhSp7ttY18O3fEoHOQKlt_3HJDLi8#scrollTo=FJv0Rtqfsu3X # noqa: E501
     Author: Dan Ellis dpwe@google.com
     Date: 2019-03-03
+
+    Please refer below link for an overview of LRAP
+    https://scikit-learn.org/stable/modules/model_evaluation.html#label-ranking-average-precision # noqa: E501
     """
 
     def __init__(
