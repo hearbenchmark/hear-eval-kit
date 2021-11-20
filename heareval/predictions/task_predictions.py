@@ -38,7 +38,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import CSVLogger
 from scipy.ndimage import median_filter
 from sklearn.model_selection import ParameterGrid
-from torch.utils.data import DataLoader, Dataset, ConcatDataset
+from torch.utils.data import ConcatDataset, DataLoader, Dataset
 from tqdm.auto import tqdm
 
 from heareval.score import (
@@ -1041,7 +1041,7 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
     for fold_idx in range(num_folds):
         test_fold = sorted_folds[fold_idx]
         valid_fold = sorted_folds[(fold_idx + 1) % num_folds]
-        train_folds = list(set(sorted_folds) - {test_fold, valid_fold})
+        train_folds = [f for f in sorted_folds if f not in (test_fold, valid_fold)]
         all_data_splits.append(
             {
                 "train": train_folds,

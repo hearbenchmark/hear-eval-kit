@@ -8,12 +8,13 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, List
 
 import click
 import torch
 from tqdm import tqdm
 
+import heareval.gpu_max_mem as gpu_max_mem
 from heareval.predictions.task_predictions import task_predictions
 
 
@@ -57,7 +58,7 @@ from heareval.predictions.task_predictions import task_predictions
     type=str,
 )
 def runner(
-    task_dirs: Tuple[str],
+    task_dirs: List[str],
     grid_points: int = 8,
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     in_memory: bool = True,
@@ -70,9 +71,15 @@ def runner(
     # random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
         task_path = Path(task_dir)
-        print(f"Computing predictions for {task_path.name}")
         if not task_path.is_dir():
             raise ValueError(f"{task_path} should be a directory")
+
+        done_file = task_path.joinpath("prediction-done.json")
+        if done_file.exists():
+            # We already did this
+            continue
+
+        print(f"Computing predictions for {task_path.name}")
 
         # Get embedding sizes for all splits/folds
         metadata = json.load(task_path.joinpath("task_metadata.json").open())
@@ -87,6 +94,8 @@ def runner(
             raise ValueError("Embedding dimension mismatch among JSON files")
 
         start = time.time()
+        gpu_max_mem.reset()
+
         task_predictions(
             embedding_path=task_path,
             embedding_size=embedding_size,
@@ -97,13 +106,32 @@ def runner(
             grid=grid,
         )
         sys.stdout.flush()
+        gpu_max_mem_used = gpu_max_mem.measure()
         print(
             f"DONE. took {time.time() - start} seconds to complete task_predictions"
             f"(embedding_path={task_path}, embedding_size={embedding_size}, "
-            f"grid_points={grid_points}, gpus={gpus}, in_memory={in_memory}, "
+            f"grid_points={grid_points}, gpus={gpus}, gpu_max_mem_used={gpu_max_mem_used}, "
+            f"gpu_device_name={gpu_max_mem.device_name()}, in_memory={in_memory}, "
             f"deterministic={deterministic}, grid={grid})"
         )
         sys.stdout.flush()
+        open(done_file, "wt").write(
+            json.dumps(
+                {
+                    "time": time.time() - start,
+                    "embedding_path": str(task_path),
+                    "embedding_size": embedding_size,
+                    "grid_points": grid_points,
+                    "gpus": gpus,
+                    "gpu_max_mem": gpu_max_mem_used,
+                    "gpu_device_name": gpu_max_mem.device_name(),
+                    "in_memory": in_memory,
+                    "deterministic": deterministic,
+                    # "grid": grid
+                },
+                indent=4,
+            )
+        )
 
 
 if __name__ == "__main__":

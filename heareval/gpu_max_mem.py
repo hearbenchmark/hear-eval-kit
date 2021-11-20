@@ -14,6 +14,7 @@ if torch.cuda.is_available():
     from pynvml import (
         NVMLError,
         nvmlDeviceGetHandleByIndex,
+        nvmlDeviceGetHandleByIndex,
         nvmlDeviceGetMemoryInfo,
         nvmlInit,
     )
@@ -27,6 +28,9 @@ if torch.cuda.is_available():
         max_memory_used = None
 
     def measure() -> Optional[float]:
+        """
+        Measure max memory used ONLY for the first GPU.
+        """
         global max_memory_used
         if torch.cuda.is_available():
             try:
@@ -40,6 +44,10 @@ if torch.cuda.is_available():
                 # Happens on Ubuntu 20.04 running on WSL2.
                 pass
         return max_memory_used
+
+    def device_name(device_index: int = 0) -> str:
+        handle = nvmlDeviceGetHandleByIndex(device_index)
+        return nvmlDeviceGetName(handle).decode("utf-8")
 
 
 else:
