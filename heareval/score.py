@@ -227,8 +227,8 @@ class EventBasedScore(SoundEventScore):
 
 class MeanAveragePrecision(ScoreFunction):
     """
-    Average Precision is calculated in macro mode which calculates AP at a class
-    level followed by averaging across the classes
+    Average Precision is calculated in macro mode which calculates
+    AP at a class level followed by macro-averaging across the classes.
     """
 
     name = "mAP"
@@ -237,23 +237,27 @@ class MeanAveragePrecision(ScoreFunction):
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
 
-        # Based on suggestions from Eduardo Fonseca -
-        # Equal weightage should be assigned to each class regardless of its prior,
-        # which is commonly referred to as macro averaging,
-        # following Hershey et al. (2017); Gemmeke et al. (2017).
-        # Since the importance of each class lies in the end application
-        # and for HEAR, which is a holistic evaulation, the macro mode,
-        # which treats each class equally is appropriate to use.
+        """
+        Based on suggestions from Eduardo Fonseca -
+        Equal weighting is assigned to each class regardless
+        of its prior, which is commonly referred to as macro
+        averaging, following Hershey et al. (2017); Gemmeke et al.
+        (2017).
+        This means that rare classes are as important as common
+        classes.
 
-        # Issue with average_precision_score, when all ground truths are negative
-        # https://github.com/scikit-learn/scikit-learn/issues/8245
-        # This might come up in small tasks, where few samples are available
+        Issue with average_precision_score, when all ground truths are negative
+        https://github.com/scikit-learn/scikit-learn/issues/8245
+        This might come up in small tasks, where few samples are available
+        """
         return average_precision_score(targets, predictions, average="macro")
 
 
 class DPrime(ScoreFunction):
     """
     DPrime is calculated per class followed by averaging across the classes
+
+    Code adapted from code provided by Eduoard Fonseca.
     """
 
     name = "d_prime"
@@ -271,7 +275,7 @@ class DPrime(ScoreFunction):
             # see `MeanAveragePrecision` for reasons
             d_prime_macro = np.mean(d_prime)
             return d_prime_macro
-        except Exception:
+        except ValueError:
             return np.nan
 
 
@@ -293,7 +297,7 @@ class AUCROC(ScoreFunction):
             # for the reasoning behind using using macro mode
             auc = roc_auc_score(targets, predictions, average="macro")
             return auc
-        except Exception:
+        except ValueError:
             return np.nan
 
 
