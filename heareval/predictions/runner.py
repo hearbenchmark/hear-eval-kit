@@ -9,7 +9,7 @@ import random
 import sys
 import time
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any, List
 
 import click
 import torch
@@ -64,7 +64,7 @@ from heareval.predictions.task_predictions import task_predictions
     type=click.BOOL,
 )
 def runner(
-    task_dirs: Tuple[str],
+    task_dirs: List[str],
     grid_points: int = 8,
     gpus: Any = None if not torch.cuda.is_available() else "[0]",
     in_memory: bool = True,
@@ -75,7 +75,6 @@ def runner(
     if gpus is not None:
         gpus = json.loads(gpus)
 
-    task_dirs = list(task_dirs)
     if shuffle:
         random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
