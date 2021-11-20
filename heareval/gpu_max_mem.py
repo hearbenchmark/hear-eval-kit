@@ -57,3 +57,6 @@ else:
 
     def measure() -> Optional[float]:
         return None
+
+    def device_name(device_index: int = 0) -> str:
+        return "cpu"
