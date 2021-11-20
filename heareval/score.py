@@ -239,6 +239,28 @@ available_scores: Dict[str, Callable] = {
             "percentage_of_length": 0.5,
         },
     ),
+    "event_onset_50ms_fms": partial(
+        EventBasedScore,
+        name="event_onset_50ms_fms",
+        score="f_measure",
+        params={
+            "evaluate_onset": True,
+            "evaluate_offset": False,
+            "t_collar": 0.05,
+            "percentage_of_length": 0.5,
+        },
+    ),
+    "event_onset_offset_50ms_20perc_fms": partial(
+        EventBasedScore,
+        name="event_onset_offset_50ms_20perc_fms",
+        score="f_measure",
+        params={
+            "evaluate_onset": True,
+            "evaluate_offset": True,
+            "t_collar": 0.05,
+            "percentage_of_length": 0.2,
+        },
+    ),
     "segment_1s_er": partial(
         SegmentBasedScore,
         name="segment_1s_er",
