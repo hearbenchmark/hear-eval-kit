@@ -232,23 +232,13 @@ available_scores: Dict[str, Callable] = {
         EventBasedScore,
         name="event_onset_200ms_fms",
         score="f_measure",
-        params={
-            "evaluate_onset": True,
-            "evaluate_offset": False,
-            "t_collar": 0.2,
-            "percentage_of_length": 0.5,
-        },
+        params={"evaluate_onset": True, "evaluate_offset": False, "t_collar": 0.2},
     ),
     "event_onset_50ms_fms": partial(
         EventBasedScore,
         name="event_onset_50ms_fms",
         score="f_measure",
-        params={
-            "evaluate_onset": True,
-            "evaluate_offset": False,
-            "t_collar": 0.05,
-            "percentage_of_length": 0.5,
-        },
+        params={"evaluate_onset": True, "evaluate_offset": False, "t_collar": 0.05},
     ),
     "event_onset_offset_50ms_20perc_fms": partial(
         EventBasedScore,
