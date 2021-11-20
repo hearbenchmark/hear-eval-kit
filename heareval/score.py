@@ -261,13 +261,18 @@ class DPrime(ScoreFunction):
     def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
-        auc = roc_auc_score(targets, predictions, average=None)
+        # ROC-AUC Requires more than one example for each class
+        # This might fail for instances, so putting this in try except
+        try:
+            auc = roc_auc_score(targets, predictions, average=None)
 
-        d_prime = stats.norm().ppf(auc) * np.sqrt(2.0)
-        # Calculate macro score by averaging over the classes,
-        # see `MeanAveragePrecision` for reasons
-        d_prime_macro = np.mean(d_prime)
-        return d_prime_macro
+            d_prime = stats.norm().ppf(auc) * np.sqrt(2.0)
+            # Calculate macro score by averaging over the classes,
+            # see `MeanAveragePrecision` for reasons
+            d_prime_macro = np.mean(d_prime)
+            return d_prime_macro
+        except:
+            return np.nan
 
 
 available_scores: Dict[str, Callable] = {
