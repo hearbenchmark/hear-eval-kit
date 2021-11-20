@@ -1243,7 +1243,7 @@ def task_predictions(
     # for secret tasks, without mentioning them in the global
     # TASK_SPECIFIC_PARAM_GRID. Ideally one out of the two option should be
     # there
-    if "task_specific_param_grid" in metadata.get("evaluation_params"):
+    if "task_specific_param_grid" in metadata.get("evaluation_params", {}):
         final_grid.update(metadata["evaluation_params"]["task_specific_param_grid"])
 
     # Model selection
