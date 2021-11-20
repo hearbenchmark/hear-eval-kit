@@ -15,6 +15,7 @@ if torch.cuda.is_available():
         NVMLError,
         nvmlDeviceGetHandleByIndex,
         nvmlDeviceGetMemoryInfo,
+        nvmlDeviceGetName,
         nvmlInit,
     )
 
@@ -27,6 +28,9 @@ if torch.cuda.is_available():
         max_memory_used = None
 
     def measure() -> Optional[float]:
+        """
+        Measure max memory used ONLY for the first GPU.
+        """
         global max_memory_used
         if torch.cuda.is_available():
             try:
@@ -41,6 +45,10 @@ if torch.cuda.is_available():
                 pass
         return max_memory_used
 
+    def device_name(device_index: int = 0) -> str:
+        handle = nvmlDeviceGetHandleByIndex(device_index)
+        return nvmlDeviceGetName(handle).decode("utf-8")
+
 
 else:
 
@@ -49,3 +57,6 @@ else:
 
     def measure() -> Optional[float]:
         return None
+
+    def device_name(device_index: int = 0) -> str:
+        return "cpu"
