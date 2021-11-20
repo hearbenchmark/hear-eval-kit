@@ -262,7 +262,7 @@ class DPrime(ScoreFunction):
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class
-        # This might fail for instances, so putting this in try except
+        # This might fail for data in small instances, so putting this in try except
         try:
             auc = roc_auc_score(targets, predictions, average=None)
 
@@ -287,13 +287,12 @@ class AUCROC(ScoreFunction):
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class
-        # This might fail for instances, so putting this in try except
+        # This might fail for data in small instances, so putting this in try except
         try:
             # Macro mode auc-roc. Please check `MeanAveragePrecision`
             # for the reasoning behind using using macro mode
             auc = roc_auc_score(targets, predictions, average="macro")
             return auc
-
         except Exception:
             return np.nan
 
