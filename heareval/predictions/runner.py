@@ -15,6 +15,7 @@ import click
 import torch
 from tqdm import tqdm
 
+import heareval.gpu_max_mem as gpu_max_mem
 from heareval.predictions.task_predictions import task_predictions
 
 
@@ -102,6 +103,8 @@ def runner(
             raise ValueError("Embedding dimension mismatch among JSON files")
 
         start = time.time()
+        gpu_max_mem.reset()
+
         task_predictions(
             embedding_path=task_path,
             embedding_size=embedding_size,
@@ -112,10 +115,13 @@ def runner(
             grid=grid,
         )
         sys.stdout.flush()
+        gpu_max_mem_used = gpu_max_mem.measure()
         print(
             f"DONE. took {time.time() - start} seconds to complete task_predictions"
             f"(embedding_path={task_path}, embedding_size={embedding_size}, "
-            f"grid_points={grid_points}, gpus={gpus}, in_memory={in_memory}, "
+            f"grid_points={grid_points}, gpus={gpus}, "
+            f"gpu_max_mem_used={gpu_max_mem_used}, "
+            f"gpu_device_name={gpu_max_mem.device_name()}, in_memory={in_memory}, "
             f"deterministic={deterministic}, grid={grid})"
         )
         sys.stdout.flush()
@@ -127,6 +133,8 @@ def runner(
                     "embedding_size": embedding_size,
                     "grid_points": grid_points,
                     "gpus": gpus,
+                    "gpu_max_mem": gpu_max_mem_used,
+                    "gpu_device_name": gpu_max_mem.device_name(),
                     "in_memory": in_memory,
                     "deterministic": deterministic,
                     # "grid": grid
