@@ -279,7 +279,7 @@ class AbstractPredictionModel(pl.LightningModule):
                 )
 
         # Weird, scores can be nan if precision has zero guesses
-        for score_name in end_scores:
+        for score_name, value in end_scores.items():
             end_scores[score_name] = 0.0 if math.isnan(value) else value
 
         self.log(

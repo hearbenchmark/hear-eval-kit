@@ -370,7 +370,7 @@ available_scores: Dict[str, Callable] = {
     "segment_1s_er": partial(
         SegmentBasedScore,
         name="segment_1s_er",
-        scores=("error_rate"),
+        scores=("error_rate",),
         params={"time_resolution": 1.0},
         maximize=False,
     ),
