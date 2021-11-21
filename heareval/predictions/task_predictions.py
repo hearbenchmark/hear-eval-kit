@@ -263,24 +263,22 @@ class AbstractPredictionModel(pl.LightningModule):
             validate_score_return_type(score_ret)
             # If the returned score is a tuple, store each subscore as separate entry
             if isinstance(score_ret, tuple):
-                # The first score in the returned tuple will be used
-                # as primary score for this metric
+                # The first score in the returned tuple will be used for
+                # any optimisation criterion, for instance if the metric is
+                # primary metric, the score corresponding to the first tuple
+                # will be used for early stopping
                 end_scores[f"{name}_{score}"] = score_ret[0][1]
                 # All other scores will also be logged
                 for (subscore, value) in score_ret:
                     end_scores[f"{name}_{score}_{subscore}"] = value
-            elif isinstance(score_ret, (float, int)):
+            elif isinstance(score_ret, float):
                 end_scores[f"{name}_{score}"] = score_ret
             else:
                 raise ValueError(
                     f"Return type {type(score_ret)} is unexpected. Return type of "
                     "the score function should either be a "
-                    "tuple(tuple(str, (float, int))) or float or int. "
+                    "tuple(tuple) or float."
                 )
-
-        # Weird, scores can be nan if precision has zero guesses
-        for score_name, value in end_scores.items():
-            end_scores[score_name] = 0.0 if math.isnan(value) else value
 
         self.log(
             f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
@@ -463,16 +461,16 @@ class EventPredictionModel(AbstractPredictionModel):
                 self.target_events[name],
             )
             # If the score returns a tuple of scores, the first score
-            # is used as the primary score
+            # is used
             if isinstance(primary_score_ret, tuple):
                 primary_score = primary_score_ret[0][1]
-            elif isinstance(primary_score_ret, (float, int)):
+            elif isinstance(primary_score_ret, float):
                 primary_score = primary_score_ret
             else:
                 raise ValueError(
                     f"Return type {type(primary_score_ret)} is unexpected. "
                     "Return type of the score function should either be a "
-                    "tuple(tuple(str, (float, int))) or float or int. "
+                    "tuple(tuple) or float. "
                 )
             if np.isnan(primary_score):
                 primary_score = 0.0

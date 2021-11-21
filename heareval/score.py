@@ -54,25 +54,37 @@ def label_to_binary_vector(label: List, num_labels: int) -> torch.Tensor:
     return binary_labels
 
 
-def validate_score_return_type(
-    ret: Union[float, int, Tuple[Tuple[str, Union[int, float]]]]
-):
-    """Validates if the return type of the score is valid"""
+def validate_score_return_type(ret: Union[Tuple[Tuple], float]):
+    """
+    Valid return types for the metric are
+        - tuple(tuple(string: name of the subtype, float: the value)): This is the
+            case with sed eval metrics. They can return (("f_measure", value),
+            ("precision", value), ...), depending on the scores
+            the metric should is supposed to return. This is set as `scores`
+            attribute in the metric.
+        - float: Standard metric behaviour
+
+    The downstream prediction pipeline is able to handle these two types.
+    In case of the tuple return type, the value of the first entry in the
+    tuple will be used as an optimisation criterion wherever required.
+    For instance, if the return is (("f_measure", value), ("precision", value)),
+    the value corresponding to the f_measure will be used ( for instance in
+    early stopping if this metric is the primary score for the task )
+    """
     if isinstance(ret, tuple):
         assert all(
-            type(s) == tuple and type(s[0]) == str and type(s[1]) in [float, int]
-            for s in ret
+            type(s) == tuple and type(s[0]) == str and type(s[1]) == float for s in ret
         ), (
             "If the return type of the score is a tuple, all the elements "
-            "in the tuple should be tuple of type tuple(str, (float, int))"
+            "in the tuple should be tuple of type (string, float)"
         )
-    elif isinstance(ret, (float, int)):
+    elif isinstance(ret, float):
         pass
     else:
         raise ValueError(
             f"Return type {type(ret)} is unexpected. Return type of "
             "the score function should either be a "
-            "tuple(tuple(str, (float, int))) or float or int. "
+            "tuple(tuple) or float. "
         )
 
 
@@ -99,12 +111,18 @@ class ScoreFunction:
             self.name = name
         self.maximize = maximize
 
-    def __call__(self, *args, **kwargs) -> float:
+    def __call__(self, *args, **kwargs) -> Union[Tuple[Tuple], float]:
+        """
+        Calls the compute function of the metric, and after validating the output,
+        returns the metric score
+        """
         ret = self.compute(*args, **kwargs)
         validate_score_return_type(ret)
         return ret
 
-    def compute(self, predictions: Any, targets: Any, **kwargs) -> float:
+    def compute(
+        self, predictions: Any, targets: Any, **kwargs
+    ) -> Union[Tuple[Tuple], float]:
         """
         Compute the score based on the predictions and targets. Returns the score.
         """
@@ -188,7 +206,9 @@ class SoundEventScore(ScoreFunction):
         self.params = params
         assert self.score_class is not None
 
-    def compute(self, predictions: Dict, targets: Dict, **kwargs):
+    def compute(
+        self, predictions: Dict, targets: Dict, **kwargs
+    ) -> Tuple[Tuple[str, float]]:
         # Containers of events for sed_eval
         reference_event_list = self.sed_eval_event_container(targets)
         estimated_event_list = self.sed_eval_event_container(predictions)
@@ -215,7 +235,8 @@ class SoundEventScore(ScoreFunction):
         overall_scores: Dict[str, Union[float, int]] = dict(
             ChainMap(*nested_overall_scores.values())
         )
-        # Return the required scores as tuples
+        # Return the required scores as tuples. The scores are returned in the
+        # order they are passed in the `scores` argument
         return tuple([(score, overall_scores[score]) for score in self.scores])
 
     @staticmethod
