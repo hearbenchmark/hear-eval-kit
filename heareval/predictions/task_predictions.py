@@ -257,13 +257,12 @@ class AbstractPredictionModel(pl.LightningModule):
         """Logs the metric score value for each score defined for the model"""
         assert hasattr(self, "scores"), "Scores for the model should be defined"
         end_scores = {}
+        # The first score in the first `self.scores` is the optimization criterion
         for score in self.scores:
             score_ret = score(*score_args)
             validate_score_return_type(score_ret)
             # If the returned score is a tuple, store each subscore as separate entry
             if isinstance(score_ret, tuple):
-                # The first score in the returned tuple for the
-                # first `self.scores` is the optimization criterion
                 end_scores[f"{name}_{score}"] = score_ret[0][1]
                 # All other scores will also be logged
                 for (subscore, value) in score_ret:
