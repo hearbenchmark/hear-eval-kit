@@ -1072,7 +1072,6 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
             {
                 "train": train_folds,
                 "valid": [valid_fold],
-                "train+valid": train_folds + [valid_fold],
                 "test": [test_fold],
             }
         )
@@ -1185,10 +1184,12 @@ def sort_grid_points(
     return grid_point_results
 
 
-def print_scores(grid_point_results: List[GridPointResult], embedding_path: Path):
+def print_scores(
+    grid_point_results: List[GridPointResult], embedding_path: Path, logger
+):
     grid_point_results = sort_grid_points(grid_point_results)
     for g in grid_point_results:
-        print(g, str(embedding_path))
+        logger.info(f"Grid Point Summary - {g}")
 
 
 def task_predictions(
@@ -1257,7 +1258,7 @@ def task_predictions(
 
     grid_point_results = []
     for conf in tqdm(confs[:grid_points], desc="grid"):
-        logger.info("trying grid point", conf)
+        logger.info(f"Trying Grid Point - {conf}")
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -1272,24 +1273,24 @@ def task_predictions(
             deterministic=deterministic,
         )
         grid_point_results.append(grid_point_result)
-        print_scores(grid_point_results, embedding_path)
+        print_scores(grid_point_results, embedding_path, logger)
 
     # Use the best hyperparameters to train models for remaining folds,
     # then compute test scores using the resulting models
     grid_point_results = sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
     logger.info(
-        "Best validation score",
-        best_grid_point.validation_score,
-        best_grid_point.hparams,
-        embedding_path,
+        "Best Grid Point Validation Score - "
+        f"{best_grid_point.validation_score}  "
+        "Grid Point HyperParams - "
+        f"{best_grid_point.hparams}  "
     )
 
     # Train predictors for the remaining splits using the hyperparameters selected
     # from the grid search.
     split_grid_points = [best_grid_point]
     for split in data_splits[1:]:
-        logger.info(f"Training split: {split}")
+        logger.info(f"Training Split - {split}")
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -1305,9 +1306,8 @@ def task_predictions(
         )
         split_grid_points.append(grid_point_result)
         logger.info(
-            f"Split {split} validation score: ",
-            grid_point_result.validation_score,
-            embedding_path,
+            f"Validation Score for the Training Split - "
+            f"{grid_point_result.validation_score}"
         )
 
     # Now test each of the trained models
@@ -1368,7 +1368,7 @@ def task_predictions(
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
-    logger.info("TEST RESULTS", json.dumps(test_results))
+    logger.info(f"Final Test Results - {json.dumps(test_results)}")
 
     # We no longer have best_predictor, the predictor is
     # loaded by trainer.test and then disappears
