@@ -792,6 +792,7 @@ def dataloader_from_split_name(
 class GridPointResult:
     def __init__(
         self,
+        predictor,
         model_path: str,
         epoch: int,
         time_in_min: float,
@@ -802,6 +803,7 @@ class GridPointResult:
         score_mode: str,
         conf: Dict,
     ):
+        self.predictor = predictor
         self.model_path = model_path
         self.epoch = epoch
         self.time_in_min = time_in_min
@@ -977,6 +979,7 @@ def task_predictions_train(
         logger.finalize("success")
         logger.save()
         return GridPointResult(
+            predictor=predictor,
             model_path=checkpoint_callback.best_model_path,
             epoch=epoch,
             time_in_min=time_in_min,
@@ -1317,6 +1320,20 @@ def task_predictions(
             label_to_idx=label_to_idx,
             nlabels=nlabels,
             in_memory=in_memory,
+        )
+
+        # Cache predictions for detailed analysis
+        if metadata["embedding_type"] == "event":
+            json.dump(
+                split_grid_points[i].predictor.test_predicted_events,
+                embedding_path.joinpath(f"{test_fold_str}.predictions.json").open("w"),
+                indent=4,
+            )
+        pickle.dump(
+            split_grid_points[i].predictor.test_predicted_labels,
+            open(
+                embedding_path.joinpath(f"{test_fold_str}.predicted-labels.pkl"), "wb"
+            ),
         )
 
         # Add model training values relevant to this split model
