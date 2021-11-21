@@ -54,7 +54,7 @@ def label_to_binary_vector(label: List, num_labels: int) -> torch.Tensor:
     return binary_labels
 
 
-def validate_score_return_type(ret: Union[Tuple[Tuple], float]):
+def validate_score_return_type(ret: Union[Tuple[Tuple[str, float], ...], float]):
     """
     Valid return types for the metric are
         - tuple(tuple(string: name of the subtype, float: the value)): This is the
@@ -111,7 +111,7 @@ class ScoreFunction:
             self.name = name
         self.maximize = maximize
 
-    def __call__(self, *args, **kwargs) -> Union[Tuple[Tuple], float]:
+    def __call__(self, *args, **kwargs) -> Union[Tuple[Tuple[str, float], ...], float]:
         """
         Calls the compute function of the metric, and after validating the output,
         returns the metric score
@@ -122,7 +122,7 @@ class ScoreFunction:
 
     def _compute(
         self, predictions: Any, targets: Any, **kwargs
-    ) -> Union[Tuple[Tuple], float]:
+    ) -> Union[Tuple[Tuple[str, float], ...], float]:
         """
         Compute the score based on the predictions and targets.
         This is a private function and the metric should be used as a functor
@@ -211,7 +211,7 @@ class SoundEventScore(ScoreFunction):
 
     def _compute(
         self, predictions: Dict, targets: Dict, **kwargs
-    ) -> Tuple[Tuple[str, float]]:
+    ) -> Tuple[Tuple[str, float], ...]:
         # Containers of events for sed_eval
         reference_event_list = self.sed_eval_event_container(targets)
         estimated_event_list = self.sed_eval_event_container(predictions)
@@ -235,7 +235,7 @@ class SoundEventScore(ScoreFunction):
             str, Dict[str, float]
         ] = scores.results_overall_metrics()
         # Open up nested overall scores
-        overall_scores: Dict[str, Union[float, int]] = dict(
+        overall_scores: Dict[str, float] = dict(
             ChainMap(*nested_overall_scores.values())
         )
         # Return the required scores as tuples. The scores are returned in the
