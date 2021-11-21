@@ -319,19 +319,20 @@ available_scores: Dict[str, Callable] = {
     "event_onset_200ms_fms": partial(
         EventBasedScore,
         name="event_onset_200ms_fms",
-        score="f_measure",
+        # If first score will be used as the primary score for this metric
+        scores=("f_measure", "precision", "recall"),
         params={"evaluate_onset": True, "evaluate_offset": False, "t_collar": 0.2},
     ),
     "event_onset_50ms_fms": partial(
         EventBasedScore,
         name="event_onset_50ms_fms",
-        score="f_measure",
+        scores=("f_measure", "precision", "recall"),
         params={"evaluate_onset": True, "evaluate_offset": False, "t_collar": 0.05},
     ),
     "event_onset_offset_50ms_20perc_fms": partial(
         EventBasedScore,
         name="event_onset_offset_50ms_20perc_fms",
-        score="f_measure",
+        scores=("f_measure", "precision", "recall"),
         params={
             "evaluate_onset": True,
             "evaluate_offset": True,
@@ -342,7 +343,7 @@ available_scores: Dict[str, Callable] = {
     "segment_1s_er": partial(
         SegmentBasedScore,
         name="segment_1s_er",
-        score="error_rate",
+        scores=("error_rate"),
         params={"time_resolution": 1.0},
         maximize=False,
     ),
