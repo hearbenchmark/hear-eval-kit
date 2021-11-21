@@ -116,15 +116,18 @@ class ScoreFunction:
         Calls the compute function of the metric, and after validating the output,
         returns the metric score
         """
-        ret = self.compute(*args, **kwargs)
+        ret = self._compute(*args, **kwargs)
         validate_score_return_type(ret)
         return ret
 
-    def compute(
+    def _compute(
         self, predictions: Any, targets: Any, **kwargs
     ) -> Union[Tuple[Tuple], float]:
         """
-        Compute the score based on the predictions and targets. Returns the score.
+        Compute the score based on the predictions and targets.
+        This is a private function and the metric should be used as a functor
+        by calling the `__call__` method which calls this and also validates
+        the return type
         """
         raise NotImplementedError("Inheriting classes must implement this function")
 
@@ -135,7 +138,7 @@ class ScoreFunction:
 class Top1Accuracy(ScoreFunction):
     name = "top1_acc"
 
-    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # Compute the number of correct predictions
@@ -160,7 +163,7 @@ class ChromaAccuracy(ScoreFunction):
 
     name = "chroma_acc"
 
-    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         # Compute the number of correct predictions
         correct = 0
         for target, prediction in zip(targets, predictions):
@@ -206,7 +209,7 @@ class SoundEventScore(ScoreFunction):
         self.params = params
         assert self.score_class is not None
 
-    def compute(
+    def _compute(
         self, predictions: Dict, targets: Dict, **kwargs
     ) -> Tuple[Tuple[str, float]]:
         # Containers of events for sed_eval
@@ -291,7 +294,7 @@ class MeanAveragePrecision(ScoreFunction):
 
     name = "mAP"
 
-    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
 
@@ -320,7 +323,7 @@ class DPrime(ScoreFunction):
 
     name = "d_prime"
 
-    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class
@@ -345,7 +348,7 @@ class AUCROC(ScoreFunction):
 
     name = "aucroc"
 
-    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class
