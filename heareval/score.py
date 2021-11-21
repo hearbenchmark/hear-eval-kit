@@ -2,7 +2,8 @@
 Common utils for scoring.
 """
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from collections import ChainMap
 
 import numpy as np
 import pandas as pd
@@ -142,20 +143,21 @@ class SoundEventScore(ScoreFunction):
     def __init__(
         self,
         label_to_idx: Dict[str, int],
-        score: str,
+        scores: Tuple[str],
         params: Dict = None,
         name: Optional[str] = None,
         maximize: bool = True,
     ):
         """
-        :param score: Score to use, from the list of overall SED eval scores.
+        :param scores: Scores to use, from the list of overall SED eval scores.
+            The first score in the tuple will be the primary score for this metric
         :param params: Parameters to pass to the scoring function,
                        see inheriting children for details.
         """
         if params is None:
             params = {}
         super().__init__(label_to_idx=label_to_idx, name=name, maximize=maximize)
-        self.score = score
+        self.scores = scores
         self.params = params
         assert self.score_class is not None
 
@@ -176,10 +178,18 @@ class SoundEventScore(ScoreFunction):
                 estimated_event_list=estimated_event_list.filter(filename=filename),
             )
 
-        # This (and segment_based_scores) return a pretty large selection of scores.
-        overall_scores = scores.results_overall_metrics()
-        # Keep the specific score we want
-        return overall_scores[self.score][self.score]
+        # results_overall_metrics return a pretty large nested selection of scores,
+        # with dicts of scores keyed on the type of scores, like f_measure, error_rate,
+        # accuracy
+        nested_overall_scores: Dict[
+            str, Dict[str, float]
+        ] = scores.results_overall_metrics()
+        # Open up nested overall scores
+        overall_scores: Dict[str, Union[float, int]] = dict(
+            ChainMap(*nested_overall_scores.values())
+        )
+        # Return the required scores as tuples
+        return tuple([(score, overall_scores[score]) for score in self.scores])
 
     @staticmethod
     def sed_eval_event_container(
