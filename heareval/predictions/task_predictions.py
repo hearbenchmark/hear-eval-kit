@@ -262,10 +262,8 @@ class AbstractPredictionModel(pl.LightningModule):
             validate_score_return_type(score_ret)
             # If the returned score is a tuple, store each subscore as separate entry
             if isinstance(score_ret, tuple):
-                # The first score in the returned tuple will be used for
-                # any optimisation criterion, for instance if the metric is
-                # primary metric, the score corresponding to the first tuple
-                # will be used for early stopping
+                # The first score in the returned tuple for the
+                # first `self.scores` is the optimization criterion
                 end_scores[f"{name}_{score}"] = score_ret[0][1]
                 # All other scores will also be logged
                 for (subscore, value) in score_ret:
