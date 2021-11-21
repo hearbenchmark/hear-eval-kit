@@ -19,7 +19,7 @@ import heareval.gpu_max_mem as gpu_max_mem
 from heareval.predictions.task_predictions import task_predictions
 
 
-def get_logger(task_name, log_path):
+def get_logger(task_name: str, log_path: Path) -> logging.Logger:
     """Returns a task level logger"""
     logger = logging.getLogger(task_name)
     logger.setLevel(logging.INFO)
@@ -126,11 +126,12 @@ def runner(
             in_memory=in_memory,
             deterministic=deterministic,
             grid=grid,
+            logger = logger
         )
         sys.stdout.flush()
         gpu_max_mem_used = gpu_max_mem.measure()
         logger.info(
-            f"DONE. took {time.time() - start} seconds to complete task_predictions"
+            f"DONE took {time.time() - start} seconds to complete task_predictions"
             f"(embedding_path={task_path}, embedding_size={embedding_size}, "
             f"grid_points={grid_points}, gpus={gpus}, "
             f"gpu_max_mem_used={gpu_max_mem_used}, "
