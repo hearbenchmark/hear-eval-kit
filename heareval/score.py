@@ -54,6 +54,28 @@ def label_to_binary_vector(label: List, num_labels: int) -> torch.Tensor:
     return binary_labels
 
 
+def validate_score_return_type(
+    ret: Union[float, int, Tuple[Tuple[str, Union[int, float]]]]
+):
+    """Validates if the return type of the score is valid"""
+    if isinstance(ret, tuple):
+        assert all(
+            type(s) == tuple and type(s[0]) == str and type(s[1]) in [float, int]
+            for s in ret
+        ), (
+            "If the return type of the score is a tuple, all the elements "
+            "in the tuple should be tuple of type tuple(str, (float, int))"
+        )
+    elif isinstance(ret, (float, int)):
+        pass
+    else:
+        raise ValueError(
+            f"Return type {type(ret)} is unexpected. Return type of "
+            "the score function should either be a "
+            "tuple(tuple(str, (float, int))) or float or int. "
+        )
+
+
 class ScoreFunction:
     """
     A simple abstract base class for score functions
@@ -77,7 +99,12 @@ class ScoreFunction:
             self.name = name
         self.maximize = maximize
 
-    def __call__(self, predictions: Any, targets: Any, **kwargs) -> float:
+    def __call__(self, *args, **kwargs) -> float:
+        ret = self.compute(*args, **kwargs)
+        validate_score_return_type(ret)
+        return ret
+
+    def compute(self, predictions: Any, targets: Any, **kwargs) -> float:
         """
         Compute the score based on the predictions and targets. Returns the score.
         """
@@ -90,7 +117,7 @@ class ScoreFunction:
 class Top1Accuracy(ScoreFunction):
     name = "top1_acc"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # Compute the number of correct predictions
@@ -115,7 +142,7 @@ class ChromaAccuracy(ScoreFunction):
 
     name = "chroma_acc"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         # Compute the number of correct predictions
         correct = 0
         for target, prediction in zip(targets, predictions):
@@ -161,7 +188,7 @@ class SoundEventScore(ScoreFunction):
         self.params = params
         assert self.score_class is not None
 
-    def __call__(self, predictions: Dict, targets: Dict, **kwargs):
+    def compute(self, predictions: Dict, targets: Dict, **kwargs):
         # Containers of events for sed_eval
         reference_event_list = self.sed_eval_event_container(targets)
         estimated_event_list = self.sed_eval_event_container(predictions)
@@ -243,7 +270,7 @@ class MeanAveragePrecision(ScoreFunction):
 
     name = "mAP"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
 
@@ -272,7 +299,7 @@ class DPrime(ScoreFunction):
 
     name = "d_prime"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class
@@ -297,7 +324,7 @@ class AUCROC(ScoreFunction):
 
     name = "aucroc"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class

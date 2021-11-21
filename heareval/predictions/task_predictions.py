@@ -46,6 +46,7 @@ from heareval.score import (
     available_scores,
     label_to_binary_vector,
     label_vocab_as_dict,
+    validate_score_return_type,
 )
 
 TASK_SPECIFIC_PARAM_GRID = {
@@ -259,17 +260,9 @@ class AbstractPredictionModel(pl.LightningModule):
         end_scores: Dict[str, Union[int, float]] = {}
         for score in self.scores:
             score_ret = score(*score_args)
+            validate_score_return_type(score_ret)
             # If the returned score is a tuple, store each subscore as separate entry
             if isinstance(score_ret, tuple):
-                assert all(
-                    type(s) == tuple
-                    and type(s[0]) == str
-                    and type(s[1]) in [float, int]
-                    for s in score_ret
-                ), (
-                    "If the return type of the score is a tuple, all the elements "
-                    "in the tuple should be tuple of type tuple(str, (float, int))"
-                )
                 # The first score in the returned tuple will be used
                 # as primary score for this metric
                 end_scores[f"{name}_{score}"] = score_ret[0][1]
