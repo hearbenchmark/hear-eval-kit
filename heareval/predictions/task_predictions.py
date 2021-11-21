@@ -1012,7 +1012,7 @@ def task_predictions_train(
         logger.finalize("success")
         logger.save()
         return GridPointResult(
-            predictor=predictor,
+            predictor = predictor,
             model_path=checkpoint_callback.best_model_path,
             epoch=epoch,
             time_in_min=time_in_min,
@@ -1354,7 +1354,7 @@ def task_predictions(
             nlabels=nlabels,
             in_memory=in_memory,
         )
-
+        
         # Cache predictions for detailed analysis
         if metadata["embedding_type"] == "event":
             json.dump(
@@ -1364,9 +1364,7 @@ def task_predictions(
             )
         pickle.dump(
             split_grid_points[i].predictor.test_predicted_labels,
-            open(
-                embedding_path.joinpath(f"{test_fold_str}.predicted-labels.pkl"), "wb"
-            ),
+            open(embedding_path.joinpath(f"{test_fold_str}.predicted-labels.pkl"), "wb"),
         )
 
         # Add model training values relevant to this split model
