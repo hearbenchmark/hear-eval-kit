@@ -126,7 +126,7 @@ def runner(
             in_memory=in_memory,
             deterministic=deterministic,
             grid=grid,
-            logger = logger
+            logger=logger,
         )
         sys.stdout.flush()
         gpu_max_mem_used = gpu_max_mem.measure()
