@@ -254,10 +254,10 @@ class AbstractPredictionModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         return self._step(batch, batch_idx)
 
-    def log_scores(self, name: str, score_args: Tuple[Any]):
+    def log_scores(self, name: str, score_args):
         """Logs the metric score value for each score defined for the model"""
         assert hasattr(self, "scores"), "Scores for the model should be defined"
-        end_scores: Dict[str, Union[int, float]] = {}
+        end_scores = {}
         for score in self.scores:
             score_ret = score(*score_args)
             validate_score_return_type(score_ret)
