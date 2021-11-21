@@ -7,6 +7,7 @@ predictions.
 import json
 import sys
 import time
+import logging
 from pathlib import Path
 from typing import Any, List
 
@@ -16,6 +17,25 @@ from tqdm import tqdm
 
 import heareval.gpu_max_mem as gpu_max_mem
 from heareval.predictions.task_predictions import task_predictions
+
+
+def get_logger(task_name, log_path):
+    """Returns a task level logger"""
+    logger = logging.getLogger(task_name)
+    logger.setLevel(logging.INFO)
+    fh = logging.FileHandler(log_path)
+    fh.setLevel(logging.INFO)
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+    # create formatter and add it to the handlers
+    # formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    formatter = logging.Formatter("%(name)s - %(message)s")
+    ch.setFormatter(formatter)
+    fh.setFormatter(formatter)
+    # add the handlers to logger
+    logger.addHandler(ch)
+    logger.addHandler(fh)
+    return logger
 
 
 @click.command()
@@ -79,10 +99,13 @@ def runner(
             # We already did this
             continue
 
-        print(f"Computing predictions for {task_path.name}")
-
         # Get embedding sizes for all splits/folds
         metadata = json.load(task_path.joinpath("task_metadata.json").open())
+
+        log_path = task_path.joinpath("prediction.log")
+        logger = get_logger(task_name=metadata["task_name"], log_path=log_path)
+
+        logger.info(f"Computing predictions for {task_path.name}")
         embedding_sizes = []
         for split in metadata["splits"]:
             split_path = task_path.joinpath(f"{split}.embedding-dimensions.json")
@@ -107,7 +130,7 @@ def runner(
         )
         sys.stdout.flush()
         gpu_max_mem_used = gpu_max_mem.measure()
-        print(
+        logger.info(
             f"DONE. took {time.time() - start} seconds to complete task_predictions"
             f"(embedding_path={task_path}, embedding_size={embedding_size}, "
             f"grid_points={grid_points}, gpus={gpus}, "

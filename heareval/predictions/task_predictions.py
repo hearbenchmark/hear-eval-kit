@@ -14,6 +14,7 @@ TODO:
 
 import copy
 import json
+import logging
 import math
 import multiprocessing
 import pickle
@@ -1211,6 +1212,7 @@ def task_predictions(
         seed_everything(42, workers=False)
 
     metadata = json.load(embedding_path.joinpath("task_metadata.json").open())
+    logger = logging.getLogger(metadata["task_name"])
     label_vocab, nlabels = label_vocab_nlabels(embedding_path)
 
     # wandb.init(project="heareval", tags=["predictions", embedding_path.name])
@@ -1255,7 +1257,7 @@ def task_predictions(
 
     grid_point_results = []
     for conf in tqdm(confs[:grid_points], desc="grid"):
-        print("trying grid point", conf)
+        logger.info("trying grid point", conf)
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -1276,7 +1278,7 @@ def task_predictions(
     # then compute test scores using the resulting models
     grid_point_results = sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
-    print(
+    logger.info(
         "Best validation score",
         best_grid_point.validation_score,
         best_grid_point.hparams,
@@ -1287,7 +1289,7 @@ def task_predictions(
     # from the grid search.
     split_grid_points = [best_grid_point]
     for split in data_splits[1:]:
-        print(f"Training split: {split}")
+        logger.info(f"Training split: {split}")
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -1302,7 +1304,7 @@ def task_predictions(
             deterministic=deterministic,
         )
         split_grid_points.append(grid_point_result)
-        print(
+        logger.info(
             f"Split {split} validation score: ",
             grid_point_result.validation_score,
             embedding_path,
@@ -1366,7 +1368,7 @@ def task_predictions(
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
-    print("TEST RESULTS", json.dumps(test_results))
+    logger.info("TEST RESULTS", json.dumps(test_results))
 
     # We no longer have best_predictor, the predictor is
     # loaded by trainer.test and then disappears
