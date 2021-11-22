@@ -54,7 +54,7 @@ def runner(
     module: str,
     model: str = None,
     tasks_dir: str = "tasks",
-    task: str = "tasks",
+    task: str = "all",
     embeddings_dir: str = "embeddings",
     model_options: str = "{}",
 ) -> None:
