@@ -2,7 +2,8 @@
 Common utils for scoring.
 """
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from collections import ChainMap
 
 import numpy as np
 import pandas as pd
@@ -53,6 +54,40 @@ def label_to_binary_vector(label: List, num_labels: int) -> torch.Tensor:
     return binary_labels
 
 
+def validate_score_return_type(ret: Union[Tuple[Tuple[str, float], ...], float]):
+    """
+    Valid return types for the metric are
+        - tuple(tuple(string: name of the subtype, float: the value)): This is the
+            case with sed eval metrics. They can return (("f_measure", value),
+            ("precision", value), ...), depending on the scores
+            the metric should is supposed to return. This is set as `scores`
+            attribute in the metric.
+        - float: Standard metric behaviour
+
+    The downstream prediction pipeline is able to handle these two types.
+    In case of the tuple return type, the value of the first entry in the
+    tuple will be used as an optimisation criterion wherever required.
+    For instance, if the return is (("f_measure", value), ("precision", value)),
+    the value corresponding to the f_measure will be used ( for instance in
+    early stopping if this metric is the primary score for the task )
+    """
+    if isinstance(ret, tuple):
+        assert all(
+            type(s) == tuple and type(s[0]) == str and type(s[1]) == float for s in ret
+        ), (
+            "If the return type of the score is a tuple, all the elements "
+            "in the tuple should be tuple of type (string, float)"
+        )
+    elif isinstance(ret, float):
+        pass
+    else:
+        raise ValueError(
+            f"Return type {type(ret)} is unexpected. Return type of "
+            "the score function should either be a "
+            "tuple(tuple) or float. "
+        )
+
+
 class ScoreFunction:
     """
     A simple abstract base class for score functions
@@ -76,9 +111,23 @@ class ScoreFunction:
             self.name = name
         self.maximize = maximize
 
-    def __call__(self, predictions: Any, targets: Any, **kwargs) -> float:
+    def __call__(self, *args, **kwargs) -> Union[Tuple[Tuple[str, float], ...], float]:
         """
-        Compute the score based on the predictions and targets. Returns the score.
+        Calls the compute function of the metric, and after validating the output,
+        returns the metric score
+        """
+        ret = self._compute(*args, **kwargs)
+        validate_score_return_type(ret)
+        return ret
+
+    def _compute(
+        self, predictions: Any, targets: Any, **kwargs
+    ) -> Union[Tuple[Tuple[str, float], ...], float]:
+        """
+        Compute the score based on the predictions and targets.
+        This is a private function and the metric should be used as a functor
+        by calling the `__call__` method which calls this and also validates
+        the return type
         """
         raise NotImplementedError("Inheriting classes must implement this function")
 
@@ -89,7 +138,7 @@ class ScoreFunction:
 class Top1Accuracy(ScoreFunction):
     name = "top1_acc"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # Compute the number of correct predictions
@@ -114,7 +163,7 @@ class ChromaAccuracy(ScoreFunction):
 
     name = "chroma_acc"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         # Compute the number of correct predictions
         correct = 0
         for target, prediction in zip(targets, predictions):
@@ -142,24 +191,27 @@ class SoundEventScore(ScoreFunction):
     def __init__(
         self,
         label_to_idx: Dict[str, int],
-        score: str,
+        scores: Tuple[str],
         params: Dict = None,
         name: Optional[str] = None,
         maximize: bool = True,
     ):
         """
-        :param score: Score to use, from the list of overall SED eval scores.
+        :param scores: Scores to use, from the list of overall SED eval scores.
+            The first score in the tuple will be the primary score for this metric
         :param params: Parameters to pass to the scoring function,
                        see inheriting children for details.
         """
         if params is None:
             params = {}
         super().__init__(label_to_idx=label_to_idx, name=name, maximize=maximize)
-        self.score = score
+        self.scores = scores
         self.params = params
         assert self.score_class is not None
 
-    def __call__(self, predictions: Dict, targets: Dict, **kwargs):
+    def _compute(
+        self, predictions: Dict, targets: Dict, **kwargs
+    ) -> Tuple[Tuple[str, float], ...]:
         # Containers of events for sed_eval
         reference_event_list = self.sed_eval_event_container(targets)
         estimated_event_list = self.sed_eval_event_container(predictions)
@@ -176,10 +228,19 @@ class SoundEventScore(ScoreFunction):
                 estimated_event_list=estimated_event_list.filter(filename=filename),
             )
 
-        # This (and segment_based_scores) return a pretty large selection of scores.
-        overall_scores = scores.results_overall_metrics()
-        # Keep the specific score we want
-        return overall_scores[self.score][self.score]
+        # results_overall_metrics return a pretty large nested selection of scores,
+        # with dicts of scores keyed on the type of scores, like f_measure, error_rate,
+        # accuracy
+        nested_overall_scores: Dict[
+            str, Dict[str, float]
+        ] = scores.results_overall_metrics()
+        # Open up nested overall scores
+        overall_scores: Dict[str, float] = dict(
+            ChainMap(*nested_overall_scores.values())
+        )
+        # Return the required scores as tuples. The scores are returned in the
+        # order they are passed in the `scores` argument
+        return tuple([(score, overall_scores[score]) for score in self.scores])
 
     @staticmethod
     def sed_eval_event_container(
@@ -233,7 +294,7 @@ class MeanAveragePrecision(ScoreFunction):
 
     name = "mAP"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
 
@@ -262,7 +323,7 @@ class DPrime(ScoreFunction):
 
     name = "d_prime"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class
@@ -287,7 +348,7 @@ class AUCROC(ScoreFunction):
 
     name = "aucroc"
 
-    def __call__(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
+    def _compute(self, predictions: np.ndarray, targets: np.ndarray, **kwargs) -> float:
         assert predictions.ndim == 2
         assert targets.ndim == 2  # One hot
         # ROC-AUC Requires more than one example for each class
@@ -309,19 +370,20 @@ available_scores: Dict[str, Callable] = {
     "event_onset_200ms_fms": partial(
         EventBasedScore,
         name="event_onset_200ms_fms",
-        score="f_measure",
+        # If first score will be used as the primary score for this metric
+        scores=("f_measure", "precision", "recall"),
         params={"evaluate_onset": True, "evaluate_offset": False, "t_collar": 0.2},
     ),
     "event_onset_50ms_fms": partial(
         EventBasedScore,
         name="event_onset_50ms_fms",
-        score="f_measure",
+        scores=("f_measure", "precision", "recall"),
         params={"evaluate_onset": True, "evaluate_offset": False, "t_collar": 0.05},
     ),
     "event_onset_offset_50ms_20perc_fms": partial(
         EventBasedScore,
         name="event_onset_offset_50ms_20perc_fms",
-        score="f_measure",
+        scores=("f_measure", "precision", "recall"),
         params={
             "evaluate_onset": True,
             "evaluate_offset": True,
@@ -332,7 +394,7 @@ available_scores: Dict[str, Callable] = {
     "segment_1s_er": partial(
         SegmentBasedScore,
         name="segment_1s_er",
-        score="error_rate",
+        scores=("error_rate",),
         params={"time_resolution": 1.0},
         maximize=False,
     ),

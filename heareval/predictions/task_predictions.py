@@ -15,7 +15,6 @@ TODO:
 import copy
 import json
 import logging
-import math
 import multiprocessing
 import pickle
 import random
@@ -47,6 +46,7 @@ from heareval.score import (
     available_scores,
     label_to_binary_vector,
     label_vocab_as_dict,
+    validate_score_return_type,
 )
 
 TASK_SPECIFIC_PARAM_GRID = {
@@ -254,6 +254,35 @@ class AbstractPredictionModel(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         return self._step(batch, batch_idx)
 
+    def log_scores(self, name: str, score_args):
+        """Logs the metric score value for each score defined for the model"""
+        assert hasattr(self, "scores"), "Scores for the model should be defined"
+        end_scores = {}
+        # The first score in the first `self.scores` is the optimization criterion
+        for score in self.scores:
+            score_ret = score(*score_args)
+            validate_score_return_type(score_ret)
+            # If the returned score is a tuple, store each subscore as separate entry
+            if isinstance(score_ret, tuple):
+                end_scores[f"{name}_{score}"] = score_ret[0][1]
+                # All other scores will also be logged
+                for (subscore, value) in score_ret:
+                    end_scores[f"{name}_{score}_{subscore}"] = value
+            elif isinstance(score_ret, float):
+                end_scores[f"{name}_{score}"] = score_ret
+            else:
+                raise ValueError(
+                    f"Return type {type(score_ret)} is unexpected. Return type of "
+                    "the score function should either be a "
+                    "tuple(tuple) or float."
+                )
+
+        self.log(
+            f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
+        )
+        for score_name in end_scores:
+            self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
+
     # Implement this for each inheriting class
     # TODO: Can we combine the boilerplate for both of these?
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
@@ -340,15 +369,13 @@ class ScenePredictionModel(AbstractPredictionModel):
                 "prediction_logit": prediction_logit.detach().cpu(),
             }
 
-        for score in self.scores:
-            end_scores[f"{name}_{score}"] = score(
-                prediction.detach().cpu().numpy(), target.detach().cpu().numpy()
-            )
-        self.log(
-            f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
+        self.log_scores(
+            name,
+            score_args=(
+                prediction.detach().cpu().numpy(),
+                target.detach().cpu().numpy(),
+            ),
         )
-        for score_name in end_scores:
-            self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
 
 
 class EventPredictionModel(AbstractPredictionModel):
@@ -429,11 +456,23 @@ class EventPredictionModel(AbstractPredictionModel):
         for postprocessing in tqdm(predicted_events_by_postprocessing):
             predicted_events = predicted_events_by_postprocessing[postprocessing]
             primary_score_fn = self.scores[0]
-            primary_score = primary_score_fn(
+            primary_score_ret = primary_score_fn(
                 # predicted_events, self.target_events[name]
                 predicted_events,
                 self.target_events[name],
             )
+            # If the score returns a tuple of scores, the first score
+            # is used
+            if isinstance(primary_score_ret, tuple):
+                primary_score = primary_score_ret[0][1]
+            elif isinstance(primary_score_ret, float):
+                primary_score = primary_score_ret
+            else:
+                raise ValueError(
+                    f"Return type {type(primary_score_ret)} is unexpected. "
+                    "Return type of the score function should either be a "
+                    "tuple(tuple) or float. "
+                )
             if np.isnan(primary_score):
                 primary_score = 0.0
             score_and_postprocessing.append((primary_score, postprocessing))
@@ -463,19 +502,7 @@ class EventPredictionModel(AbstractPredictionModel):
                 "predicted_events": predicted_events,
             }
 
-        for score in self.scores:
-            end_scores[f"{name}_{score}"] = score(
-                predicted_events, self.target_events[name]
-            )
-            # Weird, this can happen if precision has zero guesses
-            if math.isnan(end_scores[f"{name}_{score}"]):
-                end_scores[f"{name}_{score}"] = 0.0
-        self.log(
-            f"{name}_score", end_scores[f"{name}_{str(self.scores[0])}"], logger=True
-        )
-
-        for score_name in end_scores:
-            self.log(score_name, end_scores[score_name], prog_bar=True, logger=True)
+        self.log_scores(name, score_args=(predicted_events, self.target_events[name]))
 
 
 class SplitMemmapDataset(Dataset):
