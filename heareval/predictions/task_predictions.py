@@ -334,7 +334,11 @@ class ScenePredictionModel(AbstractPredictionModel):
 
         if name == "test":
             # Cache all predictions for later serialization
-            self.test_predicted_labels = prediction
+            self.test_predictions = {
+                "target": target.detach().cpu(),
+                "prediction": prediction.detach().cpu(),
+                "prediction_logit": prediction_logit.detach().cpu(),
+            }
 
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
@@ -450,10 +454,14 @@ class EventPredictionModel(AbstractPredictionModel):
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         if name == "test":
-            # print("test epoch", self.current_epoch)
             # Cache all predictions for later serialization
-            self.test_predicted_labels = prediction
-            self.test_predicted_events = predicted_events
+            self.test_predictions = {
+                "target": target.detach().cpu(),
+                "prediction": prediction.detach().cpu(),
+                "prediction_logit": prediction_logit.detach().cpu(),
+                "target_events": self.target_events[name],
+                "predicted_events": predicted_events
+            }
 
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
@@ -1327,18 +1335,10 @@ def task_predictions(
         )
 
         # Cache predictions for detailed analysis
-        if metadata["embedding_type"] == "event":
-            json.dump(
-                split_grid_points[i].predictor.test_predicted_events,
-                embedding_path.joinpath(f"{test_fold_str}.predictions.json").open("w"),
-                indent=4,
-            )
-        pickle.dump(
-            split_grid_points[i].predictor.test_predicted_labels,
-            open(
-                embedding_path.joinpath(f"{test_fold_str}.predicted-labels.pkl"), "wb"
-            ),
-        )
+        prediction_file = embedding_path.joinpath(f"{test_fold_str}.predictions.pkl")
+        print(split_grid_points[i].predictor.test_predictions)
+        with open(prediction_file, "wb") as fp:
+            pickle.dump(split_grid_points[i].predictor.test_predictions, fp)
 
         # Add model training values relevant to this split model
         test_results[test_fold_str].update(
