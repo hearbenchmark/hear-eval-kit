@@ -236,7 +236,7 @@ RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     $PIP_INSTALL hearbaseline hearvalidator
 
 # Touch this to force a rebuild of everything below
-RUN echo 20210912
+RUN echo 20211122
 
 RUN APT_INSTALL="apt-get install -y --no-install-recommends" && \
     PIP_INSTALL="python -m pip --no-cache-dir install" && \
