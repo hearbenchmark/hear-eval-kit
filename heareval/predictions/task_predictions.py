@@ -717,6 +717,7 @@ def dataloader_from_split_name(
     in_memory: bool,
     metadata: bool = True,
     batch_size: int = 64,
+    pin_memory: bool = True,
 ) -> DataLoader:
     """
     Get the dataloader for a `split_name` or a list of `split_name`
@@ -767,10 +768,14 @@ def dataloader_from_split_name(
         + f"which has {len(dataset)} instances."
     )
 
-    if in_memory:
+    # It is not recommended to return CUDA tensors using multi-processing
+    # If automatic memory pinning is set to True then the num_workers should be zero
+    # https://pytorch.org/docs/stable/data.html#single-and-multi-process-data-loading
+    if in_memory and not pin_memory:
         num_workers = NUM_WORKERS
     else:
-        # We are disk bound, so multiple workers might cause thrashing
+        # We are disk bound or using automatic memory pinning,
+        # so multiple workers might cause thrashing and slowdowns
         num_workers = 0
 
     if in_memory and split_name == "train":
