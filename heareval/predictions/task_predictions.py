@@ -789,7 +789,7 @@ def dataloader_from_split_name(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
-        pin_memory=True,
+        pin_memory=pin_memory,
         num_workers=num_workers,
     )
 
