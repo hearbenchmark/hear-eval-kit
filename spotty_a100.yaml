@@ -35,20 +35,20 @@ containers:
     runtimeParameters: ['--shm-size', '20G']
 
 instances:
-  - name: i1-a100
+  - name: jshier-a100
     provider: gcp
     parameters:
       # https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
-      zone: europe-west4-a
-      # V100 
-      machineType: a2-highgpu-1g
+      zone: europe-west4-b
+      # V100
+      machineType: a2-megagpu-16g
       # Machine Type requirements for A100: https://cloud.google.com/compute/docs/gpus
       # Needs to be updated for more than one GPU
       preemptibleInstance: True
       gpu:
         type: nvidia-tesla-a100
-        count: 1
-      imageUri: projects/ml-images/global/images/c0-deeplearning-common-cu110-v20210818-debian-10
+        count: 16
+      imageUri: projects/ml-images/global/images/c0-deeplearning-common-cu113-v20211105-debian-10
 #      spotInstance: True
 #      ports: [6006, 8888]
 #      dockerDataRoot: /docker
@@ -56,13 +56,6 @@ instances:
         - name: workspace
           parameters:
             size: 250
-# Not implemented for GCP, all volumes will be retained
-#            deletionPolicy: retain
-            mountDir: /workspace
-#        - name: docker
-#          parameters:
-#            size: 200
-#            mountDir: /docker
 
 # Pick SR!
 #   gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*.tar . && for f in hear2021-task-*.tar; do tar xf "$f"; done
@@ -71,7 +64,7 @@ instances:
 #   python3 -m heareval.embeddings.runner hearbaseline --model naive_baseline.pt
 #   python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt
 #   python3 -m heareval.evaluation.runner
-#   
+#
 #scripts:
 #   get: |
 #     gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*.tar . && for f in hear2021-task-*.tar; do tar xf "$f"; done
