@@ -1336,7 +1336,6 @@ def task_predictions(
 
         # Cache predictions for detailed analysis
         prediction_file = embedding_path.joinpath(f"{test_fold_str}.predictions.pkl")
-        print(split_grid_points[i].predictor.test_predictions)
         with open(prediction_file, "wb") as fp:
             pickle.dump(split_grid_points[i].predictor.test_predictions, fp)
 
