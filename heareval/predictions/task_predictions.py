@@ -460,7 +460,7 @@ class EventPredictionModel(AbstractPredictionModel):
                 "prediction": prediction.detach().cpu(),
                 "prediction_logit": prediction_logit.detach().cpu(),
                 "target_events": self.target_events[name],
-                "predicted_events": predicted_events
+                "predicted_events": predicted_events,
             }
 
         for score in self.scores:
