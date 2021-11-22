@@ -14,6 +14,7 @@ TODO:
 
 import copy
 import json
+import logging
 import math
 import multiprocessing
 import pickle
@@ -333,7 +334,11 @@ class ScenePredictionModel(AbstractPredictionModel):
 
         if name == "test":
             # Cache all predictions for later serialization
-            self.test_predicted_labels = prediction
+            self.test_predictions = {
+                "target": target.detach().cpu(),
+                "prediction": prediction.detach().cpu(),
+                "prediction_logit": prediction_logit.detach().cpu(),
+            }
 
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
@@ -449,10 +454,14 @@ class EventPredictionModel(AbstractPredictionModel):
         end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
 
         if name == "test":
-            # print("test epoch", self.current_epoch)
             # Cache all predictions for later serialization
-            self.test_predicted_labels = prediction
-            self.test_predicted_events = predicted_events
+            self.test_predictions = {
+                "target": target.detach().cpu(),
+                "prediction": prediction.detach().cpu(),
+                "prediction_logit": prediction_logit.detach().cpu(),
+                "target_events": self.target_events[name],
+                "predicted_events": predicted_events,
+            }
 
         for score in self.scores:
             end_scores[f"{name}_{score}"] = score(
@@ -717,6 +726,7 @@ def dataloader_from_split_name(
     in_memory: bool,
     metadata: bool = True,
     batch_size: int = 64,
+    pin_memory: bool = True,
 ) -> DataLoader:
     """
     Get the dataloader for a `split_name` or a list of `split_name`
@@ -767,10 +777,14 @@ def dataloader_from_split_name(
         + f"which has {len(dataset)} instances."
     )
 
-    if in_memory:
+    # It is not recommended to return CUDA tensors using multi-processing
+    # If automatic memory pinning is set to True then the num_workers should be zero
+    # https://pytorch.org/docs/stable/data.html#single-and-multi-process-data-loading
+    if in_memory and not pin_memory:
         num_workers = NUM_WORKERS
     else:
-        # We are disk bound, so multiple workers might cause thrashing
+        # We are disk bound or using automatic memory pinning,
+        # so multiple workers might cause thrashing and slowdowns
         num_workers = 0
 
     if in_memory and split_name == "train":
@@ -784,7 +798,7 @@ def dataloader_from_split_name(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
-        pin_memory=True,
+        pin_memory=pin_memory,
         num_workers=num_workers,
     )
 
@@ -792,6 +806,7 @@ def dataloader_from_split_name(
 class GridPointResult:
     def __init__(
         self,
+        predictor,
         model_path: str,
         epoch: int,
         time_in_min: float,
@@ -802,6 +817,7 @@ class GridPointResult:
         score_mode: str,
         conf: Dict,
     ):
+        self.predictor = predictor
         self.model_path = model_path
         self.epoch = epoch
         self.time_in_min = time_in_min
@@ -977,6 +993,7 @@ def task_predictions_train(
         logger.finalize("success")
         logger.save()
         return GridPointResult(
+            predictor=predictor,
             model_path=checkpoint_callback.best_model_path,
             epoch=epoch,
             time_in_min=time_in_min,
@@ -1068,7 +1085,6 @@ def data_splits_from_folds(folds: List[str]) -> List[Dict[str, List[str]]]:
             {
                 "train": train_folds,
                 "valid": [valid_fold],
-                "train+valid": train_folds + [valid_fold],
                 "test": [test_fold],
             }
         )
@@ -1181,10 +1197,14 @@ def sort_grid_points(
     return grid_point_results
 
 
-def print_scores(grid_point_results: List[GridPointResult], embedding_path: Path):
+def print_scores(
+    grid_point_results: List[GridPointResult],
+    embedding_path: Path,
+    logger: logging.Logger,
+):
     grid_point_results = sort_grid_points(grid_point_results)
     for g in grid_point_results:
-        print(g, str(embedding_path))
+        logger.info(f"Grid Point Summary: {g}")
 
 
 def task_predictions(
@@ -1195,6 +1215,7 @@ def task_predictions(
     in_memory: bool,
     deterministic: bool,
     grid: str,
+    logger: logging.Logger,
 ):
     # By setting workers=True in seed_everything(), Lightning derives
     # unique seeds across all dataloader workers and processes
@@ -1252,7 +1273,7 @@ def task_predictions(
 
     grid_point_results = []
     for conf in tqdm(confs[:grid_points], desc="grid"):
-        print("trying grid point", conf)
+        logger.info(f"Trying Grid Point: {conf}")
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -1267,24 +1288,24 @@ def task_predictions(
             deterministic=deterministic,
         )
         grid_point_results.append(grid_point_result)
-        print_scores(grid_point_results, embedding_path)
+        print_scores(grid_point_results, embedding_path, logger)
 
     # Use the best hyperparameters to train models for remaining folds,
     # then compute test scores using the resulting models
     grid_point_results = sort_grid_points(grid_point_results)
     best_grid_point = grid_point_results[0]
-    print(
-        "Best validation score",
-        best_grid_point.validation_score,
-        best_grid_point.hparams,
-        embedding_path,
+    logger.info(
+        "Best Grid Point Validation Score: "
+        f"{best_grid_point.validation_score}  "
+        "Grid Point HyperParams: "
+        f"{best_grid_point.hparams}  "
     )
 
     # Train predictors for the remaining splits using the hyperparameters selected
     # from the grid search.
     split_grid_points = [best_grid_point]
     for split in data_splits[1:]:
-        print(f"Training split: {split}")
+        logger.info(f"Training Split: {split}")
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -1299,10 +1320,9 @@ def task_predictions(
             deterministic=deterministic,
         )
         split_grid_points.append(grid_point_result)
-        print(
-            f"Split {split} validation score: ",
-            grid_point_result.validation_score,
-            embedding_path,
+        logger.info(
+            f"Validation Score for the Training Split: "
+            f"{grid_point_result.validation_score}"
         )
 
     # Now test each of the trained models
@@ -1318,6 +1338,11 @@ def task_predictions(
             nlabels=nlabels,
             in_memory=in_memory,
         )
+
+        # Cache predictions for detailed analysis
+        prediction_file = embedding_path.joinpath(f"{test_fold_str}.predictions.pkl")
+        with open(prediction_file, "wb") as fp:
+            pickle.dump(split_grid_points[i].predictor.test_predictions, fp)
 
         # Add model training values relevant to this split model
         test_results[test_fold_str].update(
@@ -1349,7 +1374,7 @@ def task_predictions(
     open(embedding_path.joinpath("test.predicted-scores.json"), "wt").write(
         json.dumps(test_results, indent=4)
     )
-    print("TEST RESULTS", json.dumps(test_results))
+    logger.info(f"Final Test Results: {json.dumps(test_results)}")
 
     # We no longer have best_predictor, the predictor is
     # loaded by trainer.test and then disappears
