@@ -1231,7 +1231,8 @@ def print_scores(
 ):
     grid_point_results = sort_grid_points(grid_point_results)
     for g in grid_point_results:
-        logger.info(f"Grid Point Summary: {g}")
+        # Don't log this since it is diagnostic and repetitive
+        print(f"Grid Point Summary: {g}")
 
 
 def task_predictions(
@@ -1299,8 +1300,8 @@ def task_predictions(
     random.shuffle(confs)
 
     grid_point_results = []
-    for conf in tqdm(confs[:grid_points], desc="grid"):
-        logger.info(f"Trying Grid Point: {conf}")
+    for confi, conf in tqdm(enumerate(confs[:grid_points]), desc="grid"):
+        logger.info(f"Grid point {confi+1} of {grid_points}: {conf}")
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,
@@ -1314,6 +1315,7 @@ def task_predictions(
             in_memory=in_memory,
             deterministic=deterministic,
         )
+        logger.info(f" result: {grid_point_result}")
         grid_point_results.append(grid_point_result)
         print_scores(grid_point_results, embedding_path, logger)
 
@@ -1331,8 +1333,8 @@ def task_predictions(
     # Train predictors for the remaining splits using the hyperparameters selected
     # from the grid search.
     split_grid_points = [best_grid_point]
-    for split in data_splits[1:]:
-        logger.info(f"Training Split: {split}")
+    for spliti, split in tqdm(enumerate(data_splits[1:]), desc="split"):
+        logger.info(f"Training split {spliti+2} of {len(data_splits)}: {split}")
         grid_point_result = task_predictions_train(
             embedding_path=embedding_path,
             embedding_size=embedding_size,

@@ -123,6 +123,7 @@ def runner(
                 {
                     "time_elapsed": time_elapsed,
                     "gpu_max_mem": gpu_max_mem_used,
+                    "gpu_device_name": gpu_max_mem.device_name(),
                 },
                 indent=4,
             )
