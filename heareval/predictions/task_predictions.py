@@ -500,6 +500,7 @@ class EventPredictionModel(AbstractPredictionModel):
                 "prediction_logit": prediction_logit.detach().cpu(),
                 "target_events": self.target_events[name],
                 "predicted_events": predicted_events,
+                "timestamp": timestamp,
             }
 
         self.log_scores(name, score_args=(predicted_events, self.target_events[name]))
