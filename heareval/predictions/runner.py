@@ -9,7 +9,7 @@ import sys
 import time
 import logging
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Dict, List, Tuple
 
 import click
 import torch
@@ -26,24 +26,32 @@ class RelativeSeconds(logging.Formatter):
         return super().format(record)
 
 
+# Cache this so the logger object isn't recreated,
+# and we get accurate "relativeCreated" times.
+_task_path_to_logger: Dict[Tuple[str, Path], logging.Logger] = {}
+
+
 def get_logger(task_name: str, log_path: Path) -> logging.Logger:
     """Returns a task level logger"""
-    logger = logging.getLogger(task_name)
-    logger.setLevel(logging.INFO)
-    fh = logging.FileHandler(log_path)
-    fh.setLevel(logging.INFO)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    # create formatter and add it to the handlers
-    formatter = RelativeSeconds(
-        "predict - %(name)s - %(relativeCreated)ds - %(message)s"
-    )
-    ch.setFormatter(formatter)
-    fh.setFormatter(formatter)
-    # add the handlers to logger
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-    return logger
+    global _task_path_to_logger
+    if (task_name, log_path) not in _task_path_to_logger:
+        logger = logging.getLogger(task_name)
+        logger.setLevel(logging.INFO)
+        fh = logging.FileHandler(log_path)
+        fh.setLevel(logging.INFO)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.INFO)
+        # create formatter and add it to the handlers
+        formatter = RelativeSeconds(
+            "predict - %(name)s - %(relativeCreated)ds - %(message)s"
+        )
+        ch.setFormatter(formatter)
+        fh.setFormatter(formatter)
+        # add the handlers to logger
+        logger.addHandler(ch)
+        logger.addHandler(fh)
+        _task_path_to_logger[(task_name, log_path)] = logger
+    return _task_path_to_logger[(task_name, log_path)]
 
 
 @click.command()
