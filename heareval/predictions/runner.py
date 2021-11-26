@@ -10,7 +10,7 @@ import sys
 import time
 import logging
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Dict, List, Tuple
 
 import click
 import torch
