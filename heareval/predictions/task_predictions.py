@@ -203,10 +203,12 @@ class AbstractPredictionModel(pl.LightningModule):
         prediction_type: str,
         scores: List[ScoreFunction],
         conf: Dict,
+        use_scoring_for_early_stopping: bool = True,
     ):
         super().__init__()
 
         self.save_hyperparameters(conf)
+        self.use_scoring_for_early_stopping = use_scoring_for_early_stopping
 
         # Since we don't know how these embeddings are scaled
         self.layernorm = conf["embedding_norm"](nfeatures)
@@ -340,6 +342,7 @@ class ScenePredictionModel(AbstractPredictionModel):
         prediction_type: str,
         scores: List[ScoreFunction],
         conf: Dict,
+        use_scoring_for_early_stopping: bool = True,
     ):
         super().__init__(
             nfeatures=nfeatures,
@@ -348,6 +351,7 @@ class ScenePredictionModel(AbstractPredictionModel):
             prediction_type=prediction_type,
             scores=scores,
             conf=conf,
+            use_scoring_for_early_stopping=use_scoring_for_early_stopping,
         )
 
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
@@ -358,8 +362,12 @@ class ScenePredictionModel(AbstractPredictionModel):
             flat_outputs[key] for key in ["target", "prediction", "prediction_logit"]
         )
 
-        end_scores = {}
-        end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
+        self.log(
+            f"{name}_loss",
+            self.predictor.logit_loss(prediction_logit, target),
+            prog_bar=True,
+            logger=True,
+        )
 
         if name == "test":
             # Cache all predictions for later serialization
@@ -369,13 +377,14 @@ class ScenePredictionModel(AbstractPredictionModel):
                 "prediction_logit": prediction_logit.detach().cpu(),
             }
 
-        self.log_scores(
-            name,
-            score_args=(
-                prediction.detach().cpu().numpy(),
-                target.detach().cpu().numpy(),
-            ),
-        )
+        if name == "test" or self.use_scoring_for_early_stopping:
+            self.log_scores(
+                name,
+                score_args=(
+                    prediction.detach().cpu().numpy(),
+                    target.detach().cpu().numpy(),
+                ),
+            )
 
 
 class EventPredictionModel(AbstractPredictionModel):
@@ -396,6 +405,7 @@ class EventPredictionModel(AbstractPredictionModel):
         test_target_events: Dict[str, List[Dict[str, Any]]],
         postprocessing_grid: Dict[str, List[float]],
         conf: Dict,
+        use_scoring_for_early_stopping: bool = True,
     ):
         super().__init__(
             nfeatures=nfeatures,
@@ -404,6 +414,7 @@ class EventPredictionModel(AbstractPredictionModel):
             prediction_type=prediction_type,
             scores=scores,
             conf=conf,
+            use_scoring_for_early_stopping=use_scoring_for_early_stopping,
         )
         self.target_events = {
             "val": validation_target_events,
@@ -412,6 +423,17 @@ class EventPredictionModel(AbstractPredictionModel):
         # For each epoch, what postprocessing parameters were best
         self.epoch_best_postprocessing: Dict[int, Tuple[Tuple[str, Any], ...]] = {}
         self.postprocessing_grid = postprocessing_grid
+
+    def epoch_best_postprocessing_or_default(
+        self, epoch: int
+    ) -> Tuple[Tuple[str, Any], ...]:
+        if self.use_scoring_for_early_stopping:
+            return self.epoch_best_postprocessing[epoch]
+        else:
+            postprocessing_confs = list(ParameterGrid(self.postprocessing_grid))
+            # There can only be one kind of postprocessing
+            assert len(postprocessing_confs) == 1
+            return tuple(postprocessing_confs[0].items())
 
     def _score_epoch_end(self, name: str, outputs: List[Dict[str, List[Any]]]):
         flat_outputs = self._flatten_batched_outputs(
@@ -431,6 +453,13 @@ class EventPredictionModel(AbstractPredictionModel):
             ]
         )
 
+        self.log(
+            f"{name}_loss",
+            self.predictor.logit_loss(prediction_logit, target),
+            prog_bar=True,
+            logger=True,
+        )
+
         if name == "val":
             # During training, the epoch is one behind the value that will
             # be stored as the "best" epoch
@@ -438,72 +467,72 @@ class EventPredictionModel(AbstractPredictionModel):
             postprocessing_cached = None
         elif name == "test":
             epoch = self.current_epoch
-            postprocessing_cached = self.epoch_best_postprocessing[epoch]
+            postprocessing_cached = self.epoch_best_postprocessing_or_default(epoch)
         else:
             raise ValueError
         # print("\n\n\n", epoch)
 
-        predicted_events_by_postprocessing = get_events_for_all_files(
-            prediction,
-            filename,
-            timestamp,
-            self.idx_to_label,
-            self.postprocessing_grid,
-            postprocessing_cached,
-        )
-
-        score_and_postprocessing = []
-        for postprocessing in tqdm(predicted_events_by_postprocessing):
-            predicted_events = predicted_events_by_postprocessing[postprocessing]
-            primary_score_fn = self.scores[0]
-            primary_score_ret = primary_score_fn(
-                # predicted_events, self.target_events[name]
-                predicted_events,
-                self.target_events[name],
+        if name == "test" or self.use_scoring_for_early_stopping:
+            predicted_events_by_postprocessing = get_events_for_all_files(
+                prediction,
+                filename,
+                timestamp,
+                self.idx_to_label,
+                self.postprocessing_grid,
+                postprocessing_cached,
             )
-            # If the score returns a tuple of scores, the first score
-            # is used
-            if isinstance(primary_score_ret, tuple):
-                primary_score = primary_score_ret[0][1]
-            elif isinstance(primary_score_ret, float):
-                primary_score = primary_score_ret
-            else:
-                raise ValueError(
-                    f"Return type {type(primary_score_ret)} is unexpected. "
-                    "Return type of the score function should either be a "
-                    "tuple(tuple) or float. "
+
+            score_and_postprocessing = []
+            for postprocessing in tqdm(predicted_events_by_postprocessing):
+                predicted_events = predicted_events_by_postprocessing[postprocessing]
+                primary_score_fn = self.scores[0]
+                primary_score_ret = primary_score_fn(
+                    # predicted_events, self.target_events[name]
+                    predicted_events,
+                    self.target_events[name],
                 )
-            if np.isnan(primary_score):
-                primary_score = 0.0
-            score_and_postprocessing.append((primary_score, postprocessing))
-        score_and_postprocessing.sort(reverse=True)
+                # If the score returns a tuple of scores, the first score
+                # is used
+                if isinstance(primary_score_ret, tuple):
+                    primary_score = primary_score_ret[0][1]
+                elif isinstance(primary_score_ret, float):
+                    primary_score = primary_score_ret
+                else:
+                    raise ValueError(
+                        f"Return type {type(primary_score_ret)} is unexpected. "
+                        "Return type of the score function should either be a "
+                        "tuple(tuple) or float. "
+                    )
+                if np.isnan(primary_score):
+                    primary_score = 0.0
+                score_and_postprocessing.append((primary_score, postprocessing))
+            score_and_postprocessing.sort(reverse=True)
 
-        # for vs in score_and_postprocessing:
-        #    print(vs)
+            # for vs in score_and_postprocessing:
+            #    print(vs)
 
-        best_postprocessing = score_and_postprocessing[0][1]
-        if name == "val":
-            print("BEST POSTPROCESSING", best_postprocessing)
-            for k, v in best_postprocessing:
-                self.log(f"postprocessing/{k}", v, logger=True)
-            self.epoch_best_postprocessing[epoch] = best_postprocessing
-        predicted_events = predicted_events_by_postprocessing[best_postprocessing]
+            best_postprocessing = score_and_postprocessing[0][1]
+            if name == "val":
+                print("BEST POSTPROCESSING", best_postprocessing)
+                for k, v in best_postprocessing:
+                    self.log(f"postprocessing/{k}", v, logger=True)
+                self.epoch_best_postprocessing[epoch] = best_postprocessing
+            predicted_events = predicted_events_by_postprocessing[best_postprocessing]
 
-        end_scores = {}
-        end_scores[f"{name}_loss"] = self.predictor.logit_loss(prediction_logit, target)
+            if name == "test":
+                # Cache all predictions for later serialization
+                self.test_predictions = {
+                    "target": target.detach().cpu(),
+                    "prediction": prediction.detach().cpu(),
+                    "prediction_logit": prediction_logit.detach().cpu(),
+                    "target_events": self.target_events[name],
+                    "predicted_events": predicted_events,
+                    "timestamp": timestamp,
+                }
 
-        if name == "test":
-            # Cache all predictions for later serialization
-            self.test_predictions = {
-                "target": target.detach().cpu(),
-                "prediction": prediction.detach().cpu(),
-                "prediction_logit": prediction_logit.detach().cpu(),
-                "target_events": self.target_events[name],
-                "predicted_events": predicted_events,
-                "timestamp": timestamp,
-            }
-
-        self.log_scores(name, score_args=(predicted_events, self.target_events[name]))
+            self.log_scores(
+                name, score_args=(predicted_events, self.target_events[name])
+            )
 
 
 class SplitMemmapDataset(Dataset):
@@ -876,6 +905,7 @@ def task_predictions_train(
     nlabels: int,
     scores: List[ScoreFunction],
     conf: Dict,
+    use_scoring_for_early_stopping: bool,
     gpus: Any,
     in_memory: bool,
     deterministic: bool,
@@ -940,6 +970,7 @@ def task_predictions_train(
             test_target_events=test_target_events,
             postprocessing_grid=postprocessing_grid,
             conf=conf,
+            use_scoring_for_early_stopping=use_scoring_for_early_stopping,
         )
     elif metadata["embedding_type"] == "scene":
         predictor = ScenePredictionModel(
@@ -949,16 +980,21 @@ def task_predictions_train(
             prediction_type=metadata["prediction_type"],
             scores=scores,
             conf=conf,
+            use_scoring_for_early_stopping=use_scoring_for_early_stopping,
         )
     else:
         raise ValueError(f"Unknown embedding_type {metadata['embedding_type']}")
 
-    # First score is the target
-    target_score = f"val_{str(scores[0])}"
-
-    if scores[0].maximize:
-        mode = "max"
+    if use_scoring_for_early_stopping:
+        # First score is the target
+        target_score = f"val_{str(scores[0])}"
+        if scores[0].maximize:
+            mode = "max"
+        else:
+            mode = "min"
     else:
+        # This loss is much faster, but will give poorer scores
+        target_score = "val_loss"
         mode = "min"
     checkpoint_callback = ModelCheckpoint(monitor=target_score, mode=mode)
     early_stop_callback = EarlyStopping(
@@ -1013,7 +1049,7 @@ def task_predictions_train(
         time_in_min = (end - start) / 60
         epoch = torch.load(checkpoint_callback.best_model_path)["epoch"]
         if metadata["embedding_type"] == "event":
-            best_postprocessing = predictor.epoch_best_postprocessing[epoch]
+            best_postprocessing = predictor.epoch_best_postprocessing_or_default(epoch)
         else:
             best_postprocessing = []
         # TODO: Postprocessing
@@ -1268,6 +1304,10 @@ def task_predictions(
         for score in metadata["evaluation"]
     ]
 
+    use_scoring_for_early_stopping = metadata.get(
+        "use_scoring_for_early_stopping", True
+    )
+
     # Data splits for training
     data_splits = get_splits_from_metadata(metadata)
 
@@ -1312,6 +1352,7 @@ def task_predictions(
             nlabels=nlabels,
             scores=scores,
             conf=conf,
+            use_scoring_for_early_stopping=use_scoring_for_early_stopping,
             gpus=gpus,
             in_memory=in_memory,
             deterministic=deterministic,
@@ -1345,6 +1386,7 @@ def task_predictions(
             nlabels=nlabels,
             scores=scores,
             conf=best_grid_point.conf,
+            use_scoring_for_early_stopping=use_scoring_for_early_stopping,
             gpus=gpus,
             in_memory=in_memory,
             deterministic=deterministic,
