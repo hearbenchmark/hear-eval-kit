@@ -994,7 +994,7 @@ def task_predictions_train(
             mode = "min"
     else:
         # This loss is much faster, but will give poorer scores
-        target_score = f"val_loss"
+        target_score = "val_loss"
         mode = "min"
     checkpoint_callback = ModelCheckpoint(monitor=target_score, mode=mode)
     early_stop_callback = EarlyStopping(
