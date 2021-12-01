@@ -1,0 +1,78 @@
+# You must delete disks manually on GCP :\
+# https://console.cloud.google.com/compute/disks?project=hear2021-evaluation
+
+project:
+  name: spotty-heareval
+  syncFilters:
+    - exclude:
+        - .idea/*
+        - .git/*
+        - '*/__pycache__/*'
+        - _workdir/*
+        - tasks/*
+        - embeddings/*
+        - .mypy_cache/*
+        - lightning_logs/*
+        - heareval.egg-info/*
+        - pretrained/*
+        - wandb/*
+
+containers:
+  - projectDir: /workspace/project
+    #file: docker/Dockerfile-cuda11.2
+    image: turian/heareval
+    #image: turian/heareval:cuda11.2
+#    ports:
+#      # TensorBoard
+#      - containerPort: 6006
+#        hostPort: 6006
+#      # Jupyter
+#      - containerPort: 8888
+#        hostPort: 8888
+    volumeMounts:
+      - name: workspace
+        mountPath: /workspace
+    runtimeParameters: ['--shm-size', '20G']
+
+instances:
+  - name: jshier-a100
+    provider: gcp
+    parameters:
+      # https://cloud.google.com/compute/docs/gpus/gpu-regions-zones
+      zone: europe-west4-b
+      # V100
+      machineType: a2-megagpu-16g
+      # Machine Type requirements for A100: https://cloud.google.com/compute/docs/gpus
+      # Needs to be updated for more than one GPU
+      preemptibleInstance: True
+      gpu:
+        type: nvidia-tesla-a100
+        count: 16
+      imageUri: projects/ml-images/global/images/c0-deeplearning-common-cu113-v20211105-debian-10
+#      spotInstance: True
+#      ports: [6006, 8888]
+#      dockerDataRoot: /docker
+      volumes:
+        - name: workspace
+          parameters:
+            size: 250
+
+# Pick SR!
+#   gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*.tar . && for f in hear2021-task-*.tar; do tar xf "$f"; done
+#   gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*sr48000.tar . && for f in hear2021-task-*sr48000.tar; do tar xf "$f"; done
+#   wget https://github.com/neuralaudio/hear-baseline/raw/main/saved_models/naive_baseline.pt
+#   python3 -m heareval.embeddings.runner hearbaseline --model naive_baseline.pt
+#   python3 -m heareval.predictions.runner hearbaseline --model ./naive_baseline.pt
+#   python3 -m heareval.evaluation.runner
+#
+#scripts:
+#   get: |
+#     gsutil -m cp gs://hear2021/open-tasks/hear2021-task-*.tar . && for f in hear2021-task-*.tar; do tar xf "$f"; done
+#  setup: |
+#    bash setup.sh
+#  train: |
+#    bash train.sh
+#  tensorboard: |
+#    tensorboard --bind_all --port 6006 --logdir /workspace/project/logs
+#  jupyter: |
+#    jupyter notebook --allow-root --ip 0.0.0.0 --notebook-dir=/workspace/project

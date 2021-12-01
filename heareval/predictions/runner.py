@@ -5,6 +5,7 @@ predictions.
 """
 
 import json
+import random
 import sys
 import time
 import logging
@@ -17,13 +18,6 @@ from tqdm import tqdm
 
 import heareval.gpu_max_mem as gpu_max_mem
 from heareval.predictions.task_predictions import task_predictions
-
-
-class RelativeSeconds(logging.Formatter):
-    # https://stackoverflow.com/a/63058798/82733
-    def format(self, record):
-        record.relativeCreated = record.relativeCreated // 1000
-        return super().format(record)
 
 
 # Cache this so the logger object isn't recreated,
@@ -42,8 +36,8 @@ def get_logger(task_name: str, log_path: Path) -> logging.Logger:
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
         # create formatter and add it to the handlers
-        formatter = RelativeSeconds(
-            "predict - %(name)s - %(relativeCreated)ds - %(message)s"
+        formatter = logging.Formatter(
+            "predict - %(name)s - %(asctime)s - %(msecs)d - %(message)s"
         )
         ch.setFormatter(formatter)
         fh.setFormatter(formatter)
@@ -93,6 +87,12 @@ def get_logger(task_name: str, log_path: Path) -> logging.Logger:
     help='Grid to use: ["default", "fast", "faster"]',
     type=str,
 )
+@click.option(
+    "--shuffle",
+    default=False,
+    help="Shuffle tasks? (Default: False)",
+    type=click.BOOL,
+)
 def runner(
     task_dirs: List[str],
     grid_points: int = 8,
@@ -100,11 +100,13 @@ def runner(
     in_memory: bool = True,
     deterministic: bool = True,
     grid: str = "default",
+    shuffle: bool = False,
 ) -> None:
     if gpus is not None:
         gpus = json.loads(gpus)
 
-    # random.shuffle(task_dirs)
+    if shuffle:
+        random.shuffle(task_dirs)
     for task_dir in tqdm(task_dirs):
         task_path = Path(task_dir)
         if not task_path.is_dir():
