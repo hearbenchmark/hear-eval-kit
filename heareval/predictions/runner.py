@@ -20,13 +20,6 @@ import heareval.gpu_max_mem as gpu_max_mem
 from heareval.predictions.task_predictions import task_predictions
 
 
-class RelativeSeconds(logging.Formatter):
-    # https://stackoverflow.com/a/63058798/82733
-    def format(self, record):
-        record.relativeCreated = record.relativeCreated // 1000
-        return super().format(record)
-
-
 # Cache this so the logger object isn't recreated,
 # and we get accurate "relativeCreated" times.
 _task_path_to_logger: Dict[Tuple[str, Path], logging.Logger] = {}
@@ -43,8 +36,8 @@ def get_logger(task_name: str, log_path: Path) -> logging.Logger:
         ch = logging.StreamHandler()
         ch.setLevel(logging.INFO)
         # create formatter and add it to the handlers
-        formatter = RelativeSeconds(
-            "predict - %(name)s - %(relativeCreated)ds - %(message)s"
+        formatter = logging.Formatter(
+            "predict - %(name)s - %(asctime)s - %(msecs)d - %(message)s"
         )
         ch.setFormatter(formatter)
         fh.setFormatter(formatter)
