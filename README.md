@@ -2,7 +2,9 @@
 # hear-eval-kit
 
 Evaluation kit for HEAR 2021 NeurIPS competition, using tasks from
-[hear-preprocess](https://github.com/neuralaudio/hear-preprocess).
+[hear-preprocess](https://github.com/neuralaudio/hear-preprocess)
+and audio embedding models that follow the 
+[HEAR API](https://neuralaudio.ai/hear2021-holistic-evaluation-of-audio-representations.html#common-api).
 
 # hear-eval-kit
 Downstream evaluation on each task involves two
@@ -15,7 +17,6 @@ The second step's speed is relatively similar between models.
 
 If you have any questions or comments:
 * File an [issue](https://github.com/neuralaudio/hear-eval-kit/issues).
-* Post on the [discussion board](https://discuss.neuralaudio.ai/).
 * Email us (deep at neuralaudio dot ai).
 
 ## Requirements
@@ -32,11 +33,11 @@ We test on 16GB GCP GPUs.
 
 ## Quickstart
 
-Here is a simple quickstart to evaluate `hearbaseline` using random
-projections and a tiny subset of the open tasks. More detailed
-instructions are below.
+Here is a simple example to evaluate the `hearbaseline.wav2vec2` model on the
+GTZAN music/speech task. This downloads a preprocessed version of the dataset,
+computes embeddings, and learns a shallow prediction model on the embeddings.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/master/heareval_quickstart.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/master/heareval_example.ipynb)
 
 
 ## Installation
@@ -84,36 +85,19 @@ published on Dockerhub for your convenience.
 
 Please refer to `README.spotty` for more details.
 
-## Download Open Tasks
+## Downloading Tasks
 
-If you are on GCP cloud, you can freely download open tasks as follows:
+We've released pre-processed versions of all HEAR 2021 open and secret tasks on Zenodo,
+you can access those here:
 
-```
-gsutil -m cp gs://hear2021/open-tasks/hear-2021.0.3-*-{SAMPLE_RATE}.gz . && for f in hear-*.gz; do tar zxf "$f"; done
-```
-where `SAMPLE_RATE` in `{16000, 20050, 32000, 44100, 48000}`  is
-the sample rate your model desires.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5802571.svg)](https://doi.org/10.5281/zenodo.5802571)
 
-If you are downloading from HTTPS, please only download open
-tasks once and mirror them internally, because cloud downloads are
-expensive for us. We are looking for longer-term hosting options.
-
-Download:
-```
-https://storage.googleapis.com/hear2021/open-tasks/hear-2021.0.3-{TASK}-{SAMPLE_RATE}.tar.gz
-```
-for the following tasks:
-```
-    dcase2016_task2-hear2021-full
-    nsynth_pitch-v2.2.3-5h
-    nsynth_pitch-v2.2.3-50h
-    speech_commands-v0.0.2-5h
-    speech_commands-v0.0.2-full
-```
-where `SAMPLE_RATE` in `{16000, 20050, 32000, 44100, 48000}` is the
-sample rate your model desires.
-
-Untar all the files.
+**Note on Sample Rate:** 
+All the tasks hosted on Zenodo have been pre-processed to 
+48kHz. If the embedding model that you are using requires a different sample rate,
+then you will need to resample the audio to that rate before running. Alternatively, you
+can generate the pre-processed datasets for your required sample rate using 
+[hear-preprocess](https://github.com/neuralaudio/hear-preprocess).
 
 ## Compute embeddings
 
