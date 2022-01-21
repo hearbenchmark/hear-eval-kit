@@ -95,8 +95,14 @@ you can access those here: https://doi.org/10.5281/zenodo.5885750
 **Note on Sample Rate:** 
 All the tasks hosted on Zenodo have been pre-processed to 
 48kHz. If the embedding model that you are using requires a different sample rate,
-then you will need to resample the audio to that rate before running. Alternatively, you
-can generate the pre-processed datasets for your required sample rate using 
+then you will need to resample the audio to that rate before running. 
+
+For other sampling rates (16000, 22050, 32000, 44100), please download 
+files (requester pays) from Google Storage 
+[gs://hear2021-archive/tasks/](https://console.cloud.google.com/storage/browser/hear2021-archive/tasks)
+
+Alternatively, you
+can generate the pre-processed datasets using 
 [hear-preprocess](https://github.com/neuralaudio/hear-preprocess).
 
 ## Compute embeddings
