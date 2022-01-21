@@ -33,11 +33,13 @@ We test on 16GB GCP GPUs.
 
 ## Quickstart
 
-Here is a simple example to evaluate the `hearbaseline.wav2vec2` model on the
-GTZAN music/speech task. This downloads a preprocessed version of the dataset,
-computes embeddings, and learns a shallow prediction model on the embeddings.
+Here is a simple example to evaluate the `hearbaseline.wav2vec2` model on the 
+[Mridingam Tonic](https://doi.org/10.5281/zenodo.4068196) task, which is a classification
+task using sounds from a pitched percussion instrument called a Mridingam. 
+This example shows how to compute embeddings on a pre-processed version of the data, and
+then learn a shallow prediction model on the embeddings for evaluation.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/master/heareval_example.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/master/heareval_evaluation_example.ipynb)
 
 
 ## Installation
@@ -88,9 +90,7 @@ Please refer to `README.spotty` for more details.
 ## Downloading Tasks
 
 We've released pre-processed versions of all HEAR 2021 open and secret tasks on Zenodo,
-you can access those here:
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.5802571.svg)](https://doi.org/10.5281/zenodo.5802571)
+you can access those here: https://doi.org/10.5281/zenodo.5885750
 
 **Note on Sample Rate:** 
 All the tasks hosted on Zenodo have been pre-processed to 
