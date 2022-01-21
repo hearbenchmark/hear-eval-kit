@@ -39,7 +39,7 @@ task using sounds from a pitched percussion instrument called a Mridingam.
 This example shows how to compute embeddings on a pre-processed version of the data, and
 then learn a shallow prediction model on the embeddings for evaluation.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/readme/heareval_evaluation_example.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/main/heareval_evaluation_example.ipynb)
 
 
 ## Installation
