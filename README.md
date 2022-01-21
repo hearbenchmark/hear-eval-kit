@@ -4,7 +4,7 @@
 Evaluation kit for HEAR 2021 NeurIPS competition, using tasks from
 [hear-preprocess](https://github.com/neuralaudio/hear-preprocess)
 and audio embedding models that follow the 
-[HEAR API](https://neuralaudio.ai/hear2021-holistic-evaluation-of-audio-representations.html#common-api).
+[HEAR API](https://neuralaudio.ai/hear2021-rules.html#common-api).
 
 # hear-eval-kit
 Downstream evaluation on each task involves two
