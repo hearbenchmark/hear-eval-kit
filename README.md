@@ -33,9 +33,11 @@ We test on 16GB GCP GPUs.
 
 ## Quickstart
 
-Here is a simple example to evaluate the `hearbaseline.wav2vec2` model on the 
+Here is a simple example to evaluate the 
+[hearbaseline wav2vec2](https://github.com/neuralaudio/hear-baseline) audio embedding model on the 
 [Mridingam Tonic](https://doi.org/10.5281/zenodo.4068196) task, which is a classification
 task using sounds from a pitched percussion instrument called a Mridingam. 
+
 This example shows how to compute embeddings on a pre-processed version of the data, and
 then learn a shallow prediction model on the embeddings for evaluation.
 
