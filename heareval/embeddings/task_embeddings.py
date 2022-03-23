@@ -269,6 +269,7 @@ def memmap_embeddings(
     metadata: Dict,
     split_name: str,
     embed_task_dir: Path,
+    split_data: Dict,
 ):
     """
     Memmap all the embeddings to one file, and pickle all the labels.
@@ -276,13 +277,14 @@ def memmap_embeddings(
     TODO: This writes things to disk double, we could clean that up after.
     We might also be able to get away with writing to disk only once.
     """
-    embedding_files = list(outdir.glob("*.embedding.npy"))
+    embedding_files = [outdir.joinpath(f"{f}.embedding.npy") for f in split_data.keys()]
     prng.shuffle(embedding_files)
 
     # First count the number of embeddings total
     nembeddings = 0
     ndim: int
     for embedding_file in tqdm(embedding_files):
+        assert embedding_file.exists()
         emb = np.load(embedding_file).astype(np.float32)
         if metadata["embedding_type"] == "scene":
             assert emb.ndim == 1
@@ -460,4 +462,4 @@ def task_embeddings(
                     f"Unknown embedding type: {metadata['embedding_type']}"
                 )
 
-        memmap_embeddings(outdir, prng, metadata, split, embed_task_dir)
+        memmap_embeddings(outdir, prng, metadata, split, embed_task_dir, split_data)
