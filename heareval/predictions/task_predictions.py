@@ -460,13 +460,10 @@ class EventPredictionModel(AbstractPredictionModel):
             logger=True,
         )
 
+        epoch = self.current_epoch
         if name == "val":
-            # During training, the epoch is one behind the value that will
-            # be stored as the "best" epoch
-            epoch = self.current_epoch + 1
             postprocessing_cached = None
         elif name == "test":
-            epoch = self.current_epoch
             postprocessing_cached = self.epoch_best_postprocessing_or_default(epoch)
         else:
             raise ValueError
