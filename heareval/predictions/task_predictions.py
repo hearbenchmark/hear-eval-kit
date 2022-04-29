@@ -1103,7 +1103,7 @@ def task_predictions_test(
 
     # Run tests
     test_results = trainer.test(
-        ckpt_path=grid_point.model_path, test_dataloaders=test_dataloader
+        ckpt_path=grid_point.model_path, dataloaders=test_dataloader
     )
     assert len(test_results) == 1, "Should have only one test dataloader"
     test_results = test_results[0]
