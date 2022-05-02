@@ -34,7 +34,7 @@ setup(
         "numpy==1.19.2",
         "pandas",
         "pynvml",
-        "pytorch-lightning",
+        "pytorch-lightning>=1.6",
         "python-slugify",
         "sed_eval",
         "soundfile",
