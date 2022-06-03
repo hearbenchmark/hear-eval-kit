@@ -160,7 +160,7 @@ of grid points for grid search.
 
 If you are developing this repo, clone repo:
 ```
-git clone https://github.com/neuralaudio/hear-eval-kit
+git clone https://github.com/hearbenchmark/hear-eval-kit
 cd hear-eval-kit
 ```
 
