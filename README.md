@@ -1,4 +1,3 @@
-![HEAR2021](https://hearbenchmark.com/assets/img/hear-benchmark-background-logo.png)
 # hear-eval-kit
 
 Evaluation kit for the [HEAR Benchmark](https://hearbenchmark.com) using tasks from
@@ -6,7 +5,6 @@ Evaluation kit for the [HEAR Benchmark](https://hearbenchmark.com) using tasks f
 and audio embedding models that follow the 
 [HEAR API](https://hearbenchmark.com/hear-api.html).
 
-# hear-eval-kit
 Downstream evaluation on each task involves two
 steps:
 * computing audio embeddings
