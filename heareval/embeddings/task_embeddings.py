@@ -12,14 +12,14 @@ regardless of whether the embedding model is tensorflow based.
 
 TODO:
     * Ideally, we would run this within a docker container, for
-    security. https://github.com/neuralaudio/hear2021-eval-kit/issues/51
+    security. https://github.com/hearbenchmark/hear2021-eval-kit/issues/51
     * Profiling should occur here (both embedding time AFTER loading
     to GPU, and complete wall time include disk writes).
     * This is currently pytorch only.
-    https://github.com/neuralaudio/hear2021-eval-kit/issues/52
+    https://github.com/hearbenchmark/hear2021-eval-kit/issues/52
     Using the included get_audio_embedding_numpy, we could instead
     have this work both for pytorch and tensorflow.
-    https://github.com/neuralaudio/hear2021-eval-kit/issues/49
+    https://github.com/hearbenchmark/hear2021-eval-kit/issues/49
 """
 import json
 import os.path
