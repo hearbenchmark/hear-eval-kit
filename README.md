@@ -1,10 +1,10 @@
-![HEAR2021](https://neuralaudio.ai/assets/img/hear-header-sponsor.jpg)
+![HEAR2021](https://hearbenchmark.com/assets/img/hear-benchmark-background-logo.png)
 # hear-eval-kit
 
-Evaluation kit for HEAR 2021 NeurIPS competition, using tasks from
-[hear-preprocess](https://github.com/neuralaudio/hear-preprocess)
+Evaluation kit for the [HEAR Benchmark](https://hearbenchmark.com) using tasks from
+[hear-preprocess](https://github.com/hearbenchmark/hear-preprocess)
 and audio embedding models that follow the 
-[HEAR API](https://neuralaudio.ai/hear2021-rules.html#common-api).
+[HEAR API](https://hearbenchmark.com/hear-api.html).
 
 # hear-eval-kit
 Downstream evaluation on each task involves two
@@ -16,7 +16,7 @@ The first step's speed depends upon a variety of factors.
 The second step's speed is relatively similar between models.
 
 If you have any questions or comments:
-* File an [issue](https://github.com/neuralaudio/hear-eval-kit/issues).
+* File an [issue](https://github.com/hearbenchmark/hear-eval-kit/issues).
 * Email us (deep at neuralaudio dot ai).
 
 ## Requirements
@@ -34,14 +34,14 @@ We test on 16GB GCP GPUs.
 ## Quickstart
 
 Here is a simple example to evaluate the 
-[hearbaseline wav2vec2](https://github.com/neuralaudio/hear-baseline) audio embedding model on the 
+[hearbaseline wav2vec2](https://github.com/hearbenchmark/hear-baseline) audio embedding model on the 
 [Mridingam Tonic](https://doi.org/10.5281/zenodo.4068196) task, which is a classification
 task using sounds from a pitched percussion instrument called a Mridingam. 
 
 This example shows how to compute embeddings on a pre-processed version of the data, and
 then learn a shallow prediction model on the embeddings for evaluation.
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/neuralaudio/hear-eval-kit/blob/main/heareval_evaluation_example.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/hearbenchmark/hear-eval-kit/blob/main/heareval_evaluation_example.ipynb)
 
 
 ## Installation
@@ -105,7 +105,7 @@ files (requester pays) from Google Storage
 
 Alternatively, you
 can generate the pre-processed datasets using 
-[hear-preprocess](https://github.com/neuralaudio/hear-preprocess).
+[hear-preprocess](https://github.com/hearbenchmark/hear-preprocess).
 
 ## Compute embeddings
 
@@ -181,7 +181,7 @@ python3 -m pytest
 
 
 **_NOTE_** : Please make sure the workflows for each of the open task (`./gihub/workflows/task-{task_name}.yml`) is using the correct version of preprocessed tasks from the [Preprocessed Downsampled HEAR Open
-Tasks](https://github.com/neuralaudio/hear2021-open-tasks-downsampled/tree/main/preprocessed) Repo 
+Tasks](https://github.com/hearbenchmark/hear2021-open-tasks-downsampled/tree/main/preprocessed) Repo
 for Continuous Integration.
 
 Current hearpropress version used for Continuous Integration - `2021.0.6`
