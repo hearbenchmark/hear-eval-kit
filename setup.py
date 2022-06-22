@@ -31,7 +31,7 @@ setup(
         "intervaltree",
         "more-itertools",
         # for tf 2.6.0
-        "numpy==1.19.2",
+        "numpy==1.22.0",
         "pandas",
         "pynvml",
         "pytorch-lightning>=1.6",
