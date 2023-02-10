@@ -43,6 +43,7 @@ import heareval.gpu_max_mem as gpu_max_mem
 
 TORCH = "torch"
 TENSORFLOW = "tf"
+TFLITE = "tflite"
 
 
 class Embedding:
@@ -84,6 +85,8 @@ class Embedding:
             self.type = TENSORFLOW
             # Tensorflow automatically manages data transfers to device,
             # so we don't need to set self.device
+        elif isinstance(self.model, tf.lite.Interpreter):
+            self.type = TFLITE
         else:
             raise TypeError(f"Unsupported model type received: {type(self.model)}")
 
@@ -118,6 +121,10 @@ class Embedding:
             if not isinstance(x, np.ndarray):
                 x = x.numpy()
             x = tf.convert_to_tensor(x)
+        elif self.type == TFLITE:
+            # Load array as np.ndarray
+            if not isinstance(x, np.ndarray):
+                x = x.numpy()
         else:
             raise AssertionError("Unknown type")
 
@@ -138,6 +145,11 @@ class Embedding:
                 audio, self.model
             )
             return embeddings.numpy()
+        elif self.type == TFLITE:
+            embeddings = self.module.get_scene_embeddings(  # type: ignore
+                audio, self.model
+            )
+            return embeddings
         else:
             raise NotImplementedError("Unknown type")
 
@@ -165,6 +177,14 @@ class Embedding:
             gpu_max_mem.measure()
             embeddings = embeddings.numpy()
             timestamps = timestamps.numpy()
+            return embeddings, timestamps
+        elif self.type == TFLITE:
+            # flake8: noqa
+            embeddings, timestamps = self.module.get_timestamp_embeddings(  # type: ignore
+                audio,
+                self.model,
+            )
+            gpu_max_mem.measure()
             return embeddings, timestamps
         else:
             raise NotImplementedError("Unknown type")
