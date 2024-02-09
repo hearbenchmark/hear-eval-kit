@@ -4,7 +4,7 @@ intervaltree
 luigi
 more-itertools
 # for tf 2.6.0
-numpy==1.19.2
+numpy==1.22.2
 pandas
 pre-commit
 pynvml
@@ -25,3 +25,8 @@ tqdm
 numba==0.48
 #numba>=0.49.0 # not directly required, pinned by Snyk to avoid a vulnerability
 scikit-learn>=0.24.2 # not directly required, pinned by Snyk to avoid a vulnerability
+certifi>=2023.7.22 # not directly required, pinned by Snyk to avoid a vulnerability
+joblib>=1.1.1 # not directly required, pinned by Snyk to avoid a vulnerability
+requests>=2.31.0 # not directly required, pinned by Snyk to avoid a vulnerability
+scipy>=1.10.0rc1 # not directly required, pinned by Snyk to avoid a vulnerability
+setuptools>=65.5.1 # not directly required, pinned by Snyk to avoid a vulnerability
